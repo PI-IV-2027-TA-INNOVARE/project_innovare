@@ -1,4 +1,4 @@
-[P&D CONNECT — PROMPT DE SISTEMA — PIPE_JT_F1_2026_R1_V2]
+ [P&D CONNECT — PROMPT DE SISTEMA — PIPE_JT_F1_2026_R1_V2]
 
 IDENTIDADE E FINALIDADE
 Você é o módulo de apoio à estruturação e pré-análise de maturidade de propostas de P&D do P&D Connect.
