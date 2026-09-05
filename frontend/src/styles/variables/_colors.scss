@@ -1,0 +1,85 @@
+// ---------------------------------------------------------------------------
+// Paleta AC2 Microbiologia
+// Valores extraidos do :root oficial de https://ac2microbiologia.com.br
+//   --orange #E07B1A · --orange-d #B8610F · --orange-l #FEF3E7
+//   --navy-l #EDF1F7 · --text-m #536070 · --border #DDE4ED · --bg #F5F7FA
+// O navy institucional usado em superficies grandes e #0B2545 (cor das sombras
+// do site); o preto puro (--navy/--text do site) fica reservado para texto.
+// ---------------------------------------------------------------------------
+
+// --- Marca -----------------------------------------------------------------
+$color-ac2-orange: #e07b1a;
+$color-ac2-orange-dark: #b8610f;
+$color-ac2-orange-light: #fef3e7;
+$color-ac2-navy: #0b2545;
+$color-ac2-navy-deep: #060f1e;
+$color-ac2-navy-light: #edf1f7;
+
+// --- Tema claro ------------------------------------------------------------
+// O site da AC2 usa branco puro em superficie e preto puro em texto. Na
+// aplicacao esse par estoura: da 21:1 — o maximo possivel na escala, muito
+// acima dos 4,5:1 que a WCAG pede — e halacao em texto pequeno e justamente o
+// que cansa a vista. Piorou com o login sangrado, em que o painel do
+// formulario ocupa metade da tela em branco puro.
+//
+// A rampa abaixo desce ~12% de luminancia em relacao ao branco puro e troca
+// o preto por um quase-preto navy, preservando 15:1 de contraste. As cores de MARCA (laranja e navy) nao
+// mudam — o que muda e a superficie da aplicacao.
+$color-bg-primary: #e4e9f0;
+$color-bg-secondary: #dbe2ec;
+$color-bg-tertiary: $color-ac2-navy;
+$color-surface: #eff1f4;
+$color-surface-hover: #e8ecf1;
+$color-surface-white: #f2f4f6;
+
+$color-primary: $color-ac2-orange;
+$color-primary-strong: $color-ac2-orange-dark;
+$color-secondary: $color-ac2-navy;
+$color-secondary-strong: #163a68;
+$color-warm: $color-ac2-orange-light;
+$color-green: #2f7d5b;
+$color-error: #c6392b;
+
+$color-text-primary: #0f1a28;
+$color-text-secondary: rgba(#0f1a28, 0.8);
+$color-text-muted: #536070;
+$color-text-inverse: #ffffff;
+$color-text-inverse-muted: rgba(#ffffff, 0.72);
+
+// Um degrau mais escura que a borda do site: sobre a superficie suavizada, a
+// #DDE4ED original quase sumia.
+$color-border: #ced6e1;
+$color-border-accent: rgba($color-ac2-orange, 0.32);
+
+$color-primary-dim: rgba($color-primary, 0.14);
+$color-secondary-dim: rgba($color-secondary, 0.1);
+$color-warm-dim: rgba($color-warm, 0.6);
+
+// --- Tema escuro -----------------------------------------------------------
+$color-bg-primary-dark: $color-ac2-navy-deep;
+$color-bg-secondary-dark: #0b1626;
+$color-bg-tertiary-dark: $color-ac2-navy;
+$color-surface-dark: #101c2e;
+$color-surface-hover-dark: #16243a;
+$color-surface-white-dark: #132039;
+
+$color-primary-dark: #f0913a;
+$color-primary-strong-dark: #ffb068;
+$color-secondary-dark: #6f9ad1;
+$color-secondary-strong-dark: #8fb4e0;
+$color-warm-dark: rgba($color-ac2-orange, 0.16);
+$color-green-dark: #5fb18a;
+$color-error-dark: #e2705f;
+
+$color-text-primary-dark: #edf1f7;
+$color-text-secondary-dark: rgba(#edf1f7, 0.82);
+$color-text-muted-dark: #93a3b8;
+$color-text-inverse-dark: #000000;
+$color-text-inverse-muted-dark: rgba(#000000, 0.72);
+
+$color-border-dark: rgba(#edf1f7, 0.14);
+$color-border-accent-dark: rgba($color-primary-dark, 0.36);
+
+$color-primary-dim-dark: rgba($color-primary-dark, 0.18);
+$color-secondary-dim-dark: rgba($color-secondary-dark, 0.16);
+$color-warm-dim-dark: rgba($color-ac2-orange, 0.1);

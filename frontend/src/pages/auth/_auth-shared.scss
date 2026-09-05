@@ -1,0 +1,779 @@
+// Shell compartilhado das telas de autenticacao — identidade AC2.
+// Usado por login, esqueci-minha-senha e redefinir-senha.
+//
+// LAYOUT — split-screen sangrado (full-bleed).
+// O painel institucional e a coluna do formulario dividem a viewport inteira,
+// sem cartao flutuante. A coluna do formulario fica travada em
+// `--auth-form-width`: a tela cresce, o formulario nao. Campo de login largo
+// demais custa linha de leitura e alvo de clique (Fitts), entao o ganho de
+// espaco vai para respiro, nao para largura de input.
+//
+// TIPOGRAFIA — escala de 4 degraus: 28 / 16 / 14 / 12px. Nada abaixo de 12px.
+// Os inputs ficam em 16px de proposito: abaixo disso o iOS aplica zoom
+// automatico ao focar o campo.
+//
+// CONTRASTE — o laranja da marca so aparece como texto atraves de
+// `--accent-primary-text` / `--accent-cta-bg` (ver `base/_globals.scss`).
+// Usar `--accent-primary` cru em texto reprova o AA da WCAG (3,0:1).
+//
+// Todas as cores vem de CSS custom properties para que o painel de Aparencia
+// do admin consiga repintar as telas em tempo real.
+
+.login-page {
+  --auth-form-width: 26rem;
+  --auth-brand-width: 30rem;
+  --auth-gutter: 40px;
+  --auth-block-gap: 28px;
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-auth-shell);
+}
+
+.login-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  background: var(--bg-card);
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+}
+
+// --- Painel institucional ---------------------------------------------------
+
+.login-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  // Centralizado: com o kicker institucional junto da marca nao ha mais rodape
+  // para ancorar, e `space-between` deixaria dois vazios grandes em tela alta.
+  justify-content: center;
+  gap: 48px;
+  padding: 56px var(--auth-gutter);
+  // Navy escuro nos DOIS temas — a primeira tela do produto precisa parecer o
+  // produto. `--brand-panel-text` existe porque `--text-inverse` e preto no
+  // tema escuro (serve a superficies de acento, que la sao claras).
+  background: var(--bg-brand-panel);
+  color: var(--brand-panel-text);
+  isolation: isolate;
+  overflow: hidden;
+
+  // Os filhos formam uma coluna propria, espelhando a largura do formulario.
+  > * {
+    width: 100%;
+    max-width: var(--auth-brand-width);
+    margin-inline: auto;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(circle at 78% 12%, var(--accent-primary-dim) 0%, transparent 55%),
+      radial-gradient(circle at 8% 92%, var(--brand-panel-glow) 0%, transparent 48%);
+  }
+
+  // Mobile: o painel vira uma faixa compacta no topo para que o formulario
+  // nasca acima da dobra — so a identidade e a promessa em uma linha ficam.
+  @media (max-width: 900px) {
+    gap: 16px;
+    padding: 24px var(--auth-gutter);
+    justify-content: flex-start;
+  }
+
+  @media (max-width: 480px) {
+    --auth-gutter: 24px;
+  }
+}
+
+.login-brand__top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.login-brand__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.login-brand__identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.login-brand__client {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--brand-panel-text);
+}
+
+// O contexto institucional entra junto da marca, no topo. Antes era um rodape
+// orfao no fim da coluna, longe daquilo que ele qualifica.
+.login-brand__kicker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--brand-panel-text-muted);
+}
+
+.login-brand__title {
+  font-size: clamp(2rem, 2.8vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+
+  span {
+    color: var(--accent-primary);
+  }
+
+  @media (max-width: 900px) {
+    font-size: 1.5rem;
+  }
+}
+
+.login-brand__tagline {
+  margin-top: 16px;
+  max-width: 36ch;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--brand-panel-text-muted);
+
+  @media (max-width: 900px) {
+    margin-top: 6px;
+    max-width: none;
+    font-size: 0.875rem;
+  }
+}
+
+.login-brand__list {
+  margin-top: 32px;
+  display: grid;
+  gap: 16px;
+  list-style: none;
+
+  li {
+    position: relative;
+    padding-left: 28px;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--brand-panel-text-muted);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 9px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+    }
+  }
+
+  @media (max-width: 900px) {
+    display: none;
+  }
+}
+
+// --- Painel do formulario ---------------------------------------------------
+
+.login-panel {
+  position: relative;
+  display: flex;
+  padding: 56px var(--auth-gutter);
+  background: var(--bg-card);
+
+  // Centraliza por `margin: auto` no filho, nao por `align-items: center`:
+  // quando o conteudo e mais alto que a viewport (notebook curto + modo
+  // demonstracao), o align-items corta o topo e ele fica inalcancavel no
+  // scroll. Margem automatica nunca resolve para valor negativo.
+  > * {
+    margin: auto;
+  }
+
+  @media (max-width: 900px) {
+    padding: 40px var(--auth-gutter);
+
+    // No mobile o formulario comeca logo abaixo da faixa da marca.
+    > * {
+      margin: 0 auto;
+    }
+  }
+
+  @media (max-width: 480px) {
+    --auth-gutter: 24px;
+  }
+}
+
+.login-panel__inner {
+  width: 100%;
+  max-width: var(--auth-form-width);
+}
+
+.login-panel__theme {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1;
+  margin: 0;
+
+  // O laranja cru sobre --bg-chip da 2,6:1 e reprova o minimo de 3:1 exigido
+  // para icone que carrega significado (WCAG 1.4.11).
+  color: var(--accent-primary-text);
+
+  &:hover {
+    color: var(--accent-cta-bg-hover);
+  }
+}
+
+.login-panel__header {
+  margin-bottom: var(--auth-block-gap);
+}
+
+.login-panel__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.login-panel__subtitle {
+  margin-top: 8px;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.login-form {
+  display: grid;
+  gap: 24px;
+}
+
+.login-field__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.login-field__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-field__input {
+  width: 100%;
+  padding: 14px 16px;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+
+  &::placeholder {
+    color: var(--text-muted);
+    opacity: 0.75;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-focus);
+  }
+
+  &[aria-invalid='true'] {
+    border-color: var(--accent-error);
+
+    &:focus {
+      border-color: var(--accent-error);
+      box-shadow: var(--shadow-focus-error);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.login-field__control .login-field__input {
+  padding-right: 54px;
+}
+
+// Alvo de 40x40 — o botao de texto anterior tinha ~28px de altura.
+.login-field__toggle {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-size: 0.95rem;
+  color: var(--accent-primary-text);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover:not(:disabled) {
+    background: var(--accent-primary-dim);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.login-field__hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+
+  &--warning {
+    color: var(--accent-primary-text);
+    font-weight: 500;
+  }
+}
+
+.login-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 50px;
+  margin-top: 8px;
+  padding: 14px 20px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-cta-text);
+  background: var(--accent-cta-bg);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+
+  &:hover:not(:disabled) {
+    background: var(--accent-cta-bg-hover);
+    box-shadow: var(--shadow-accent);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
+
+.login-submit__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: login-spin 0.7s linear infinite;
+}
+
+@keyframes login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Acao terciaria: o laranja fica reservado ao botao Entrar. Quando link, botao
+// e atalho de demonstracao usam o mesmo laranja, a cor deixa de significar
+// "acao principal" e vira so a cor da tela.
+.login-link {
+  justify-self: center;
+  padding: 6px 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.login-message {
+  padding: 12px 14px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--accent-error);
+  background: var(--bg-danger-soft);
+  border-left: 3px solid var(--accent-error);
+  border-radius: var(--radius-sm);
+}
+
+// Canal unico de erro: o alerta de sessao encerrada e o erro de submit usam a
+// mesma caixa, no mesmo lugar, para nao competirem entre si.
+.login-alert {
+  margin-bottom: var(--auth-block-gap);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-danger-soft);
+  border-left: 3px solid var(--accent-error);
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-error);
+  }
+
+  strong {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  p {
+    margin-top: 4px;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+}
+
+.login-note {
+  margin-top: 24px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+// --- Modo demonstracao (VITE_AUTH_MOCK=true) --------------------------------
+//
+// Acordeao fechado por padrao. O bloco e o elemento mais clicado da tela em
+// desenvolvimento, mas nao pode disputar atencao com o formulario real nem
+// empurra-lo para fora da dobra num notebook de 768px.
+//
+// Os chips usam BORDA TRACEJADA de proposito: e o sinal visual mais barato de
+// "isto e provisorio". Com a mesma borda solida dos demais controles, os quatro
+// papeis pareciam tipos de conta a escolher no login.
+
+.login-demo {
+  margin-top: 24px;
+  background: var(--accent-warm);
+  border: 1px dashed var(--border-accent);
+  border-radius: var(--radius-md);
+}
+
+.login-demo__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-family: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.login-demo__icon {
+  font-size: 0.85rem;
+  color: var(--accent-primary-text);
+}
+
+.login-demo__title {
+  flex: 1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.login-demo__chevron {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+
+  &.is-open {
+    transform: rotate(180deg);
+  }
+}
+
+.login-demo__panel {
+  padding: 0 16px 14px;
+}
+
+.login-demo__hint {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.login-demo__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  list-style: none;
+}
+
+.login-demo__account {
+  padding: 5px 11px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.login-demo__details {
+  margin-top: 12px;
+}
+
+// Acao de apoio dentro de um bloco que ja e secundario — nao leva laranja.
+.login-demo__summary {
+  display: inline-block;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.login-demo__table {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+
+.login-demo__email {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.login-demo__password {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+// ---------------------------------------------------------------------------
+// Compatibilidade: "esqueci minha senha" e "redefinir senha" ainda usam a
+// marcacao anterior do login. Os seletores abaixo reaproveitam o shell da AC2
+// para essas telas sem exigir reescrita do JSX delas.
+// Remover quando as duas paginas forem migradas (Fase 1 do plano).
+// ---------------------------------------------------------------------------
+
+.login-page__bg,
+.login-brand-panel__overlay {
+  display: none;
+}
+
+.login-brand-panel {
+  @extend .login-brand;
+
+  // Essas telas tem um bloco unico no painel; sem isso o `space-between`
+  // herdado empurraria o conteudo para o topo de uma coluna de 100dvh.
+  justify-content: center;
+
+  &__content {
+    display: grid;
+    gap: 14px;
+  }
+
+  &__brand {
+    font-size: clamp(2rem, 2.8vw, 2.75rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    color: var(--brand-panel-text);
+  }
+
+  &__tagline {
+    max-width: 36ch;
+    font-size: 1rem;
+    line-height: 1.65;
+    color: var(--brand-panel-text-muted);
+  }
+}
+
+.login-shell__form {
+  @extend .login-panel;
+}
+
+.login-box {
+  width: 100%;
+  max-width: var(--auth-form-width);
+
+  &__header {
+    margin-bottom: var(--auth-block-gap);
+  }
+
+  &__title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  &__subtitle {
+    margin-top: 8px;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+}
+
+.login-feedback {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-warm);
+  border-left: 3px solid var(--accent-primary);
+
+  strong {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  p {
+    margin-top: 4px;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  &--error {
+    background: var(--bg-danger-soft);
+    border-left-color: var(--accent-error);
+  }
+}
+
+// Conforto dos campos herdados por essas duas telas, sem repintar os
+// formularios do resto da aplicacao.
+.login-page {
+  .form-input {
+    padding: 14px 16px;
+    font-size: 1rem;
+    border-radius: var(--radius-md);
+  }
+
+  .form-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-footer a {
+    color: var(--accent-primary-text);
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--shadow-focus);
+      border-radius: var(--radius-sm);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+@media (prefers-reduced-motion: reduce) {
+  .login-submit:hover:not(:disabled),
+  .login-demo__account:hover {
+    transform: none;
+  }
+
+  .login-submit__spinner {
+    animation-duration: 2.4s;
+  }
+}

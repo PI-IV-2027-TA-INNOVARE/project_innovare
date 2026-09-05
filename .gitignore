@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------
+# Segredos — AGENTS.md §0.1: nenhum segredo entra em arquivo versionado.
+# Sem ancora (`/`) de proposito: pega qualquer .env em qualquer subdiretorio.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Documentos de trabalho locais — instrucoes de agente e contexto de dominio
+# que ficam fora do historico do repositorio. Ancorados na raiz para nao
+# esconder arquivos de mesmo nome dentro dos modulos.
+# ---------------------------------------------------------------------------
+/AGENTS.md
+/CLAUDE.md
+/CONTEXT.md
+.agents
+.claude
+/PLANO_IMPLEMENTACAO.md

@@ -1,0 +1,775 @@
+// Console do Administrador — AC2 P&D Connect.
+//
+// Duas regras governam este arquivo:
+//
+// 1. NENHUMA cor literal. Tudo sai das CSS custom properties, porque o proprio
+//    painel de Aparencia reescreve essas properties em tempo real — uma cor
+//    literal aqui seria a unica coisa da tela que nao obedece ao painel.
+// 2. Escala de 8px. Espacamentos sao 8/16/24/32; nada de valores avulsos.
+//
+// Profundidade, brilho e bordas saem da paleta institucional via `color-mix`,
+// entao o tema escuro e o claro derivam do mesmo conjunto sem cores novas.
+
+.admin-page {
+  width: 100%;
+  padding: 32px var(--admin-gutter) 64px;
+  color: var(--text-primary);
+}
+
+// A AuthNav monta seu conteudo dentro de `.container` (1200px, centrado). Numa
+// pagina sangrada isso deixaria a marca da barra flutuando a centenas de pixels
+// da barra lateral. O `:has()` limita o ajuste as rotas que renderizam o admin.
+.authenticated-app:has(.admin-page) .auth-nav__inner {
+  max-width: none;
+  padding-inline: clamp(18px, 2.4vw, 40px);
+}
+
+// --- Cabecalho da pagina ----------------------------------------------------
+
+.admin-page__header {
+  margin-bottom: var(--admin-section-gap);
+}
+
+.admin-page__breadcrumb {
+  font-size: 0.8125rem; // 13px
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.8;
+
+  span {
+    margin: 0 6px;
+    opacity: 0.7;
+  }
+}
+
+.admin-page__title {
+  margin-top: 8px;
+  font-size: clamp(2.125rem, 2.4vw, 2.5rem); // 34 -> 40px
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.admin-page__description {
+  margin-top: 16px;
+  max-width: 62ch;
+  font-size: 0.875rem; // 14px
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+// --- Corpo: barra lateral + conteudo ----------------------------------------
+
+.admin-page__body {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: var(--admin-section-gap);
+  align-items: start;
+}
+
+.admin-nav {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  position: sticky;
+  // A AuthNav e sticky com z-index 1100: colar em 24px faria a barra lateral
+  // deslizar por baixo dela ao rolar.
+  top: var(--admin-nav-offset);
+  max-height: calc(100vh - var(--admin-nav-offset) - 24px);
+  overflow-y: auto;
+}
+
+.admin-nav__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  text-align: left;
+  font-family: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--admin-radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--admin-motion),
+    border-color var(--admin-motion),
+    color var(--admin-motion);
+
+  // Barra vertical do estado ativo — cresce a partir do centro.
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 4px;
+    height: 0;
+    border-radius: 0 4px 4px 0;
+    background: var(--accent-primary);
+    transform: translateY(-50%);
+    transition: height var(--admin-motion);
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+    border-color: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+  }
+
+  &.is-active {
+    background: var(--accent-primary-dim);
+    border-color: var(--border-accent);
+
+    &::before {
+      height: 60%;
+    }
+
+    .admin-nav__icon,
+    .admin-nav__label {
+      color: var(--accent-primary);
+    }
+  }
+}
+
+.admin-nav__icon {
+  width: 20px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  transition: color var(--admin-motion);
+}
+
+.admin-nav__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-nav__label {
+  font-size: 0.9375rem; // 15px
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-nav__description {
+  font-size: 0.8125rem; // 13px
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.admin-content {
+  min-width: 0;
+}
+
+// --- Aparencia: layout ------------------------------------------------------
+
+.appearance-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--admin-section-gap);
+  align-items: start;
+}
+
+.appearance-main {
+  min-width: 0;
+}
+
+.appearance-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-gap);
+  margin-bottom: var(--admin-pad);
+  flex-wrap: wrap;
+}
+
+.appearance-toolbar__count {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+// Os grupos empilhados eram a maior fonte de rolagem da tela. Ha largura para
+// dispo-los em duas colunas; `auto-fit` volta para uma sozinho, sem media query.
+// `align-items: start` NAO e detalhe: sem ele o cartao recolhido estica ate a
+// altura do vizinho aberto (o padrao de grid e `stretch`), e "Superficies" ao
+// lado de "Marca" virava um retangulo alto com um titulo no topo e fundo vazio
+// embaixo — parecia aberto e sem conteudo.
+.appearance-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+  align-content: start;
+  align-items: start;
+  gap: var(--admin-pad);
+}
+
+.appearance-empty {
+  padding: var(--admin-pad);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px dashed var(--admin-card-border);
+  border-radius: var(--admin-radius);
+}
+
+// --- Aparencia: grupo -------------------------------------------------------
+
+.tokens-group {
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow-soft);
+  transition: border-color var(--admin-motion), box-shadow var(--admin-motion);
+
+  &:hover {
+    border-color: var(--admin-card-border-hover);
+  }
+}
+
+.tokens-group__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.tokens-group__title {
+  flex: 1;
+  font-size: 1.125rem; // 18px
+  font-weight: 500;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.tokens-group__count {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-radius: 999px;
+}
+
+.tokens-group__description {
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.tokens-group__grid {
+  margin-top: var(--admin-gap);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
+  gap: 12px;
+}
+
+// --- Aparencia: cartao de cor -----------------------------------------------
+
+.token-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
+  transition:
+    transform var(--admin-motion),
+    border-color var(--admin-motion),
+    box-shadow var(--admin-motion);
+
+  &:hover,
+  &:focus-within {
+    transform: translateY(-2px);
+    border-color: var(--admin-card-border-hover);
+    box-shadow: var(--admin-glow);
+
+    .token-card__swatch-action {
+      opacity: 1;
+    }
+  }
+
+  &.is-customized {
+    border-color: var(--border-accent);
+  }
+}
+
+.token-card__swatch {
+  position: relative;
+  display: block;
+  height: 54px;
+  cursor: pointer;
+
+  input[type='color'] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.token-card__swatch-fill {
+  position: absolute;
+  inset: 0;
+  // Xadrez discreto por baixo: cores com alfa (o laranja de destaque no tema
+  // escuro e rgba) apareceriam como um bloco chapado sem ele.
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 25%, transparent 25%);
+  background-size: 12px 12px;
+}
+
+.token-card__swatch-action {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  border: 1px solid var(--admin-card-border);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity var(--admin-motion);
+  pointer-events: none;
+}
+
+.token-card__body {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.token-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.token-card__name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.token-card__hint {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.token-card__controls {
+  display: flex;
+  gap: 6px;
+}
+
+.token-card__hex {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  transition: border-color var(--admin-motion), box-shadow var(--admin-motion);
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.token-card__copy {
+  width: 32px;
+  height: 32px;
+}
+
+.token-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.token-card__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-card__flag {
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  border-radius: 999px;
+}
+
+.token-badge {
+  padding: 3px 9px;
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-radius: 999px;
+
+  &--primaria,
+  &--hover,
+  &--destaque {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &--secundaria {
+    color: var(--accent-secondary);
+    background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  }
+
+  &--estado {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+  }
+}
+
+// --- Aparencia: bloco avancado ----------------------------------------------
+
+.token-advanced {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--admin-card-border);
+}
+
+.token-advanced__row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+
+  dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  dd {
+    min-width: 0;
+  }
+
+  code {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
+    font-size: 0.6875rem; // 11px
+    color: var(--text-muted);
+  }
+}
+
+.token-advanced__derived {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+}
+
+// --- Previa ao vivo ---------------------------------------------------------
+
+.appearance-aside {
+  position: sticky;
+  top: var(--admin-nav-offset);
+  max-height: calc(100vh - var(--admin-nav-offset) - 24px);
+  overflow-y: auto;
+}
+
+.preview {
+  display: grid;
+  gap: var(--admin-pad);
+  padding: var(--admin-pad);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow-soft);
+}
+
+.preview__header {
+  display: grid;
+  gap: 4px;
+}
+
+.preview__eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--accent-primary);
+}
+
+.preview__note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.preview__block {
+  display: grid;
+  gap: 12px;
+  padding-top: var(--admin-gap);
+  border-top: 1px solid var(--admin-card-border);
+}
+
+.preview__block-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.preview__row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preview__stack {
+  display: grid;
+  gap: 12px;
+}
+
+.preview__field {
+  display: grid;
+  gap: 6px;
+}
+
+.preview__label {
+  font-size: 0.8125rem; // 13px
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.preview__switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+
+  input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  input:checked + .preview__switch-track {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+
+    &::after {
+      transform: translateX(18px);
+    }
+  }
+
+  input:focus-visible + .preview__switch-track {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+.preview__switch-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  transition: background var(--admin-motion), border-color var(--admin-motion);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--bg-card);
+    border-radius: 50%;
+    transition: transform var(--admin-motion);
+  }
+}
+
+.preview__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: var(--accent-primary);
+  }
+}
+
+.preview-pill {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+
+  &--ok {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+  }
+
+  // "Aviso" usa o laranja institucional: e o tom de alerta da marca, e a paleta
+  // da AC2 nao tem um amarelo proprio.
+  &--warn {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &--error {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
+.preview-card {
+  display: grid;
+  gap: 8px;
+  padding: var(--admin-gap);
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
+  transition: transform var(--admin-motion), box-shadow var(--admin-motion);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--admin-glow);
+  }
+}
+
+.preview-card__eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-secondary);
+}
+
+.preview-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.preview-card__text {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.preview-alert {
+  padding: 12px 14px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  border-radius: var(--admin-radius-sm);
+  border-left: 3px solid transparent;
+
+  &--ok {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+    border-left-color: var(--accent-green);
+  }
+
+  &--error {
+    color: var(--text-primary);
+    background: var(--bg-danger-soft);
+    border-left-color: var(--accent-error);
+  }
+}
+
+// --- Responsivo -------------------------------------------------------------
+
+// Tablet: a previa desce para baixo dos cartoes; a coluna de trabalho fica
+// inteira para os grupos de cor.
+@media (max-width: 1180px) {
+  .appearance-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .appearance-aside {
+    position: static;
+    max-height: none;
+  }
+}
+
+// A barra lateral vira menu superior antes de o conteudo espremer.
+@media (max-width: 900px) {
+  .admin-page__body {
+    grid-template-columns: 1fr;
+    gap: var(--admin-pad);
+  }
+
+  .admin-nav {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 8px;
+  }
+
+  .admin-nav__description {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-page {
+    padding-bottom: 48px;
+  }
+
+  .admin-nav {
+    grid-auto-flow: row;
+  }
+
+  .admin-nav__description {
+    display: block;
+  }
+
+  .tokens-group__grid {
+    grid-template-columns: 1fr;
+  }
+}
