@@ -1,0 +1,485 @@
+// Oportunidades — lista e shell de condução.
+// Herdam o console compartilhado (`styles/components/_console.scss`).
+
+.oportunidades-page,
+.oportunidade-page {
+  width: 100%;
+  padding: 32px var(--admin-gutter) 64px;
+  color: var(--text-primary);
+}
+
+.oportunidades-page__header,
+.oportunidade-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--admin-pad);
+  flex-wrap: wrap;
+  margin-bottom: var(--admin-pad);
+}
+
+.oportunidade-page__header {
+  display: block;
+}
+
+.oportunidades-page__title,
+.oportunidade-page__title {
+  margin-top: 8px;
+  font-size: clamp(1.75rem, 2.2vw, 2.125rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.oportunidades-page__description {
+  max-width: 68ch;
+  margin-top: 12px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.oportunidade-page__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.oportunidade-page__codigo {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.oportunidade-page__demandante {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.oportunidade-page__vazio {
+  padding: 48px 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+
+  a {
+    color: var(--accent-primary);
+  }
+}
+
+// --- Selos do fluxo ---------------------------------------------------------
+
+.origem-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 999px;
+  white-space: nowrap;
+
+  // Problema externo x ideia interna: as duas portas de entrada do produto
+  // precisam ser distinguíveis de relance na fila.
+  &--externo {
+    color: var(--accent-secondary);
+    background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
+  }
+
+  &--interna {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+}
+
+.fluxo-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+
+  // Só os desfechos ganham cor: durante o fluxo, todas as etapas valem o mesmo,
+  // e colorir cada uma faria a fila parecer um semáforo sem significado.
+  &--aguardando_decisao {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &--continuar {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+  }
+
+  &--revisar {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &--arquivada,
+  &--arquivar {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
+.oportunidade-link {
+  display: grid;
+  gap: 2px;
+
+  &:hover .oportunidade-link__titulo {
+    color: var(--accent-primary);
+  }
+}
+
+.oportunidade-link__titulo {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: color var(--admin-motion);
+}
+
+.oportunidade-link__meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.oportunidade-lacuna {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  font-weight: 600;
+  color: var(--accent-error);
+
+  svg {
+    font-size: 0.7rem;
+  }
+}
+
+.lacuna-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-error);
+  background: var(--bg-danger-soft);
+  border-radius: 999px;
+}
+
+// --- Abas do shell ----------------------------------------------------------
+
+.oportunidade-abas {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  margin-bottom: var(--admin-pad);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--admin-card-border);
+}
+
+.oportunidade-aba {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color var(--admin-motion), border-color var(--admin-motion);
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &.is-active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+  }
+
+  // Etapa planejada: continua alcançável (o shell é o mapa do fluxo), mas sem
+  // o peso visual de uma etapa que já funciona.
+  &.is-planned {
+    font-weight: 500;
+    opacity: 0.75;
+  }
+}
+
+.oportunidade-aba__icon {
+  font-size: 0.8rem;
+}
+
+.oportunidade-aba__tag {
+  padding: 2px 7px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+
+// --- Conteúdo das abas ------------------------------------------------------
+
+.oportunidade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  gap: var(--admin-gap);
+}
+
+.oportunidade-resumo {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+.oportunidade-bloco {
+  display: grid;
+  gap: 8px;
+}
+
+.oportunidade-bloco__titulo {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.oportunidade-bloco__vazio,
+.oportunidade-bloco__nota {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.oportunidade-equipe {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+
+  li {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+  }
+}
+
+// --- Decisão ----------------------------------------------------------------
+
+.decisao-opcoes {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.decisao-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
+  cursor: pointer;
+  transition: border-color var(--admin-motion), background var(--admin-motion);
+
+  input {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    accent-color: var(--accent-primary);
+  }
+
+  &:hover {
+    border-color: var(--admin-card-border-hover);
+  }
+
+  &.is-selected {
+    border-color: var(--border-accent);
+    background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  }
+
+  // Arquivar é destrutivo para o fluxo: destacar em vermelho quando escolhido
+  // evita o clique distraído no último item da lista.
+  &--danger.is-selected {
+    border-color: color-mix(in srgb, var(--accent-error) 45%, transparent);
+    background: var(--bg-danger-soft);
+  }
+}
+
+.decisao-opcao__texto {
+  display: grid;
+  gap: 2px;
+
+  strong {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+  }
+
+  span {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+}
+
+.decisao-acoes {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.decisao-selo {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border-radius: 999px;
+
+  &--continuar {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+  }
+
+  &--revisar {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &--arquivar {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
+.oportunidade-justificativa {
+  padding: 14px 16px;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--admin-radius-sm);
+}
+
+// --- Trilha do histórico ----------------------------------------------------
+
+.trilha {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  list-style: none;
+}
+
+.trilha__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px 0;
+
+  // Linha ligando os marcadores: a trilha é uma sequência, não uma pilha de
+  // avisos soltos.
+  &:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 44px;
+    bottom: 0;
+    width: 2px;
+    background: var(--admin-card-border);
+  }
+}
+
+.trilha__marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: 50%;
+
+  &--decisao {
+    color: var(--accent-primary);
+    border-color: var(--border-accent);
+    background: var(--accent-primary-dim);
+  }
+
+  &--copiloto,
+  &--matching,
+  &--preanalise {
+    color: var(--accent-secondary);
+  }
+}
+
+.trilha__texto {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.trilha__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.trilha__ator {
+  font-weight: 600;
+}
+
+// --- Etapa planejada --------------------------------------------------------
+
+.etapa-planejada {
+  border-style: dashed;
+}
+
+.etapa-planejada__selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.etapa-planejada__nota {
+  max-width: 72ch;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}

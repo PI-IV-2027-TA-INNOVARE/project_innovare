@@ -1,0 +1,63 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-ghost {
+  color: var(--accent-primary);
+  background: var(--bg-chip);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-ghost:hover {
+  color: var(--accent-primary-strong);
+  background: var(--bg-chip-strong);
+}
+
+// O laranja da marca cru reprova o AA da WCAG com texto por cima (3,0:1).
+// --accent-cta-bg / --accent-cta-text sao o par corrigido, definido por tema
+// em base/_globals.scss e derivado de --accent-primary em runtime.
+.btn-primary {
+  color: var(--accent-cta-text);
+  background: var(--accent-cta-bg);
+  box-shadow: var(--shadow-accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-cta-bg-hover);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--shadow-medium);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  color: var(--accent-primary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-outline:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-secondary);
+}
+
+.btn-lg {
+  padding: 14px 32px;
+  font-size: 1rem;
+  border-radius: var(--radius-md);
+}
+
+.btn-icon {
+  font-size: 1.1em;
+}

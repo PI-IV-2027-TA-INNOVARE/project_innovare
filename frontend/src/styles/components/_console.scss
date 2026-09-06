@@ -1,0 +1,1475 @@
+// Console — pecas compartilhadas pelas telas de gestao.
+//
+// Servem ao painel do Administrador (/admin) e as telas de gestao do Supervisor
+// (/rede, /perfil): mesma grade de 8px, mesmos botoes, campos, tabela, selos,
+// menus de linha, paginacao e modais.
+//
+// NENHUMA cor literal: tudo sai das CSS custom properties, porque o painel de
+// Aparencia as reescreve em tempo real. Profundidade e brilho saem da paleta
+// institucional via `color-mix`, sem cores novas.
+
+// Tokens e anel de foco de todo o console — o painel do Administrador e as
+// telas de gestao do Supervisor usam a mesma grade e o mesmo ritmo.
+.console,
+.admin-page {
+  // Grade e ritmo
+  --admin-gutter: clamp(18px, 2.4vw, 40px);
+  --admin-nav-offset: 88px; // 68px da AuthNav sticky + respiro
+  --admin-radius: 16px;
+  --admin-radius-sm: 12px;
+  --admin-pad: 24px;
+  --admin-gap: 16px;
+  --admin-section-gap: 32px;
+  --admin-motion: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  // Superficies derivadas: elevacao por luz, nao por sombra pesada.
+  --admin-card-border: var(--border-color);
+  --admin-card-border-hover: color-mix(in srgb, var(--accent-secondary) 34%, var(--border-color));
+  --admin-glow: 0 10px 28px color-mix(in srgb, var(--accent-secondary) 16%, transparent);
+  --admin-glow-soft: 0 2px 10px color-mix(in srgb, var(--accent-secondary) 8%, transparent);
+
+
+  // Anel de foco unico para tudo que e clicavel (WCAG 2.4.7). `:where` mantem
+  // especificidade zero, entao as regras de componente continuam vencendo.
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+// --- Cabecalho de secao -----------------------------------------------------
+
+.admin-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--admin-pad);
+  flex-wrap: wrap;
+  margin-bottom: var(--admin-section-gap);
+}
+
+.admin-section__heading {
+  min-width: 0;
+}
+
+.admin-section__title {
+  font-size: 1.375rem; // 22px
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.admin-section__subtitle {
+  margin-top: 8px;
+  max-width: 64ch;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.admin-section__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// --- Botoes -----------------------------------------------------------------
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: var(--accent-primary);
+  border: 1px solid transparent;
+  border-radius: var(--admin-radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--admin-motion),
+    border-color var(--admin-motion),
+    color var(--admin-motion),
+    transform var(--admin-motion);
+
+  &:hover:not(:disabled) {
+    background: var(--accent-primary-strong);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  &--outline {
+    color: var(--text-primary);
+    background: transparent;
+    border-color: var(--border-color);
+
+    &:hover:not(:disabled) {
+      color: var(--accent-primary);
+      background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+      border-color: var(--border-accent);
+    }
+  }
+
+  &--ghost {
+    color: var(--text-primary);
+    background: transparent;
+    border-color: transparent;
+
+    &:hover:not(:disabled) {
+      color: var(--accent-primary);
+      background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+    }
+  }
+
+  &--danger {
+    color: var(--text-on-accent, #fff);
+    background: var(--accent-error);
+
+    &:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--accent-error) 84%, var(--text-primary));
+    }
+  }
+
+  // Filtro ligado: o botao continua outline, so ganha o acento — preencher aqui
+  // competiria com "Novo usuario", que e a acao primaria da barra.
+  &--outline.is-active {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+    border-color: var(--border-accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+// Capacidade que a baseline prevê e a tela ainda não entrega. Visível e
+// desabilitada, nunca um link para rota inexistente.
+.admin-btn__soon {
+  padding: 2px 7px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 999px;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    color var(--admin-motion),
+    background var(--admin-motion),
+    border-color var(--admin-motion);
+
+  &:hover {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+    border-color: var(--border-accent);
+  }
+
+  &.is-done {
+    color: var(--accent-green);
+    border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
+  }
+}
+
+.link-button {
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--admin-motion);
+
+  &:hover {
+    color: var(--accent-primary-strong);
+    text-decoration: underline;
+  }
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--admin-motion);
+
+  &:hover {
+    color: var(--accent-primary);
+  }
+}
+
+.disclosure__chevron {
+  font-size: 0.7rem;
+  transition: transform var(--admin-motion);
+
+  &.is-open {
+    transform: rotate(180deg);
+  }
+}
+
+// --- Campos -----------------------------------------------------------------
+
+.admin-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--admin-radius-sm);
+  transition: border-color var(--admin-motion), box-shadow var(--admin-motion);
+
+  &::placeholder {
+    color: var(--text-muted);
+    opacity: 0.75;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+// Campo de texto longo: mesma moldura do input, altura livre.
+.admin-input--area {
+  min-height: 96px;
+  padding: 12px 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.admin-search {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+.admin-search__icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.admin-search__input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px 0 38px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--admin-radius-sm);
+  transition: border-color var(--admin-motion), box-shadow var(--admin-motion);
+
+  &::placeholder {
+    color: var(--text-muted);
+    opacity: 0.75;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+// --- Aviso ------------------------------------------------------------------
+
+.admin-banner {
+  margin-bottom: var(--admin-pad);
+  padding: 16px 20px;
+  background: var(--accent-warm);
+  border: 1px solid var(--border-accent);
+  border-left-width: 3px;
+  border-radius: var(--admin-radius-sm);
+
+  strong {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+  }
+
+  p {
+    margin-top: 4px;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  code {
+    padding: 1px 5px;
+    font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
+    font-size: 0.9em;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    border-radius: 4px;
+  }
+}
+
+// --- Toast ------------------------------------------------------------------
+
+.admin-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 48px));
+  padding: 14px 18px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
+  box-shadow: var(--admin-glow);
+  animation: admin-toast-in var(--admin-motion) both;
+}
+
+.admin-toast__icon {
+  color: var(--accent-green);
+}
+
+.admin-toast--error .admin-toast__icon {
+  color: var(--accent-error);
+}
+
+.admin-toast--info .admin-toast__icon {
+  color: var(--accent-primary);
+}
+
+@keyframes admin-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+// --- Usuarios: aviso compacto -----------------------------------------------
+
+.admin-callout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: var(--admin-pad);
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--admin-radius-sm);
+}
+
+.admin-callout__icon {
+  color: var(--accent-primary);
+}
+
+.admin-callout__text {
+  flex: 1;
+  min-width: 200px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.admin-callout__detail {
+  flex-basis: 100%;
+  padding-top: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  border-top: 1px solid color-mix(in srgb, var(--accent-primary) 16%, transparent);
+
+  code {
+    padding: 1px 5px;
+    font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
+    font-size: 0.9em;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    border-radius: 4px;
+  }
+}
+
+// --- Usuarios: cartoes de estatistica ---------------------------------------
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--admin-gap);
+  margin-bottom: var(--admin-pad);
+}
+
+.stat-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  transition:
+    transform var(--admin-motion),
+    border-color var(--admin-motion),
+    box-shadow var(--admin-motion);
+
+  // Indicador lateral: e o unico laranja do cartao, entao continua significando
+  // "isto e da marca" sem competir com os botoes de acao.
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-primary);
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: var(--admin-card-border-hover);
+    box-shadow: var(--admin-glow);
+  }
+
+  &--ok::before {
+    background: var(--accent-green);
+  }
+
+  &--ok .stat-card__icon {
+    color: var(--accent-green);
+  }
+}
+
+.stat-card__icon {
+  font-size: 1.1rem;
+  color: var(--accent-primary);
+  opacity: 0.9;
+}
+
+.stat-card__label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.stat-card__value {
+  margin-top: 2px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+// --- Usuarios: barra de acoes -----------------------------------------------
+
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-gap);
+  margin-bottom: var(--admin-pad);
+  flex-wrap: wrap;
+}
+
+.admin-toolbar__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.admin-search__clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color var(--admin-motion), background var(--admin-motion);
+
+  &:hover {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+}
+
+// --- Usuarios: filtros ------------------------------------------------------
+
+.filter-panel {
+  display: grid;
+  gap: var(--admin-gap);
+  margin-bottom: var(--admin-gap);
+  padding: var(--admin-pad);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+}
+
+.filter-panel__group {
+  border: none;
+  padding: 0;
+}
+
+.filter-panel__legend {
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.chip-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color var(--admin-motion),
+    background var(--admin-motion),
+    border-color var(--admin-motion),
+    opacity var(--admin-motion);
+
+  &:hover {
+    opacity: 0.86;
+    border-color: var(--border-color);
+  }
+
+  &.is-selected {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+    border-color: var(--border-accent);
+  }
+
+  &--removable {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
+
+    svg {
+      font-size: 0.7rem;
+      opacity: 0.7;
+    }
+
+    &:hover {
+      color: var(--accent-error);
+      background: var(--bg-danger-soft);
+    }
+  }
+}
+
+.active-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--admin-gap);
+  flex-wrap: wrap;
+}
+
+// --- Usuarios: tabela -------------------------------------------------------
+
+.admin-table-wrap {
+  overflow-x: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow-soft);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 12px 20px;
+    text-align: left;
+    font-size: 0.75rem; // 12px
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 18px 20px;
+    color: var(--text-primary);
+    border-top: 1px solid var(--admin-card-border);
+    vertical-align: middle;
+  }
+
+  tbody tr {
+    transition: background var(--admin-motion), transform var(--admin-motion);
+
+    &:hover {
+      background: color-mix(in srgb, var(--accent-secondary) 8%, transparent);
+      transform: translateY(-1px);
+
+      td:first-child {
+        box-shadow: inset 3px 0 0 var(--accent-primary);
+      }
+    }
+  }
+}
+
+.admin-table__actions-col {
+  width: 64px;
+  text-align: right;
+}
+
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--admin-motion);
+
+  &:hover {
+    color: var(--accent-primary);
+  }
+
+  &.is-active {
+    color: var(--text-primary);
+  }
+
+  &__icon {
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity var(--admin-motion);
+  }
+
+  &:hover &__icon,
+  &.is-active &__icon {
+    opacity: 0.8;
+  }
+}
+
+// --- Usuarios: celula de identidade -----------------------------------------
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.user-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 12px;
+
+  // Tres tons, todos institucionais: o avatar distribui as cores existentes,
+  // nao introduz nenhuma.
+  &[data-tone='1'] {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &[data-tone='2'] {
+    color: var(--accent-secondary);
+    background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
+  }
+
+  &[data-tone='3'] {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 16%, transparent);
+  }
+
+  &[data-size='lg'] {
+    width: 56px;
+    height: 56px;
+    font-size: 1.1rem;
+    border-radius: 16px;
+  }
+}
+
+.user-cell__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.user-cell__name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-cell__meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.user-cell__email {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+// --- Usuarios: selos --------------------------------------------------------
+
+.role-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 999px;
+  white-space: nowrap;
+
+  // Supervisor: contorno laranja — conduz a oportunidade, mas nao administra.
+  &--supervisor {
+    color: var(--accent-primary);
+    background: transparent;
+    border: 1px solid var(--border-accent);
+  }
+
+  // Administrador: preenchido, o unico com peso solido na tabela.
+  &--administrador {
+    color: var(--text-on-accent, #fff);
+    background: var(--accent-primary);
+  }
+
+  &--pesquisador {
+    color: var(--accent-secondary);
+    background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
+  }
+
+  &--demandante,
+  &--colaborador,
+  &--graduando {
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border-color);
+  }
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap;
+
+  &__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  &--ativo {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+  }
+
+  &--inativo {
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  }
+
+  // Cadastrado na rede, ainda sem login liberado — estado proprio, porque o
+  // Supervisor precisa distinguir "nao entrou ainda" de "saiu" (RN-A04).
+  &--sem_acesso {
+    color: var(--accent-primary);
+    background: var(--accent-primary-dim);
+  }
+
+  &--suspenso {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
+// --- Usuarios: menu da linha ------------------------------------------------
+
+.row-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.row-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px; // area clicavel minima (WCAG 2.5.8)
+  height: 44px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color var(--admin-motion), background var(--admin-motion), border-color var(--admin-motion);
+
+  &:hover,
+  &[aria-expanded='true'] {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+    border-color: var(--border-accent);
+  }
+}
+
+.row-menu__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+  min-width: 216px;
+  padding: 6px;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: 14px;
+  box-shadow: var(--admin-glow);
+  animation: row-menu-in 140ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  transform-origin: top right;
+}
+
+@keyframes row-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.row-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: left;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color var(--admin-motion), background var(--admin-motion);
+
+  svg {
+    width: 14px;
+    color: var(--text-muted);
+  }
+
+  &:hover {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+
+    svg {
+      color: var(--accent-primary);
+    }
+  }
+
+  &--danger {
+    color: var(--accent-error);
+
+    svg {
+      color: var(--accent-error);
+    }
+
+    &:hover {
+      color: var(--accent-error);
+      background: var(--bg-danger-soft);
+
+      svg {
+        color: var(--accent-error);
+      }
+    }
+  }
+}
+
+// --- Usuarios: carregamento e vazio -----------------------------------------
+
+.skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-primary) 8%, transparent) 25%,
+    color-mix(in srgb, var(--text-primary) 14%, transparent) 37%,
+    color-mix(in srgb, var(--text-primary) 8%, transparent) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-sweep 1.4s ease infinite;
+}
+
+@keyframes skeleton-sweep {
+  from { background-position: 100% 50%; }
+  to { background-position: 0 50%; }
+}
+
+.table-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.table-empty__icon {
+  font-size: 1.6rem;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.table-empty__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.table-empty__text {
+  max-width: 46ch;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.table-empty .admin-btn {
+  margin-top: 8px;
+}
+
+// --- Usuarios: paginacao ----------------------------------------------------
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--admin-gap);
+  margin-top: var(--admin-gap);
+  flex-wrap: wrap;
+}
+
+.pagination__summary {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-gap);
+  flex-wrap: wrap;
+}
+
+.pagination__size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.pagination__page {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pagination__buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.pagination__buttons .icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.admin-input--compact {
+  width: auto;
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+// --- Modais -----------------------------------------------------------------
+
+.admin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  backdrop-filter: blur(4px);
+  animation: admin-modal-fade 140ms ease both;
+}
+
+@keyframes admin-modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.admin-modal__dialog {
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow);
+  animation: admin-modal-in 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+
+  &--sm { max-width: 420px; }
+  &--md { max-width: 560px; }
+}
+
+@keyframes admin-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.admin-modal__header {
+  padding: var(--admin-pad) var(--admin-pad) 0;
+}
+
+.admin-modal__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-modal__description {
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.admin-modal__body {
+  padding: var(--admin-pad);
+}
+
+.admin-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 var(--admin-pad) var(--admin-pad);
+}
+
+.admin-form {
+  display: grid;
+  gap: var(--admin-gap);
+}
+
+.admin-form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--admin-gap);
+}
+
+.admin-field {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-field__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.admin-field__error {
+  font-size: 0.75rem;
+  color: var(--accent-error);
+}
+
+.detail-list {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-list__row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+
+  dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  dd {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+}
+
+// --- Cartao de secao e lista de termos --------------------------------------
+//
+// Compartilhados pelo Meu Perfil do Pesquisador e pelo cadastro da Rede: as
+// duas telas editam as mesmas sete dimensoes do RF03.
+// --- (fim da nota) -------------------------------------------------------
+
+.perfil-card {
+  padding: var(--admin-pad);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow-soft);
+  transition: border-color var(--admin-motion);
+
+  &:hover {
+    border-color: var(--admin-card-border-hover);
+  }
+}
+
+.perfil-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: var(--admin-gap);
+}
+
+.perfil-card__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.perfil-card__description {
+  margin-top: 6px;
+  max-width: 54ch;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+// Selo do campo que pertence ao Supervisor. O campo continua visível — esconder
+// faria o pesquisador achar que o dado não existe.
+.perfil-card__lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+
+  svg {
+    font-size: 0.7rem;
+  }
+}
+
+// `fieldset` neutro de layout: sem isto o navegador aplica borda e margem
+// próprias e o cartão desalinha dos vizinhos.
+.perfil-card__body {
+  display: grid;
+  gap: var(--admin-gap);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  &:disabled .admin-input {
+    opacity: 0.75;
+    cursor: not-allowed;
+  }
+}
+
+.perfil-card__note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+// --- Lista de termos --------------------------------------------------------
+
+.lista-editavel__entrada {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  .admin-input {
+    flex: 1;
+    min-width: 180px;
+    width: auto;
+  }
+}
+
+.lista-editavel__chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  list-style: none;
+}
+
+.lista-editavel__vazio {
+  margin-top: 12px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+// --- Volta para a lista -----------------------------------------------------
+//
+// Alvo de 44px no canto superior esquerdo — onde a mão procura. Fica ACIMA do
+// título, e não ao lado: ao lado, ele compete com o nome do registro; acima,
+// lê-se primeiro "de onde eu saio" e depois "onde eu estou".
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-bottom: 4px;
+  margin-left: -10px; // alinha o texto com o título, não o padding
+  padding: 0 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: 10px;
+  transition: color var(--admin-motion), background var(--admin-motion);
+
+  svg {
+    font-size: 0.75rem;
+    transition: transform var(--admin-motion);
+  }
+
+  &:hover {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+
+    svg {
+      transform: translateX(-2px);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+// --- Responsivo do console -------------------------------------------------
+
+// Tablet: a barra de acoes quebra em duas linhas e a tabela rola na horizontal.
+@media (max-width: 860px) {
+  .admin-toolbar__actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .admin-search {
+    max-width: none;
+  }
+}
+
+// Mobile: cada usuario vira um cartao. Os rotulos saem do `data-label` que a
+// celula ja carrega — sem segunda arvore de marcacao para manter em sincronia.
+@media (max-width: 760px) {
+  .admin-table--users {
+    thead {
+      display: none;
+    }
+
+    tbody tr {
+      display: grid;
+      gap: 10px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--admin-card-border);
+
+      &:hover {
+        transform: none;
+
+        td:first-child {
+          box-shadow: none;
+        }
+      }
+    }
+
+    td {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 0;
+      border: none;
+
+      &::before {
+        content: attr(data-label);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+      }
+    }
+
+    td[data-label='Usuário'],
+    td.admin-table__actions-col {
+      grid-template-columns: 1fr;
+      width: auto;
+      text-align: left;
+
+      &::before {
+        display: none;
+      }
+    }
+
+    td.admin-table__actions-col {
+      justify-items: end;
+    }
+  }
+}
+
+@media (max-width: 620px) {
+  .console {
+    padding-bottom: 48px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pagination {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-section__header {
+    flex-direction: column;
+  }
+
+  .admin-toast {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+}
+
+// --- Movimento reduzido -----------------------------------------------------
+
+@media (prefers-reduced-motion: reduce) {
+  .console *,
+  .admin-page * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+
+  .token-card:hover,
+  .token-card:focus-within,
+  .preview-card:hover {
+    transform: none;
+  }
+}

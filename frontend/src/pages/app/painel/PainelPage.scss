@@ -1,0 +1,435 @@
+// Painel inicial da area autenticada — identidade AC2 via custom properties.
+//
+// Uso do laranja, de proposito escalonado: acao (CTA e link ativo) usa o laranja
+// cheio; identidade e decoracao usam o mesmo laranja diluido; o que ainda nao
+// existe nao usa laranja nenhum. Sem essa separacao a cor deixa de significar
+// "clique aqui" e vira so a cor da tela.
+
+.painel {
+  width: 100%;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.painel__eyebrow {
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--accent-primary);
+}
+
+.painel__title {
+  margin-top: 6px;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+}
+
+.painel__role {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.89rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.painel__role-tag {
+  padding: 3px 11px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+// --- Aviso de demonstracao --------------------------------------------------
+
+.painel__notice {
+  position: relative;
+  margin-top: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 48px 14px 16px;
+  background: var(--accent-warm);
+  border: 1px solid var(--border-accent);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+}
+
+.painel__notice-icon {
+  margin-top: 2px;
+  color: var(--accent-primary);
+}
+
+.painel__notice-body {
+  min-width: 0;
+
+  strong {
+    display: block;
+    font-size: 0.86rem;
+    color: var(--text-primary);
+  }
+
+  p {
+    margin-top: 4px;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+}
+
+.painel__notice-toggle {
+  margin-top: 8px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+.painel__notice-detail {
+  code {
+    padding: 1px 5px;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--bg-chip);
+    border-radius: 4px;
+  }
+}
+
+.painel__notice-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+
+  &:hover {
+    color: var(--accent-primary);
+    background: var(--bg-chip);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+// --- Modulos administrativos ------------------------------------------------
+
+.painel__modules {
+  margin-top: 32px;
+}
+
+// Grade preparada para os proximos modulos. O cartao unico de hoje nao estica
+// pela tela inteira: `auto-fill` com teto de 380px deixa a coluna com largura de
+// leitura e o proximo modulo entra ao lado, sem mexer no layout.
+.painel__module-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 380px));
+  gap: 16px;
+}
+
+.module-card {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-accent);
+  }
+}
+
+.module-card__icon {
+  color: var(--accent-primary);
+  opacity: 0.9;
+}
+
+.module-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.module-card__text {
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.module-card__link {
+  margin-top: 8px;
+  padding: 10px 18px;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: var(--accent-primary);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--accent-primary-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+// --- Fluxo de valor (planejado) ---------------------------------------------
+
+.painel__roadmap {
+  margin-top: 40px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border-color);
+}
+
+.painel__section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.painel__section-subtitle {
+  margin-top: 5px;
+  max-width: 68ch;
+  font-size: 0.87rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.painel__steps {
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+}
+
+// Etapa ainda nao implementada.
+//
+// O apagamento NAO e feito com `opacity` no cartao inteiro: isso derrubaria o
+// contraste do texto abaixo do minimo AA. O estado "planejado" vem do fundo
+// rebaixado, da borda tracejada, do texto em tom de apoio e da ausencia de
+// qualquer laranja — o laranja fica reservado ao que de fato responde ao clique.
+.painel-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 18px;
+  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: default;
+
+  // Linha conectora: liga o circulo desta etapa ao da proxima, para a lista ler
+  // como sequencia e nao como quatro itens soltos.
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 33px; // 18px de padding + metade do circulo de 30px
+    top: calc(50% + 15px);
+    width: 2px;
+    height: calc(50% + 10px);
+    background: var(--border-color);
+    opacity: 0.7;
+  }
+}
+
+.painel-step__index {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.painel-step__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.painel-step__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.painel-step__description {
+  margin-top: 3px;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+// Contraste conferido: `--text-muted` cheio sobre fundo transparente mantem
+// ~7,8:1 no tema escuro. Um cinza mais claro aqui reprovaria em AA.
+.painel-step__badge {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .painel__module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .painel-step {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .painel-step__badge {
+    margin-left: 45px;
+  }
+}
+
+// --- Conteúdo por papel -----------------------------------------------------
+//
+// Herda o console compartilhado (`styles/components/_console.scss`) para os
+// cartões de indicador e os selos de fluxo, sem duplicar componente.
+
+.painel__papel {
+  margin-top: 32px;
+  padding: 0;
+}
+
+.painel-secao {
+  margin-top: 24px;
+}
+
+.painel-secao__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.painel-secao__titulo {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.painel-secao__nota {
+  margin-top: 12px;
+  max-width: 70ch;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.painel-lista {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.painel-lista__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-accent);
+  }
+}
+
+.painel-lista__item.is-static {
+  cursor: default;
+
+  &:hover {
+    transform: none;
+    border-color: var(--border-color);
+  }
+}
+
+.painel-lista__texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.painel-lista__titulo {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.painel-lista__meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.painel-lista__vazio {
+  padding: 20px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+}

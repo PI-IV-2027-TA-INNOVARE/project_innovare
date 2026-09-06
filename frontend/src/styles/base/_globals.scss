@@ -1,0 +1,201 @@
+@use '../variables' as *;
+
+// ---------------------------------------------------------------------------
+// Os tokens abaixo sao CSS custom properties de proposito: o painel de
+// Aparencia do admin sobrescreve um subconjunto delas em runtime via
+// `document.documentElement.style.setProperty(...)` (ver src/theme/brandTokens.js
+// e src/context/BrandingContext.jsx). Qualquer cor nova que deva ser editavel
+// pelo admin precisa existir como custom property aqui.
+// ---------------------------------------------------------------------------
+
+:root {
+  --bg-primary: #{$color-bg-primary};
+  --bg-secondary: #{$color-bg-secondary};
+  --bg-tertiary: #{$color-bg-tertiary};
+  --bg-card: #{$color-surface};
+  --bg-card-hover: #{$color-surface-hover};
+  --bg-card-solid: #{$color-surface-white};
+  // Este gradiente e o fundo que o usuario realmente ve: `body` esta sempre
+  // coberto por um shell de 100dvh (.authenticated-app / .login-page), entao
+  // `background: var(--bg-primary)` no body nunca aparece.
+  //
+  // Por isso ele PRECISA referenciar custom properties. Enquanto era compilado
+  // a partir das variaveis Sass, os valores viravam literais no CSS e mudar
+  // "Fundo da pagina" no painel de Aparencia nao surtia efeito nenhum.
+  //
+  // Como as referencias resolvem no proprio :root, a mesma declaracao serve
+  // aos dois temas — o bloco [data-theme='dark'] so troca as variaveis.
+  --bg-auth-shell:
+    radial-gradient(circle at 12% 18%, var(--bg-auth-radial) 0%, transparent 46%),
+    radial-gradient(circle at 88% 84%, var(--accent-secondary-dim) 0%, transparent 52%),
+    linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+  --bg-auth-radial: #{rgba($color-ac2-orange, 0.12)};
+  --bg-input: #{$color-surface};
+  --bg-input-muted: #{rgba($color-ac2-navy, 0.04)};
+  --bg-panel: #{rgba($color-surface, 0.9)};
+  --bg-panel-strong: #{$color-surface};
+  --bg-chip: #{rgba($color-ac2-navy, 0.07)};
+  --bg-chip-strong: #{rgba($color-ac2-navy, 0.12)};
+  --bg-danger-soft: #{rgba($color-error, 0.08)};
+  // Painel institucional das telas de autenticacao.
+  //
+  // NAO muda com o tema: o produto inteiro e navy escuro, e um login claro
+  // quebraria a continuidade logo na primeira tela. Por isso o texto do painel
+  // tem tokens proprios — `--text-inverse` no tema escuro e PRETO (serve as
+  // superficies de acento, que la sao claras) e ficaria ilegivel aqui.
+  --bg-brand-panel: linear-gradient(155deg, #{$color-ac2-navy} 0%, #{$color-ac2-navy-deep} 100%);
+  --brand-panel-text: #{$color-ac2-navy-light};
+  --brand-panel-text-muted: #{rgba($color-ac2-navy-light, 0.74)};
+  --brand-panel-border: #{rgba($color-ac2-navy-light, 0.14)};
+  --brand-panel-glow: #{rgba($color-ac2-navy-light, 0.12)};
+
+  --accent-primary: #{$color-primary};
+  --accent-primary-strong: #{$color-primary-strong};
+  --accent-secondary: #{$color-secondary};
+  --accent-secondary-strong: #{$color-secondary-strong};
+  --accent-warm: #{$color-warm};
+  --accent-green: #{$color-green};
+  --accent-error: #{$color-error};
+
+  --accent-primary-dim: #{$color-primary-dim};
+  --accent-secondary-dim: #{$color-secondary-dim};
+  --accent-warm-dim: #{$color-warm-dim};
+
+  // O laranja da marca (#E07B1A) tem 3,0:1 sobre branco e reprova o AA da WCAG
+  // (4,5:1 para texto). As variaveis abaixo existem para os dois usos em que
+  // ele vira *texto*: link/icone sobre superficie clara e botao solido.
+  // O color-mix escurece o tom da marca em runtime, entao o painel de Aparencia
+  // do admin continua repintando tudo a partir de --accent-primary.
+  //   #E07B1A -> #9E5816 = 5,0:1 sobre a superficie clara suavizada.
+  --accent-primary-text: color-mix(in srgb, var(--accent-primary) 70%, #05070b);
+  --accent-cta-bg: var(--accent-primary-text);
+  --accent-cta-bg-hover: color-mix(in srgb, var(--accent-primary) 58%, #05070b);
+  --accent-cta-text: #ffffff;
+
+  --shadow-accent: #{$shadow-accent};
+  --shadow-secondary: #{$shadow-secondary};
+  --shadow-soft: #{$shadow-soft};
+  --shadow-medium: #{$shadow-medium};
+  --shadow-strong: #{$shadow-strong};
+  --shadow-focus: 0 0 0 4px #{rgba($color-ac2-orange, 0.18)};
+  --shadow-focus-error: 0 0 0 4px #{rgba($color-error, 0.18)};
+
+  --text-primary: #{$color-text-primary};
+  --text-secondary: #{$color-text-secondary};
+  --text-muted: #{$color-text-muted};
+  --text-inverse: #{$color-text-inverse};
+  --text-inverse-muted: #{$color-text-inverse-muted};
+  --text-on-accent: #{$color-text-inverse};
+
+  --border-color: #{$color-border};
+  --border-accent: #{$color-border-accent};
+  --border-soft: #{rgba($color-ac2-navy, 0.08)};
+  --border-strong: #{rgba($color-ac2-navy, 0.16)};
+  --nav-public-bg: #{rgba($color-ac2-navy, 0.9)};
+  --nav-public-bg-strong: #{$color-ac2-navy};
+  --nav-auth-bg: #{rgba($color-surface, 0.94)};
+
+  --font-primary: #{$font-primary};
+  --font-body: #{$font-body};
+
+  --radius-sm: #{$radius-sm};
+  --radius-md: #{$radius-md};
+  --radius-lg: #{$radius-lg};
+  --radius-xl: #{$radius-xl};
+
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.35s ease;
+  --transition-slow: 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  --max-width: #{$max-width};
+  --nav-height: #{$nav-height};
+}
+
+[data-theme='dark'] {
+  --bg-primary: #{$color-bg-primary-dark};
+  --bg-secondary: #{$color-bg-secondary-dark};
+  --bg-tertiary: #{$color-bg-tertiary-dark};
+  --bg-card: #{$color-surface-dark};
+  --bg-card-hover: #{$color-surface-hover-dark};
+  --bg-card-solid: #{$color-surface-white-dark};
+  --bg-auth-radial: #{rgba($color-primary-dark, 0.16)};
+  --bg-input: #{$color-surface-dark};
+  --bg-input-muted: #{rgba(#edf1f7, 0.05)};
+  --bg-panel: #{rgba($color-surface-dark, 0.92)};
+  --bg-panel-strong: #{$color-surface-white-dark};
+  --bg-chip: #{rgba(#edf1f7, 0.08)};
+  --bg-chip-strong: #{rgba(#edf1f7, 0.14)};
+  --bg-danger-soft: #{rgba($color-error-dark, 0.14)};
+  // Mesmo painel do tema claro — ver a nota em :root.
+  --bg-brand-panel: linear-gradient(155deg, #{$color-ac2-navy} 0%, #{$color-ac2-navy-deep} 100%);
+
+  --accent-primary: #{$color-primary-dark};
+  --accent-primary-strong: #{$color-primary-strong-dark};
+  --accent-secondary: #{$color-secondary-dark};
+  --accent-secondary-strong: #{$color-secondary-strong-dark};
+  --accent-warm: #{$color-warm-dark};
+  --accent-green: #{$color-green-dark};
+  --accent-error: #{$color-error-dark};
+
+  --accent-primary-dim: #{$color-primary-dim-dark};
+  --accent-secondary-dim: #{$color-secondary-dim-dark};
+  --accent-warm-dim: #{$color-warm-dim-dark};
+
+  // No tema escuro o laranja claro (#F0913A) ja da 7,2:1 sobre as superficies
+  // escuras: ele fica como esta e quem inverte e o texto do botao solido.
+  --accent-primary-text: var(--accent-primary);
+  --accent-cta-bg: var(--accent-primary);
+  --accent-cta-bg-hover: var(--accent-primary-strong);
+  --accent-cta-text: #0b1626;
+
+  --shadow-accent: 0 18px 45px rgba(0, 0, 0, 0.5);
+  --shadow-secondary: 0 16px 40px rgba(0, 0, 0, 0.42);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.36);
+  --shadow-medium: 0 16px 34px rgba(0, 0, 0, 0.44);
+  --shadow-strong: 0 26px 52px rgba(0, 0, 0, 0.54);
+  --shadow-focus: 0 0 0 4px #{rgba($color-primary-dark, 0.24)};
+  --shadow-focus-error: 0 0 0 4px #{rgba($color-error-dark, 0.26)};
+
+  --text-primary: #{$color-text-primary-dark};
+  --text-secondary: #{$color-text-secondary-dark};
+  --text-muted: #{$color-text-muted-dark};
+  --text-inverse: #{$color-text-inverse-dark};
+  --text-inverse-muted: #{$color-text-inverse-muted-dark};
+  --text-on-accent: #{$color-text-inverse-dark};
+
+  --border-color: #{$color-border-dark};
+  --border-accent: #{$color-border-accent-dark};
+  --border-soft: #{rgba(#edf1f7, 0.1)};
+  --border-strong: #{rgba(#edf1f7, 0.18)};
+  --nav-public-bg: #{rgba($color-ac2-navy-deep, 0.9)};
+  --nav-public-bg-strong: #{$color-ac2-navy-deep};
+  --nav-auth-bg: #{rgba($color-surface-dark, 0.94)};
+}
+
+body {
+  font-family: $font-body;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  line-height: $line-height-body;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background var(--transition-normal), color var(--transition-normal);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input,
+textarea,
+select {
+  color-scheme: light;
+}
+
+[data-theme='dark'] input,
+[data-theme='dark'] textarea,
+[data-theme='dark'] select {
+  color-scheme: dark;
+}

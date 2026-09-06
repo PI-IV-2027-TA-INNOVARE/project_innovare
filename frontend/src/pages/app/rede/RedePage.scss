@@ -1,0 +1,122 @@
+// Rede interna do Supervisor — reaproveita o console compartilhado
+// (`styles/components/_console.scss`) e os cartões de seção do perfil.
+
+.rede-page {
+  width: 100%;
+  padding: 32px var(--admin-gutter) 64px;
+  color: var(--text-primary);
+}
+
+.rede-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--admin-pad);
+  flex-wrap: wrap;
+  margin-bottom: var(--admin-pad);
+}
+
+.rede-page__title {
+  margin-top: 8px;
+  font-size: clamp(1.75rem, 2.2vw, 2.125rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.rede-page__description {
+  max-width: 64ch;
+  margin-top: 12px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.rede-page__back {
+  color: inherit;
+
+  &:hover {
+    color: var(--accent-primary);
+  }
+}
+
+.rede-page__kicker {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+
+.rede-page__count {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+// Cartão de alerta da barra de indicadores: perfil sem competência declarada é
+// perfil invisível ao matching, e isso é um problema da rede, não uma métrica.
+.stat-card--alert {
+  &::before {
+    background: var(--accent-error);
+  }
+
+  .stat-card__icon {
+    color: var(--accent-error);
+  }
+}
+
+.competencia-lista {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.competencia-lista__vazio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-error);
+
+  svg {
+    font-size: 0.7rem;
+  }
+}
+
+// --- Formulário de cadastro -------------------------------------------------
+
+.rede-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  gap: var(--admin-gap);
+  margin-top: var(--admin-pad);
+}
+
+.rede-form__switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: var(--accent-primary);
+  }
+}
+
+.rede-form__footer {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
