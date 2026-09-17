@@ -50,7 +50,6 @@ export const appIcons = {
   passwordHide: faEyeSlash,
   warning: faTriangleExclamation,
 
-  // Console de administracao
   appearance: faPalette,
   users: faUsers,
   search: faMagnifyingGlass,
@@ -62,7 +61,6 @@ export const appIcons = {
   settings: faGear,
   logout: faArrowRightFromBracket,
 
-  // Usuarios
   addUser: faUserPlus,
   export: faDownload,
   filter: faFilter,
@@ -80,7 +78,6 @@ export const appIcons = {
   company: faBuilding,
   active: faCircleCheck,
 
-  // Oportunidades e estados de rota
   folder: faFolderOpen,
   flow: faDiagramProject,
   decision: faScaleBalanced,
@@ -89,7 +86,6 @@ export const appIcons = {
   back: faArrowLeft,
   compass: faCompass,
 
-  // Ordenacao e paginacao
   sort: faSort,
   sortAsc: faSortUp,
   sortDesc: faSortDown,

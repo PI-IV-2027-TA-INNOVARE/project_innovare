@@ -6,14 +6,6 @@ import {
   getDefaultBranding,
 } from '../theme/brandTokens'
 
-/**
- * Personalizacao visual em tempo real.
- *
- * O admin sobrescreve tokens de marca e a mudanca vale imediatamente para toda
- * a aplicacao, sem reload: aplicamos as CSS custom properties direto no <html>.
- * Cada tema (claro/escuro) guarda seu proprio conjunto de valores.
- */
-
 const BrandingContext = createContext(null)
 
 const STORAGE_KEY = 'pdconnect.branding.v1'
@@ -35,7 +27,6 @@ function readStoredBranding() {
       dark: parsed.dark && typeof parsed.dark === 'object' ? parsed.dark : {},
     }
   } catch {
-    // localStorage indisponivel (aba anonima, storage bloqueado): segue no padrao.
     return { light: {}, dark: {} }
   }
 }
@@ -44,7 +35,6 @@ function persistBranding(overrides) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides))
   } catch {
-    // Persistencia e conveniencia; a sessao atual continua funcionando sem ela.
   }
 }
 
@@ -53,7 +43,6 @@ export function BrandingProvider({ children }) {
   const [overrides, setOverrides] = useState(readStoredBranding)
   const appliedVarsRef = useRef([])
 
-  // Valores efetivos = padrao da AC2 para o tema atual + o que o admin mudou.
   const branding = useMemo(
     () => ({ ...getDefaultBranding(theme), ...(overrides[theme] || {}) }),
     [overrides, theme]
@@ -65,7 +54,6 @@ export function BrandingProvider({ children }) {
     const root = document.documentElement
     const variables = buildCssVariables(branding)
 
-    // Limpa o que foi aplicado antes para que "restaurar padrao" volte ao CSS.
     for (const cssVar of appliedVarsRef.current) {
       if (!(cssVar in variables)) {
         root.style.removeProperty(cssVar)
@@ -99,12 +87,10 @@ export function BrandingProvider({ children }) {
     })
   }, [theme])
 
-  /** Restaura a paleta oficial da AC2 no tema atual. */
   const resetTheme = useCallback(() => {
     setOverrides((current) => ({ ...current, [theme]: {} }))
   }, [theme])
 
-  /** Restaura a paleta oficial da AC2 nos dois temas. */
   const resetAll = useCallback(() => {
     setOverrides({ light: {}, dark: {} })
   }, [])

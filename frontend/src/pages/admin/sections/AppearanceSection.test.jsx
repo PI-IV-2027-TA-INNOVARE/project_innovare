@@ -5,13 +5,6 @@ import { BrandingProvider } from '../../../context/BrandingContext'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import AppearanceSection from './AppearanceSection'
 
-/**
- * Testes do painel de Aparência.
- *
- * O que importa aqui é o comportamento da tela: quem enxerga o quê, o que a
- * busca filtra, o que o bloco Avançado esconde e qual retorno a pessoa recebe
- * depois de mexer numa cor. As cores em si são contrato de `brandTokens.js`.
- */
 function renderAppearance() {
   return render(
     <ThemeProvider>
@@ -22,7 +15,6 @@ function renderAppearance() {
   )
 }
 
-/** O cartão de um token, localizado pelo nome visível da cor. */
 function cartaoDaCor(nome) {
   return screen.getByRole('heading', { name: nome, level: 4 }).closest('.token-card')
 }
@@ -58,7 +50,6 @@ describe('AppearanceSection', () => {
 
     await user.type(screen.getByLabelText(/buscar configuração/i), 'sucesso')
 
-    // Match escondido atrás de um grupo fechado é match perdido.
     expect(screen.getByText('Sucesso')).toBeVisible()
   })
 
@@ -72,7 +63,6 @@ describe('AppearanceSection', () => {
     await user.click(within(cartao).getByRole('button', { name: /avançado/i }))
 
     expect(within(cartao).getByText('--accent-primary')).toBeVisible()
-    // O laranja recalcula outras cinco variaveis; o bloco precisa dizer isso.
     expect(within(cartao).getByText('--shadow-focus')).toBeVisible()
   })
 
@@ -152,8 +142,6 @@ describe('AppearanceSection', () => {
   it('copia o valor da cor para a area de transferencia', async () => {
     const user = userEvent.setup()
 
-    // O `setup()` do user-event instala a propria area de transferencia; o
-    // dublê precisa entrar depois dele, ou e sobrescrito.
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText },

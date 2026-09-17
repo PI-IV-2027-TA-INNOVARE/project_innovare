@@ -7,7 +7,6 @@
   border-bottom: 1px solid var(--border-soft);
   background: var(--nav-auth-bg);
   backdrop-filter: blur(18px);
-  // necessário para o drawer posicionar corretamente (position: absolute)
   overflow: visible;
 }
 
@@ -40,7 +39,6 @@
   min-width: 0;
 }
 
-// Clean text links — underline active state, no chip
 .auth-nav__link {
   display: inline-flex;
   align-items: center;
@@ -69,7 +67,6 @@
   font-weight: 700;
 }
 
-// Mobile-right: sino + hamburger (só visível em mobile)
 .auth-nav__mobile-right {
   display: none;
   align-items: center;
@@ -117,7 +114,6 @@
   &.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
 }
 
-// Drawer mobile
 .auth-nav__drawer {
   position: absolute;
   top: 100%;
@@ -231,7 +227,6 @@
   max-width: min(38vw, 400px);
 }
 
-// Avatar initial circle
 .auth-nav__profile-text {
   display: flex;
   align-items: center;
@@ -256,7 +251,6 @@
   box-shadow: var(--shadow-focus);
 }
 
-// Avatar circle before name
 .auth-nav__profile-text::before {
   content: attr(data-initial);
   display: inline-flex;
@@ -284,11 +278,6 @@
   white-space: nowrap;
 }
 
-
-// --- Menu da conta ----------------------------------------------------------
-//
-// Perfil, tema e sair viviam soltos na barra, competindo com a navegacao. Aqui
-// viram um menu unico ancorado no avatar.
 
 .auth-nav__profile-chevron {
   font-size: 0.62rem;
@@ -364,7 +353,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 44px; // area clicavel minima (WCAG 2.5.8)
+  min-height: 44px;
   padding: 0 12px;
   font-family: inherit;
   font-size: 0.86rem;
@@ -471,7 +460,6 @@
   box-shadow: var(--shadow-focus);
 }
 
-// AuthNav autenticada — hamburger a partir de lg (1024px)
 @include media-down(lg) {
   .auth-nav {
     position: sticky;

@@ -5,15 +5,6 @@ import { appIcons } from '../../lib/icons'
 import { ROLES } from '../../lib/roles'
 import './SystemPages.scss'
 
-/**
- * Rota inexistente.
- *
- * Antes o `*` redirecionava para `/painel` em silêncio, o que confunde duas
- * coisas muito diferentes: um link digitado errado e um link para uma área que
- * a pessoa não pode ver. Agora cada caso tem sua tela — este diz que o endereço
- * não existe e oferece os destinos que o papel dela realmente alcança.
- */
-
 const DESTINOS_POR_PAPEL = {
   [ROLES.SUPERVISOR]: [
     { to: '/painel', label: 'Painel' },
@@ -29,7 +20,10 @@ const DESTINOS_POR_PAPEL = {
     { to: '/painel', label: 'Painel' },
     { to: '/admin', label: 'Administração' },
   ],
-  [ROLES.DEMANDANTE]: [{ to: '/painel', label: 'Painel' }],
+  [ROLES.DEMANDANTE]: [
+    { to: '/painel', label: 'Painel' },
+    { to: '/problemas', label: 'Meus problemas' },
+  ],
 }
 
 export default function NaoEncontradaPage() {

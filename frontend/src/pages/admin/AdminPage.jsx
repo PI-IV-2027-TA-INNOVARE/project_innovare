@@ -1,44 +1,24 @@
-import { useState } from 'react'
+import { Suspense } from 'react'
+import { NavLink, Outlet } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../lib/icons'
-import AppearanceSection from './sections/AppearanceSection'
-import UsersSection from './sections/UsersSection'
+import { useAuth } from '../../context/AuthContext'
+import { podeVer } from '../../lib/permissoes'
+import { SECOES_ADMIN } from './secoes'
 import './AdminPage.scss'
 
-/**
- * Console do Administrador.
- *
- * Escopo do ator (baseline de atores v1.0): contas, acessos, permissões e
- * configurações da plataforma. Não substitui as atribuições científicas e
- * decisórias do Supervisor.
- *
- * A barra lateral desenha os destinos; cada seção continua responsável pelo
- * próprio conteúdo e pelo próprio portão. Item ausente da barra é ergonomia,
- * não segurança — ver PLANO_IMPLEMENTACAO.md §4.3.
- */
-
-const SECTIONS = [
-  {
-    id: 'aparencia',
-    label: 'Aparência',
-    description: 'Cores e identidade visual',
-    icon: appIcons.appearance,
-    Component: AppearanceSection,
-  },
-  {
-    id: 'usuarios',
-    label: 'Usuários',
-    description: 'Contas, perfis e acessos',
-    icon: appIcons.users,
-    Component: UsersSection,
-  },
-]
+function SecaoCarregando() {
+  return (
+    <div className="route-state__loader" role="status" aria-live="polite">
+      <span className="route-state__spinner" aria-hidden="true" />
+      <span className="sr-only">Carregando seção</span>
+    </div>
+  )
+}
 
 export default function AdminPage() {
-  const [activeId, setActiveId] = useState(SECTIONS[0].id)
+  const { user } = useAuth()
 
-  const active = SECTIONS.find((section) => section.id === activeId) || SECTIONS[0]
-  const ActiveComponent = active.Component
+  const visiveis = SECOES_ADMIN.filter((secao) => podeVer(user, secao.permissao))
 
   return (
     <div className="admin-page">
@@ -57,26 +37,26 @@ export default function AdminPage() {
 
       <div className="admin-page__body">
         <nav className="admin-nav" aria-label="Seções da administração">
-          {SECTIONS.map((section) => (
-            <button
-              key={section.id}
-              type="button"
-              className={`admin-nav__item${section.id === activeId ? ' is-active' : ''}`}
-              onClick={() => setActiveId(section.id)}
-              aria-current={section.id === activeId ? 'page' : undefined}
+          {visiveis.map((secao) => (
+            <NavLink
+              key={secao.id}
+              to={secao.rota}
+              className={({ isActive }) => `admin-nav__item${isActive ? ' is-active' : ''}`}
             >
-              <FontAwesomeIcon icon={section.icon} className="admin-nav__icon" />
+              <FontAwesomeIcon icon={secao.icon} className="admin-nav__icon" />
 
               <span className="admin-nav__text">
-                <span className="admin-nav__label">{section.label}</span>
-                <span className="admin-nav__description">{section.description}</span>
+                <span className="admin-nav__label">{secao.label}</span>
+                <span className="admin-nav__description">{secao.description}</span>
               </span>
-            </button>
+            </NavLink>
           ))}
         </nav>
 
         <div className="admin-content">
-          <ActiveComponent />
+          <Suspense fallback={<SecaoCarregando />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
     </div>

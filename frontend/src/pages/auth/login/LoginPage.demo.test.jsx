@@ -5,17 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import LoginPage from './LoginPage'
 
-/**
- * Modo demonstracao — arquivo separado de proposito.
- *
- * `IS_MOCK_AUTH_ENABLED` e uma constante lida do ambiente no momento em que o
- * modulo carrega, entao nao da para alterna-la dentro de um mesmo arquivo de
- * teste. Aqui o modulo inteiro e dublado; no outro arquivo o modo fica
- * desligado (a suite fixa `VITE_AUTH_MOCK=false` em `vite.config.js`, para nao
- * depender do `.env` local, que nao e versionado).
- */
-// `vi.hoisted` porque a factory do `vi.mock` e icada para o topo do arquivo:
-// um `const` comum ainda nao existiria quando ela roda.
 const CONTAS = vi.hoisted(() => [
   {
     email: 'supervisor@ac2microbiologia.com.br',
@@ -56,10 +45,6 @@ function renderLogin() {
   )
 }
 
-/**
- * O bloco nasce fechado — o formulario real e o foco da tela. Quase todo teste
- * daqui precisa dos atalhos, entao a expansao vira parte do preparo.
- */
 async function abrirDemonstracao(user) {
   await user.click(screen.getByRole('button', { name: /modo demonstração/i }))
 }

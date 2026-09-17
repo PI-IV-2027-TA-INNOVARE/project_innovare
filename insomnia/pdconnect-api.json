@@ -1,0 +1,1129 @@
+{
+  "info": {
+    "_postman_id": "b7a1f0c2-5d64-4f3a-9c58-0f1a2b3c4d5e",
+    "name": "P&D Connect API",
+    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular).\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: python manage.py runserver (127.0.0.1:8000).\n2. Semeie contas locais: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. No Postman o script de teste guarda access e refresh nas variaveis da colecao e todo o resto ja sai autenticado; no Insomnia o script nao roda - cole o access na variavel access_token.\n4. Ajuste usuario_id, membro_id e codigo para registros que existam no seu banco - os valores do arquivo sao placeholders.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos login, refresh e as duas rotas publicas de senha. O access vale 60 minutos e o refresh 7 dias; o refresh rotaciona a cada renovacao e o anterior cai na blacklist.\n\nEscopo por papel: Administrador so alcanca /usuarios/; Supervisor e Pesquisador alcancam /rede/ e /oportunidades/; Demandante so /oportunidades/ da propria organizacao. 403 fora disso, e 404 (nao 403) para registro de outra organizacao.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Autenticacao",
+      "item": [
+        {
+          "name": "Troca a propria senha",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password",
+                ""
+              ]
+            },
+            "description": "`POST /api/auth/change-password/` - troca de senha com a sessao ativa.\n\noperationId: auth_change_password_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senha_atual\": \"\",\n  \"nova_senha\": \"\",\n  \"confirmar_senha\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Esqueci minha senha - envia o link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password",
+                ""
+              ]
+            },
+            "description": "`POST /api/auth/forgot-password/`.\n\nResponde 200 exista ou nao a conta - ver `SolicitarRecuperacaoSenhaService`.\n\noperationId: auth_forgot_password_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pessoa@ac2.com.br\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Logout - poe o refresh na blacklist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout",
+                ""
+              ]
+            },
+            "description": "`POST /api/auth/logout/` - encerra a sessao de verdade.\n\nLimpar o token no navegador nao encerra sessao nenhuma: quem tiver copiado\no refresh continua renovando o acesso ate ele expirar. Aqui o refresh entra\nna blacklist do SimpleJWT e para de valer na hora (PB02).\n\noperationId: auth_logout_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Perfil autenticado e permissoes efetivas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "profile",
+                ""
+              ]
+            },
+            "description": "`GET /api/auth/profile/` - o usuario autenticado e o seu `papel`.\n\nE daqui que o front descobre qual dos quatro atores esta na sessao.\n\noperationId: auth_profile_retrieve"
+          }
+        },
+        {
+          "name": "Redefine a senha pelo token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password",
+                ""
+              ]
+            },
+            "description": "`POST /api/auth/reset-password/` - vale para recuperacao e primeiro acesso.\n\noperationId: auth_reset_password_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"\",\n  \"nova_senha\": \"\",\n  \"confirmar_senha\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login - emite access e refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/token/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token",
+                ""
+              ]
+            },
+            "description": "`POST /api/auth/token/` - par de tokens a partir de e-mail e senha.\n\noperationId: auth_token_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{senha}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const corpo = pm.response.json();",
+                  "if (corpo.access) { pm.collectionVariables.set('access_token', corpo.access); }",
+                  "if (corpo.refresh) { pm.collectionVariables.set('refresh_token', corpo.refresh); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renova o access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/token/refresh/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token",
+                "refresh",
+                ""
+              ]
+            },
+            "description": "`POST /api/auth/token/refresh/`.\n\noperationId: auth_token_refresh_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const corpo = pm.response.json();",
+                  "if (corpo.access) { pm.collectionVariables.set('access_token', corpo.access); }",
+                  "if (corpo.refresh) { pm.collectionVariables.set('refresh_token', corpo.refresh); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Usuarios (Administrador)",
+      "item": [
+        {
+          "name": "Lista contas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "papel",
+                  "value": "",
+                  "description": "administrador | supervisor | pesquisador | demandante",
+                  "disabled": true
+                },
+                {
+                  "key": "situacao",
+                  "value": "",
+                  "description": "ativo | inativo",
+                  "disabled": true
+                },
+                {
+                  "key": "busca",
+                  "value": "",
+                  "description": "nome ou e-mail",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_list"
+          }
+        },
+        {
+          "name": "Cria conta e dispara o convite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                ""
+              ]
+            },
+            "description": "`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel\": \"demandante\",\n  \"organizacao\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Detalha a conta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuario_id}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuario_id}}",
+                ""
+              ]
+            },
+            "description": "`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_retrieve"
+          }
+        },
+        {
+          "name": "Edita a conta",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuario_id}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuario_id}}",
+                ""
+              ]
+            },
+            "description": "`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_partial_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel\": \"demandante\",\n  \"organizacao\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reenvia o convite de primeiro acesso",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuario_id}}/reenviar-convite/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuario_id}}",
+                "reenviar-convite",
+                ""
+              ]
+            },
+            "description": "Novo link de primeiro acesso. O anterior deixa de valer na hora.\n\noperationId: usuarios_reenviar_convite_create"
+          }
+        },
+        {
+          "name": "Ativa ou inativa a conta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuario_id}}/situacao/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuario_id}}",
+                "situacao",
+                ""
+              ]
+            },
+            "description": "Ativar, inativar ou suspender. Vale na requisicao seguinte.\n\noperationId: usuarios_situacao_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"situacao\": \"ativo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rede interna",
+      "item": [
+        {
+          "name": "Lista membros da rede",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "papel_rede",
+                  "value": "",
+                  "description": "pesquisador | supervisor | colaborador",
+                  "disabled": true
+                },
+                {
+                  "key": "situacao",
+                  "value": "",
+                  "description": "com_acesso | sem_acesso | inativo",
+                  "disabled": true
+                },
+                {
+                  "key": "disponibilidade",
+                  "value": "",
+                  "description": "disponivel | parcial | indisponivel",
+                  "disabled": true
+                },
+                {
+                  "key": "busca",
+                  "value": "",
+                  "description": "alcanca nome e competencia",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_list"
+          }
+        },
+        {
+          "name": "Cadastra membro (nasce sem acesso)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rede/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                ""
+              ]
+            },
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel_rede\": \"supervisor\",\n  \"titulacao_codigo\": \"\",\n  \"organizacao\": 0,\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Detalha o membro",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/{{membro_id}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "{{membro_id}}",
+                ""
+              ]
+            },
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_retrieve"
+          }
+        },
+        {
+          "name": "Edita o cadastro do membro",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rede/{{membro_id}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "{{membro_id}}",
+                ""
+              ]
+            },
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_partial_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel_rede\": \"supervisor\",\n  \"titulacao_codigo\": \"\",\n  \"organizacao\": 0,\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Libera acesso - cria a conta e convida",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/{{membro_id}}/liberar-acesso/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "{{membro_id}}",
+                "liberar-acesso",
+                ""
+              ]
+            },
+            "description": "Cria a conta e envia o convite de primeiro acesso (PB08).\n\noperationId: rede_liberar_acesso_create"
+          }
+        },
+        {
+          "name": "Meu perfil na rede",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/meu-perfil/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "meu-perfil",
+                ""
+              ]
+            },
+            "description": "`/api/rede/meu-perfil/` - o perfil que o proprio membro mantem (RN-A05).\n\nNao aceita `id`: o alvo e sempre quem esta autenticado. Rota com id abriria\na porta para editar o perfil alheio por engano de permissao.\n\noperationId: rede_meu_perfil_retrieve"
+          }
+        },
+        {
+          "name": "Atualiza meu perfil na rede",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rede/meu-perfil/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "meu-perfil",
+                ""
+              ]
+            },
+            "description": "`/api/rede/meu-perfil/` - o perfil que o proprio membro mantem (RN-A05).\n\nNao aceita `id`: o alvo e sempre quem esta autenticado. Rota com id abriria\na porta para editar o perfil alheio por engano de permissao.\n\noperationId: rede_meu_perfil_partial_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulacao_codigo\": \"\",\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Titulacoes (vocabulario controlado)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/titulacoes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "titulacoes",
+                ""
+              ]
+            },
+            "description": "`/api/rede/titulacoes/` - vocabulario controlado de titulacao.\n\nRF07 filtra \"especialmente mestres e doutores\", o que exige `nivel`\ncomparavel. A tela consome esta lista em vez de espelhar as opcoes.\n\noperationId: rede_titulacoes_list"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Oportunidades",
+      "item": [
+        {
+          "name": "Fila de oportunidades (escopo por ator)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "situacao",
+                  "value": "",
+                  "description": "entrada | estruturacao | ... | arquivada",
+                  "disabled": true
+                },
+                {
+                  "key": "origem",
+                  "value": "",
+                  "description": "externo | interna",
+                  "disabled": true
+                },
+                {
+                  "key": "busca",
+                  "value": "",
+                  "description": "codigo ou titulo",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_list"
+          }
+        },
+        {
+          "name": "Abre oportunidade (origem vem do ator)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                ""
+              ]
+            },
+            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"\",\n  \"resumo\": \"\",\n  \"contexto\": \"\",\n  \"responsavel\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Detalha a oportunidade",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                ""
+              ]
+            },
+            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_retrieve"
+          }
+        },
+        {
+          "name": "Edita resumo e contexto",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                ""
+              ]
+            },
+            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_partial_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"\",\n  \"resumo\": \"\",\n  \"contexto\": \"\",\n  \"responsavel\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Lista anexos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/anexos/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "anexos",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Anexos vinculados a oportunidade (PB21).\n\nA permissao e a mesma da oportunidade: quem alcanca o registro alcanca\nos documentos dele. O `get_object` ja aplicou o escopo.\n\noperationId: oportunidades_anexos_list"
+          }
+        },
+        {
+          "name": "Envia anexo (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/anexos/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "anexos",
+                ""
+              ]
+            },
+            "description": "Anexos vinculados a oportunidade (PB21).\n\nA permissao e a mesma da oportunidade: quem alcanca o registro alcanca\nos documentos dele. O `get_object` ja aplicou o escopo.\n\noperationId: oportunidades_anexos_create",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "arquivo",
+                  "type": "file",
+                  "src": "",
+                  "description": "O upload e multipart e o campo se chama arquivo. Tipos e tamanho maximo vem de ANEXO_TIPOS_ACEITOS e ANEXO_TAMANHO_MAXIMO_MB no settings."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Complementa apos pedido de revisao",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/complementar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "complementar",
+                ""
+              ]
+            },
+            "description": "Resposta do Demandante ao pedido de revisao (PB27).\n\noperationId: oportunidades_complementar_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Decide: continuar, revisar ou arquivar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/decisao/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "decisao",
+                ""
+              ]
+            },
+            "description": "Continuar, Revisar ou Arquivar - com justificativa (RN-A07).\n\noperationId: oportunidades_decisao_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"continuar\",\n  \"justificativa\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Historico (trilha append-only)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/historico/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "historico",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "A trilha da oportunidade (RF12 / PB69, PB70).\n\nO Demandante nao ve as categorias internas: PB71 diz que ele acompanha\no andamento \"sem acessar informacoes internas restritas (ex.: resultados\nde matching, pre-analise detalhada)\". O recorte e aqui, no servidor, e\nnao na tela.\n\noperationId: oportunidades_historico_list"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Permissoes",
+      "item": [
+        {
+          "name": "Catalogo de permissoes por papel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/permissoes/catalogo/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissoes",
+                "catalogo",
+                ""
+              ]
+            },
+            "description": "`GET /api/permissoes/catalogo/`.\n\nO front consome o catalogo em vez de espelhar a matriz de atores a mao.\n\noperationId: permissoes_catalogo_retrieve"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "OpenAPI (schema)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/schema/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "schema",
+                ""
+              ]
+            },
+            "description": "Especificacao OpenAPI 3 servida pelo drf-spectacular."
+          }
+        },
+        {
+          "name": "Swagger UI (docs)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/docs/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "docs",
+                ""
+              ]
+            },
+            "description": "Documentacao navegavel da API."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "supervisor@ac2.com.br",
+      "type": "string"
+    },
+    {
+      "key": "senha",
+      "value": "123",
+      "type": "string"
+    },
+    {
+      "key": "usuario_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "membro_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "codigo",
+      "value": "OP-2026-001",
+      "type": "string"
+    }
+  ]
+}

@@ -3,13 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import PerfilPage from './PerfilPage'
 
-/**
- * Meu Perfil do Pesquisador.
- *
- * O que estes testes fixam é a regra de domínio, não a aparência: o pesquisador
- * edita as sete dimensões do RF03, mas NÃO os campos que pertencem ao Supervisor
- * (RN-A05 / RF02) — e esses campos continuam visíveis, em leitura.
- */
 vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => ({
     user: {
@@ -30,12 +23,10 @@ describe('PerfilPage', () => {
 
     const identificacao = cartao('Identificação')
 
-    // Visível — esconder faria o pesquisador achar que o dado não existe.
     expect(within(identificacao).getByLabelText('Nome')).toHaveValue('Maria Ferreira')
     expect(within(identificacao).getByLabelText('Nome')).toHaveAttribute('readonly')
     expect(within(identificacao).getByText(/somente leitura/i)).toBeInTheDocument()
 
-    // O <fieldset disabled> cascateia para todo campo descendente.
     expect(within(cartao('Vínculo')).getByLabelText('Instituição')).toBeDisabled()
   })
 
@@ -56,7 +47,6 @@ describe('PerfilPage', () => {
     const user = userEvent.setup()
     render(<PerfilPage />)
 
-    // Experiência nasce vazia: 5 de 6 dimensões.
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '83')
     expect(screen.getByText(/falta preencher: experiência/i)).toBeInTheDocument()
 
@@ -79,8 +69,6 @@ describe('PerfilPage', () => {
     await user.type(campo, 'Biologia molecular{Enter}')
     expect(within(competencias).getByRole('button', { name: /remover biologia molecular/i })).toBeInTheDocument()
 
-    // "fermentacao" e "Fermentação" são o mesmo termo para quem lê — e viraria
-    // duas features distintas para o matching.
     await user.type(campo, 'fermentacao{Enter}')
     expect(within(competencias).queryByRole('button', { name: /remover fermentacao/i })).not.toBeInTheDocument()
 

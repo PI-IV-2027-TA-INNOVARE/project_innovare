@@ -1,22 +1,3 @@
-/**
- * Rede interna da AC2 — dados e vocabulários.
- *
- * Placeholder LOCAL, sinalizado na interface. O backend ainda não modela os
- * quatro atores nem o perfil profissional do RF03; inventar o contrato aqui
- * violaria "contratos blindados" (AGENTS.md §1). O que já é definitivo é o
- * VOCABULÁRIO: ele vem da baseline, não de mim.
- *
- * O matching opera **somente** sobre esta rede (CONTEXT.md §4, "Rede Interna").
- * Não há busca externa em Lattes, ResearchGate ou Scholar (§7, OUT).
- */
-
-/**
- * Titulação é vocabulário CONTROLADO, não texto livre.
- *
- * RF07 pede matching de supervisores "com qualificação compatível, especialmente
- * mestres e doutores" — isso não é filtrável sobre string digitada à mão. A
- * ordem da lista é a hierarquia usada na comparação. Ver P12 no plano.
- */
 export const TITULACOES = Object.freeze([
   { id: 'graduacao', label: 'Graduação', nivel: 1 },
   { id: 'especializacao', label: 'Especialização', nivel: 2 },
@@ -25,7 +6,6 @@ export const TITULACOES = Object.freeze([
   { id: 'pos_doutorado', label: 'Pós-doutorado', nivel: 5 },
 ])
 
-/** Papel na rede — distinto do papel de acesso (`lib/roles.js`). */
 export const PAPEIS_REDE = Object.freeze([
   { id: 'supervisor', label: 'Supervisor' },
   { id: 'pesquisador', label: 'Pesquisador' },
@@ -39,12 +19,6 @@ export const SITUACOES = Object.freeze([
   { id: 'inativo', label: 'Inativo' },
 ])
 
-/**
- * Disponibilidade declarada.
- *
- * É o que torna a sugestão do matching realista: competência sem
- * disponibilidade produz equipe potencial que não se sustenta na prática.
- */
 export const DISPONIBILIDADES = Object.freeze([
   { id: 'integral', label: 'Integral' },
   { id: 'parcial', label: 'Parcial' },
@@ -172,12 +146,6 @@ export const titulacaoLabel = (id) => rotulo(TITULACOES, id)
 export const situacaoLabel = (id) => rotulo(SITUACOES, id)
 export const disponibilidadeLabel = (id) => rotulo(DISPONIBILIDADES, id)
 
-/**
- * As sete dimensões do RF03, na ordem em que o perfil as apresenta.
- *
- * A completude não é enfeite: cada dimensão vazia é uma feature a menos para o
- * matching comparar (RF06 / RF07), e é por isso que a tela mostra o número.
- */
 export const DIMENSOES_PERFIL = Object.freeze([
   { id: 'titulacao', label: 'Titulação', preenchida: (p) => Boolean(p.titulacao) },
   { id: 'competencias', label: 'Competências', preenchida: (p) => p.competencias?.length > 0 },
@@ -187,7 +155,6 @@ export const DIMENSOES_PERFIL = Object.freeze([
   { id: 'disponibilidade', label: 'Disponibilidade', preenchida: (p) => Boolean(p.disponibilidade) },
 ])
 
-/** Quantas das dimensões do RF03 estão preenchidas. */
 export function completudeDoPerfil(perfil) {
   const preenchidas = DIMENSOES_PERFIL.filter((dimensao) => dimensao.preenchida(perfil))
 

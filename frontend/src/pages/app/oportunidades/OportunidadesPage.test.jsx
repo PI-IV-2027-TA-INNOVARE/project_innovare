@@ -1,24 +1,49 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OportunidadePage from './OportunidadePage'
 import OportunidadesPage from './OportunidadesPage'
-import { disponibilizadasPara, emAndamento } from './oportunidadesData'
+import {
+  NUCLEO_INTERNO,
+  OPORTUNIDADES_EXEMPLO,
+  daApi,
+  disponibilizadasPara,
+  emAndamento,
+} from './oportunidadesData'
 
-/**
- * Oportunidades — lista e shell de condução.
- *
- * As regras de domínio que estes testes protegem são as que o modelo antigo
- * violava: o Pesquisador NÃO navega um catálogo (D02), NÃO aceita nem recusa
- * (RN-A06) e NÃO decide (RN-A07). O escopo é resolvido pela tela, não por
- * filtro que o usuário possa desfazer.
- */
 const auth = { user: null, isAuthenticated: true }
 
 vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => auth,
 }))
+
+vi.mock('../../../services/pdConnectApi', () => ({
+  listOportunidades: vi.fn(),
+}))
+
+const api = await import('../../../services/pdConnectApi')
+
+function comoApi(oportunidade) {
+  return {
+    codigo: oportunidade.id,
+    titulo: oportunidade.titulo,
+    origem: oportunidade.origem,
+    resumo: oportunidade.resumo,
+    contexto: oportunidade.contexto || '',
+    demandante_nome:
+      oportunidade.origem === 'externo' ? oportunidade.demandante : null,
+    responsavel_nome: oportunidade.responsavel,
+    situacao: oportunidade.situacao,
+    total_anexos: 0,
+    criada_em: new Date(oportunidade.criadaEm).toISOString(),
+    atualizada_em: new Date(oportunidade.atualizadaEm).toISOString(),
+  }
+}
+
+function servidorResponde(oportunidades) {
+  api.listOportunidades.mockResolvedValue({ results: oportunidades.map(comoApi) })
+}
 
 function entrarComo(role, displayName) {
   auth.user = { role, displayName, email: `${role}@ac2microbiologia.com.br` }
@@ -40,6 +65,8 @@ async function esperarLista() {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
+  servidorResponde(OPORTUNIDADES_EXEMPLO)
   entrarComo('supervisor', 'Rafael Antunes')
 })
 
@@ -47,6 +74,8 @@ describe('OportunidadesPage', () => {
   it('mostra a fila inteira e os indicadores ao Supervisor', async () => {
     renderApp()
     await esperarLista()
+
+    expect(api.listOportunidades).toHaveBeenCalledTimes(1)
 
     expect(screen.getByRole('heading', { name: 'Oportunidades', level: 1 })).toBeInTheDocument()
 
@@ -56,17 +85,29 @@ describe('OportunidadesPage', () => {
     expect(screen.getByText('Cultura starter para queijo artesanal')).toBeInTheDocument()
   })
 
-  it('limita o Pesquisador às oportunidades em que ele está na equipe potencial', async () => {
+  it('a ideia interna aparece sob o Núcleo, e não sob uma organização demandante', async () => {
+    renderApp()
+    await esperarLista()
+
+    const interna = screen
+      .getByText('Cultura starter para queijo artesanal')
+      .closest('.oportunidade-link')
+
+    expect(within(interna).getByText(`OP-2026-011 · ${NUCLEO_INTERNO}`)).toBeInTheDocument()
+  })
+
+  it('o recorte do Pesquisador vem do servidor, não de filtro na tela', async () => {
     entrarComo('pesquisador', 'Maria Ferreira')
+    servidorResponde(disponibilizadasPara('Maria Ferreira'))
+
     renderApp()
     await esperarLista()
 
     expect(screen.getByRole('heading', { name: 'Minhas oportunidades', level: 1 })).toBeInTheDocument()
 
-    // Ideia interna sem equipe: não é dele, e não há filtro que a traga.
+    expect(screen.getByText('Controle de Listeria em linha de laticínios')).toBeInTheDocument()
     expect(screen.queryByText('Cultura starter para queijo artesanal')).not.toBeInTheDocument()
 
-    // Nem indicadores de decisão, que não são responsabilidade dele.
     expect(screen.queryByText('Aguardando sua decisão')).not.toBeInTheDocument()
   })
 
@@ -74,10 +115,35 @@ describe('OportunidadesPage', () => {
     entrarComo('administrador', 'Administração da plataforma')
     renderApp()
 
-    // A rota já barra os outros papéis; a tela não confia nisso sozinha.
     expect(await screen.findByText(/não acompanha oportunidades por esta tela/i))
       .toBeInTheDocument()
     expect(screen.queryByText('Bioinsumo para cana-de-açúcar')).not.toBeInTheDocument()
+    expect(api.listOportunidades).not.toHaveBeenCalled()
+  })
+
+  it('quando a API falha, diz o motivo e oferece tentar de novo', async () => {
+    const user = userEvent.setup()
+    api.listOportunidades.mockRejectedValueOnce(new Error('Sessão expirada.'))
+
+    renderApp()
+
+    const aviso = await screen.findByRole('alert')
+    expect(aviso).toHaveTextContent('Sessão expirada.')
+    expect(screen.queryByText('Bioinsumo para cana-de-açúcar')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /tentar de novo/i }))
+
+    await esperarLista()
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('fila vazia no servidor mostra o estado vazio, não um erro', async () => {
+    servidorResponde([])
+
+    renderApp()
+
+    expect(await screen.findByText(/cadastre uma ideia interna/i)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('ordena a situação pela etapa do fluxo, não pelo alfabeto', async () => {
@@ -88,7 +154,6 @@ describe('OportunidadesPage', () => {
     await user.click(screen.getByRole('button', { name: /ordenar por situação/i }))
 
     const primeiro = document.querySelectorAll('.oportunidade-link__titulo')[0].textContent
-    // "Em estruturação" (etapa 2) vem antes de "Aguardando decisão" (etapa 6).
     expect(primeiro).toBe('Cultura starter para queijo artesanal')
   })
 
@@ -117,8 +182,6 @@ describe('OportunidadePage', () => {
   it('oferece volta explícita para a lista, não só o breadcrumb', () => {
     renderApp('/oportunidades/OP-2026-014')
 
-    // Quem abriu um registro quer saber como SAIR dele — e o alvo precisa ser
-    // um link de verdade, não a seta do navegador.
     expect(screen.getByRole('link', { name: /voltar para oportunidades/i }))
       .toHaveAttribute('href', '/oportunidades')
   })
@@ -135,8 +198,6 @@ describe('OportunidadePage', () => {
   it('escopa o detalhe, não só a lista', () => {
     entrarComo('pesquisador', 'Maria Ferreira')
 
-    // OP-2026-011 é ideia interna sem equipe: escopar só a listagem seria escopo
-    // nenhum, bastaria digitar o código na URL.
     renderApp('/oportunidades/OP-2026-011')
 
     expect(screen.getByText(/nenhuma oportunidade com o código/i)).toBeInTheDocument()
@@ -150,12 +211,21 @@ describe('OportunidadePage', () => {
       .toBeInTheDocument()
   })
 
-  it('não oferece link para a tela de ideia interna, que ainda não existe', async () => {
+  it('leva o Supervisor ao cadastro de ideia interna', async () => {
     renderApp()
     await esperarLista()
 
-    const botao = screen.getByRole('button', { name: /nova ideia interna/i })
-    expect(botao).toBeDisabled()
+    expect(screen.getByRole('link', { name: /nova ideia interna/i })).toHaveAttribute(
+      'href',
+      '/oportunidades/nova'
+    )
+  })
+
+  it('não oferece o cadastro de ideia interna ao Pesquisador (RN-A03)', async () => {
+    entrarComo('pesquisador', 'Maria Ferreira')
+    renderApp()
+    await esperarLista()
+
     expect(screen.queryByRole('link', { name: /nova ideia interna/i })).not.toBeInTheDocument()
   })
 
@@ -234,5 +304,57 @@ describe('oportunidadesData', () => {
       .toEqual(['OP-2026-014', 'OP-2026-013', 'OP-2026-009'])
 
     expect(disponibilizadasPara('Ninguém')).toHaveLength(0)
+  })
+
+  it('traduz o registro da API para o formato da tela', () => {
+    const externa = daApi({
+      codigo: 'OP-2026-014',
+      titulo: 'Bioinsumo para cana-de-açúcar',
+      origem: 'externo',
+      resumo: 'Redução de perdas por contaminação.',
+      contexto: '',
+      demandante_nome: 'Agroindústria Vale Verde',
+      responsavel_nome: 'Rafael Antunes',
+      situacao: 'aguardando_decisao',
+      total_anexos: 2,
+      criada_em: '2026-08-25T09:00:00.000Z',
+      atualizada_em: '2026-09-16T12:00:00.000Z',
+    })
+
+    expect(externa.id).toBe('OP-2026-014')
+    expect(externa.demandante).toBe('Agroindústria Vale Verde')
+    expect(externa.totalAnexos).toBe(2)
+    expect(externa.atualizadaEm).toBe(Date.parse('2026-09-16T12:00:00.000Z'))
+  })
+
+  it('a ideia interna não tem demandante, e a tela mostra o Núcleo', () => {
+    const interna = daApi({
+      codigo: 'OP-2026-011',
+      titulo: 'Cultura starter para queijo artesanal',
+      origem: 'interna',
+      demandante_nome: null,
+      responsavel_nome: null,
+      situacao: 'estruturacao',
+      criada_em: '2026-09-10T09:00:00.000Z',
+      atualizada_em: '2026-09-15T09:00:00.000Z',
+    })
+
+    expect(interna.demandante).toBe(NUCLEO_INTERNO)
+    expect(interna.responsavel).toBe('')
+  })
+
+  it('matching ainda não existe, então equipe e lacuna chegam vazias', () => {
+    const registro = daApi({
+      codigo: 'OP-2026-009',
+      titulo: 'Redução de nitrito em embutidos',
+      origem: 'externo',
+      demandante_nome: 'Cooperativa Terra Boa',
+      situacao: 'continuar',
+      criada_em: '2026-07-01T09:00:00.000Z',
+      atualizada_em: '2026-09-01T09:00:00.000Z',
+    })
+
+    expect(registro.equipe).toEqual([])
+    expect(registro.lacunas).toEqual([])
   })
 })

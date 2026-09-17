@@ -1,13 +1,5 @@
 @use '../variables' as *;
 
-// ---------------------------------------------------------------------------
-// Os tokens abaixo sao CSS custom properties de proposito: o painel de
-// Aparencia do admin sobrescreve um subconjunto delas em runtime via
-// `document.documentElement.style.setProperty(...)` (ver src/theme/brandTokens.js
-// e src/context/BrandingContext.jsx). Qualquer cor nova que deva ser editavel
-// pelo admin precisa existir como custom property aqui.
-// ---------------------------------------------------------------------------
-
 :root {
   --bg-primary: #{$color-bg-primary};
   --bg-secondary: #{$color-bg-secondary};
@@ -15,16 +7,6 @@
   --bg-card: #{$color-surface};
   --bg-card-hover: #{$color-surface-hover};
   --bg-card-solid: #{$color-surface-white};
-  // Este gradiente e o fundo que o usuario realmente ve: `body` esta sempre
-  // coberto por um shell de 100dvh (.authenticated-app / .login-page), entao
-  // `background: var(--bg-primary)` no body nunca aparece.
-  //
-  // Por isso ele PRECISA referenciar custom properties. Enquanto era compilado
-  // a partir das variaveis Sass, os valores viravam literais no CSS e mudar
-  // "Fundo da pagina" no painel de Aparencia nao surtia efeito nenhum.
-  //
-  // Como as referencias resolvem no proprio :root, a mesma declaracao serve
-  // aos dois temas — o bloco [data-theme='dark'] so troca as variaveis.
   --bg-auth-shell:
     radial-gradient(circle at 12% 18%, var(--bg-auth-radial) 0%, transparent 46%),
     radial-gradient(circle at 88% 84%, var(--accent-secondary-dim) 0%, transparent 52%),
@@ -37,12 +19,6 @@
   --bg-chip: #{rgba($color-ac2-navy, 0.07)};
   --bg-chip-strong: #{rgba($color-ac2-navy, 0.12)};
   --bg-danger-soft: #{rgba($color-error, 0.08)};
-  // Painel institucional das telas de autenticacao.
-  //
-  // NAO muda com o tema: o produto inteiro e navy escuro, e um login claro
-  // quebraria a continuidade logo na primeira tela. Por isso o texto do painel
-  // tem tokens proprios — `--text-inverse` no tema escuro e PRETO (serve as
-  // superficies de acento, que la sao claras) e ficaria ilegivel aqui.
   --bg-brand-panel: linear-gradient(155deg, #{$color-ac2-navy} 0%, #{$color-ac2-navy-deep} 100%);
   --brand-panel-text: #{$color-ac2-navy-light};
   --brand-panel-text-muted: #{rgba($color-ac2-navy-light, 0.74)};
@@ -61,12 +37,6 @@
   --accent-secondary-dim: #{$color-secondary-dim};
   --accent-warm-dim: #{$color-warm-dim};
 
-  // O laranja da marca (#E07B1A) tem 3,0:1 sobre branco e reprova o AA da WCAG
-  // (4,5:1 para texto). As variaveis abaixo existem para os dois usos em que
-  // ele vira *texto*: link/icone sobre superficie clara e botao solido.
-  // O color-mix escurece o tom da marca em runtime, entao o painel de Aparencia
-  // do admin continua repintando tudo a partir de --accent-primary.
-  //   #E07B1A -> #9E5816 = 5,0:1 sobre a superficie clara suavizada.
   --accent-primary-text: color-mix(in srgb, var(--accent-primary) 70%, #05070b);
   --accent-cta-bg: var(--accent-primary-text);
   --accent-cta-bg-hover: color-mix(in srgb, var(--accent-primary) 58%, #05070b);
@@ -126,7 +96,6 @@
   --bg-chip: #{rgba(#edf1f7, 0.08)};
   --bg-chip-strong: #{rgba(#edf1f7, 0.14)};
   --bg-danger-soft: #{rgba($color-error-dark, 0.14)};
-  // Mesmo painel do tema claro — ver a nota em :root.
   --bg-brand-panel: linear-gradient(155deg, #{$color-ac2-navy} 0%, #{$color-ac2-navy-deep} 100%);
 
   --accent-primary: #{$color-primary-dark};
@@ -141,8 +110,6 @@
   --accent-secondary-dim: #{$color-secondary-dim-dark};
   --accent-warm-dim: #{$color-warm-dim-dark};
 
-  // No tema escuro o laranja claro (#F0913A) ja da 7,2:1 sobre as superficies
-  // escuras: ele fica como esta e quem inverte e o texto do botao solido.
   --accent-primary-text: var(--accent-primary);
   --accent-cta-bg: var(--accent-primary);
   --accent-cta-bg-hover: var(--accent-primary-strong);

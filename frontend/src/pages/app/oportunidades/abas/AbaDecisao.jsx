@@ -4,18 +4,6 @@ import { appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { DECISOES, decisaoLabel } from '../oportunidadesData'
 
-/**
- * Decisão do Supervisor (RF11 / RN-A07).
- *
- * Três regras de domínio, todas visíveis na tela:
- *
- * 1. A decisão é **humana**. A IA não aprova, não reprova e não arquiva
- *    (AGENTS.md §0.2) — por isso não há botão "aceitar sugestão da IA".
- * 2. Só o **Supervisor** registra. Quem não é vê a decisão, não o formulário.
- * 3. A **justificativa é obrigatória**: é o que a rastreabilidade (RF12) precisa
- *    guardar, e "Arquivar" sem motivo registrado é exatamente o que ninguém
- *    consegue reconstituir seis meses depois.
- */
 export default function AbaDecisao({ decisao, podeDecidir, onRegistrar }) {
   const [tipo, setTipo] = useState('')
   const [justificativa, setJustificativa] = useState('')
@@ -58,8 +46,8 @@ export default function AbaDecisao({ decisao, podeDecidir, onRegistrar }) {
           <div>
             <h2 className="perfil-card__title">Aguardando decisão</h2>
             <p className="perfil-card__description">
-              O encaminhamento é registrado pelo Supervisor (RN-A07). Você
-              acompanha o resultado por aqui.
+              O encaminhamento é registrado pelo Supervisor. Você acompanha o
+              resultado por aqui.
             </p>
           </div>
         </header>

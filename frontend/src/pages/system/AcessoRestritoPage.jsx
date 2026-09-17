@@ -3,26 +3,15 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useAuth } from '../../context/AuthContext'
 import { appIcons } from '../../lib/icons'
 import { roleLabel } from '../../lib/roles'
-import { CONTATOS_SUPORTE } from './contatosSuporte'
+import { lerContatos } from './contatosSuporte'
 import './SystemPages.scss'
 
-/**
- * Acesso restrito.
- *
- * Quem está autenticado mas não tem permissão para a rota chega aqui, e não a um
- * redirecionamento silencioso para o Painel — mandar a pessoa para outro lugar
- * sem explicar transforma "você não tem acesso" em "o link está quebrado", e o
- * chamado que chega depois é sobre a coisa errada.
- *
- * A tela diz três coisas: qual é o papel dela, o que aquele papel alcança e com
- * quem falar. Os contatos virão do Console → Parâmetros quando ele existir
- * (PLANO_IMPLEMENTACAO.md §6.5).
- */
 export default function AcessoRestritoPage() {
   const { user } = useAuth()
   const location = useLocation()
 
   const rotaTentada = location.state?.from
+  const contatos = lerContatos()
 
   return (
     <div className="system-page">
@@ -60,7 +49,7 @@ export default function AcessoRestritoPage() {
         </p>
 
         <ul className="system-contatos">
-          {CONTATOS_SUPORTE.map((contato) => (
+          {contatos.map((contato) => (
             <li key={contato.email}>
               <span className="system-contatos__nome">{contato.nome}</span>
               <a className="system-contatos__email" href={`mailto:${contato.email}`}>

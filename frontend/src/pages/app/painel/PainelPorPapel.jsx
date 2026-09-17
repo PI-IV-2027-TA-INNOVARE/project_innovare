@@ -5,22 +5,13 @@ import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
   OPORTUNIDADES_EXEMPLO,
+  agruparPorSituacao,
   disponibilizadasPara,
   resumoPorSituacao,
   situacaoLabel,
 } from '../oportunidades/oportunidadesData'
+import { problemasDe, resumoDoDemandante } from '../problemas/problemasData'
 import { REDE_EXEMPLO, completudeDoPerfil } from '../rede/redeData'
-
-/**
- * Conteúdo do painel por papel.
- *
- * O painel é a porta de entrada de cada ator, e "porta de entrada" quer dizer
- * responder a uma pergunta só: **o que espera por mim agora?** Por isso cada
- * papel vê números diferentes — e o Pesquisador não vê fila de decisão nenhuma,
- * porque decidir não é dele (RN-A07).
- *
- * Dados de exemplo locais, como no resto da Fase 2/3.1.
- */
 
 function Tile({ icon, label, value, tone, to }) {
   const conteudo = (
@@ -42,13 +33,7 @@ function Tile({ icon, label, value, tone, to }) {
   )
 }
 
-/**
- * `linkavel` existe porque o destino não serve a todo mundo: o Demandante
- * acompanha os PRÓPRIOS problemas em `/problemas/:id`, e `/oportunidades/:id` é
- * rota de Supervisor e Pesquisador. Link que leva a "acesso restrito" é pior que
- * item sem link — parece defeito, e o usuário culpa a plataforma.
- */
-function ListaDeOportunidades({ itens, vazio, linkavel = true }) {
+function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
   if (itens.length === 0) {
     return <p className="painel-lista__vazio">{vazio}</p>
   }
@@ -72,13 +57,9 @@ function ListaDeOportunidades({ itens, vazio, linkavel = true }) {
 
         return (
           <li key={item.id}>
-            {linkavel ? (
-              <Link className="painel-lista__item" to={`/oportunidades/${item.id}`}>
-                {conteudo}
-              </Link>
-            ) : (
-              <div className="painel-lista__item is-static">{conteudo}</div>
-            )}
+            <Link className="painel-lista__item" to={`${base}/${item.id}`}>
+              {conteudo}
+            </Link>
           </li>
         )
       })}
@@ -106,8 +87,37 @@ function BlocoSupervisor() {
 
       <section className="painel-secao">
         <div className="painel-secao__header">
-          <h2 className="painel-secao__titulo">Esperando sua decisão</h2>
+          <h2 className="painel-secao__titulo">Oportunidades por etapa</h2>
           <Link className="link-button" to="/oportunidades">Ver a fila</Link>
+        </div>
+
+        <ul className="painel-etapas">
+          {agruparPorSituacao(OPORTUNIDADES_EXEMPLO).map((situacao) => (
+            <li key={situacao.id}>
+              <Link
+                className="painel-etapa"
+                to={`/oportunidades?situacao=${situacao.id}`}
+              >
+                <span className={`fluxo-badge fluxo-badge--${situacao.id}`}>
+                  {situacao.label}
+                </span>
+                <span className="painel-etapa__total">{situacao.total}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        <p className="painel-secao__nota">
+          Cada etapa abre a fila já filtrada por ela.
+        </p>
+      </section>
+
+      <section className="painel-secao">
+        <div className="painel-secao__header">
+          <h2 className="painel-secao__titulo">Esperando sua decisão</h2>
+          <Link className="link-button" to="/oportunidades?situacao=aguardando_decisao">
+            Ver a fila
+          </Link>
         </div>
 
         <ListaDeOportunidades
@@ -122,8 +132,6 @@ function BlocoSupervisor() {
 function BlocoPesquisador({ nome }) {
   const minhas = disponibilizadasPara(nome)
 
-  // O perfil do exemplo local nasce sem experiência preenchida — é o que a
-  // barra do /perfil mostra, e o painel repete o número para dar o empurrão.
   const completude = completudeDoPerfil({
     titulacao: 'mestrado',
     competencias: ['Microbiologia de alimentos', 'Fermentação'],
@@ -157,10 +165,6 @@ function BlocoPesquisador({ nome }) {
           vazio="Você ainda não integra nenhuma equipe potencial."
         />
 
-        {/*
-          Dito na tela, não só na documentação: o matching sugere, o Supervisor
-          valida. Sem isso o pesquisador procura o botão de aceitar (RN-A06).
-        */}
         <p className="painel-secao__nota">
           A composição da equipe é sugerida pelo matching e validada pelo
           Supervisor — não há convite para aceitar ou recusar.
@@ -171,30 +175,43 @@ function BlocoPesquisador({ nome }) {
 }
 
 function BlocoDemandante({ nome }) {
-  // Pelo usuário, nunca por nome fixo: com a organização escrita no código,
-  // qualquer Demandante que entrasse veria os problemas de outra empresa.
-  const meus = OPORTUNIDADES_EXEMPLO.filter((item) => item.demandante === nome)
+  const meus = problemasDe(nome)
+  const indicadores = resumoDoDemandante(meus)
 
   return (
     <>
       <div className="stat-grid">
-        <Tile icon={appIcons.folder} label="Problemas cadastrados" value={meus.length} />
+        <Tile
+          icon={appIcons.folder}
+          label="Problemas cadastrados"
+          value={indicadores.total}
+          to="/problemas"
+        />
         <Tile
           icon={appIcons.flow}
           label="Em análise pela AC2"
-          value={meus.filter((item) => item.situacao !== 'arquivada').length}
+          value={indicadores.emAnalise}
           tone="ok"
+          to="/problemas"
+        />
+        <Tile
+          icon={appIcons.warning}
+          label="Aguardando você"
+          value={indicadores.aguardandoVoce}
+          tone={indicadores.aguardandoVoce > 0 ? 'alert' : undefined}
+          to="/problemas"
         />
       </div>
 
       <section className="painel-secao">
         <div className="painel-secao__header">
           <h2 className="painel-secao__titulo">Seus problemas</h2>
+          <Link className="link-button" to="/problemas">Ver todos</Link>
         </div>
 
         <ListaDeOportunidades
-          itens={meus}
-          linkavel={false}
+          itens={meus.slice(0, 3)}
+          base="/problemas"
           vazio="Você ainda não cadastrou nenhum problema."
         />
 

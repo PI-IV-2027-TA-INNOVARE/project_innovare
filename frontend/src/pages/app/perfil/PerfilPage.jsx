@@ -16,21 +16,6 @@ import {
 import ListaEditavel from './ListaEditavel'
 import './PerfilPage.scss'
 
-/**
- * Meu Perfil do Pesquisador (RF03 / RN-A05).
- *
- * O enquadramento decide a tela: **não é currículo, é a entrada do matching**.
- * Cada campo preenchido vira feature comparada em RF06/RF07, e é por isso que a
- * completude aparece no topo — sem isso ninguém preenche.
- *
- * Nem tudo aqui é dele. Nome, e-mail, vínculo e situação na rede pertencem ao
- * Supervisor, que gere a rede (RF02) — esses campos aparecem **em leitura, não
- * escondidos** (PLANO_IMPLEMENTACAO.md §4.4): esconder faz o pesquisador achar
- * que o dado não existe e abrir chamado.
- *
- * Grava em estado local; o endpoint é da Fase 2.
- */
-
 const PERFIL_INICIAL = {
   titulacao: 'mestrado',
   formacao: 'Mestrado em Microbiologia Aplicada — UNICAMP, 2021',
@@ -42,7 +27,6 @@ const PERFIL_INICIAL = {
   observacoes: '',
 }
 
-/** Campos que o Supervisor mantém — o pesquisador lê, não edita. */
 const VINCULO = {
   instituicao: 'AC2 Microbiologia',
   papel: 'Pesquisador',
@@ -66,10 +50,6 @@ function Secao({ title, description, children, readOnly, hint }) {
         ) : null}
       </header>
 
-      {/*
-        `fieldset` neutro de layout: o navegador cascateia `disabled` para todo
-        campo descendente, então não há lista de campos a manter em sincronia.
-      */}
       <fieldset className="perfil-card__body" disabled={readOnly}>
         {children}
       </fieldset>
@@ -156,7 +136,7 @@ export default function PerfilPage() {
       <div className="perfil-grid">
         <Secao
           title="Identificação"
-          description="Mantida pelo Núcleo de P&D — não há autocadastro na plataforma (RN-A04)."
+          description="Mantida pelo Núcleo de P&D — não há autocadastro na plataforma."
           readOnly
           hint="Nome e e-mail são credencial de acesso; fale com o Supervisor para alterá-los."
         >
@@ -173,7 +153,7 @@ export default function PerfilPage() {
 
         <Secao
           title="Vínculo"
-          description="Quem gere a rede interna é o Supervisor (RF02)."
+          description="Quem gere a rede interna é o Supervisor."
           readOnly
           hint="Vínculo e situação na rede são mantidos pelo Supervisor."
         >
@@ -190,7 +170,7 @@ export default function PerfilPage() {
 
         <Secao
           title="Formação e titulação"
-          description="A titulação pesa no matching de supervisão (RF07)."
+          description="A titulação pesa no matching de supervisão."
         >
           <label className="admin-field">
             <span className="admin-field__label">Titulação</span>

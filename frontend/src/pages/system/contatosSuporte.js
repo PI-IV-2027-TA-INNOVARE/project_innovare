@@ -1,13 +1,6 @@
-/**
- * Contatos de suporte exibidos nas telas de acesso restrito e de rota
- * inexistente.
- *
- * Constante local por enquanto: a lista passa a ser configurável no
- * Console → Parâmetros (PLANO_IMPLEMENTACAO.md §6.5), e a tela consome de lá
- * sem mudar de forma. Não há dado pessoal aqui além do e-mail funcional — a
- * tela é vista por quem ainda não tem permissão nenhuma.
- */
-export const CONTATOS_SUPORTE = Object.freeze([
+const CHAVE = 'pdconnect.contatos-suporte'
+
+export const CONTATOS_PADRAO = Object.freeze([
   {
     nome: 'Núcleo de P&D — AC2',
     email: 'pd@ac2microbiologia.com.br',
@@ -19,3 +12,41 @@ export const CONTATOS_SUPORTE = Object.freeze([
     papel: 'Contas, perfis e permissões',
   },
 ])
+
+function valido(contato) {
+  return Boolean(contato) && typeof contato.nome === 'string' && typeof contato.email === 'string'
+}
+
+export function lerContatos() {
+  try {
+    const bruto = window.localStorage.getItem(CHAVE)
+
+    if (!bruto) return [...CONTATOS_PADRAO]
+
+    const lista = JSON.parse(bruto)
+
+    if (!Array.isArray(lista) || lista.length === 0 || !lista.every(valido)) {
+      return [...CONTATOS_PADRAO]
+    }
+
+    return lista
+  } catch {
+    return [...CONTATOS_PADRAO]
+  }
+}
+
+export function gravarContatos(lista) {
+  try {
+    window.localStorage.setItem(CHAVE, JSON.stringify(lista))
+  } catch {
+  }
+}
+
+export function restaurarContatos() {
+  try {
+    window.localStorage.removeItem(CHAVE)
+  } catch {
+  }
+
+  return [...CONTATOS_PADRAO]
+}

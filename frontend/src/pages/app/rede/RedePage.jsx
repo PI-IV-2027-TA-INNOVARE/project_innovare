@@ -24,18 +24,6 @@ import {
 } from './redeData'
 import './RedePage.scss'
 
-/**
- * Rede interna da AC2 (RF02) — tela do Supervisor.
- *
- * É ele quem cadastra pesquisadores e libera o acesso: **não há autocadastro**
- * (RN-A04 / D06). O matching opera somente sobre esta lista (CONTEXT.md §4), o
- * que dá à tela um segundo papel além do cadastral — mostrar onde a rede está
- * cega. Daí a coluna de competências e o indicador de perfis incompletos: um
- * pesquisador sem competência declarada é invisível para o matching.
- *
- * Placeholder local; os endpoints entram na Fase 2 (ver `redeData.js`).
- */
-
 const COLUNAS = [
   { id: 'nome', label: 'Pessoa', ordenavel: true },
   { id: 'papel', label: 'Papel', ordenavel: true },
@@ -72,7 +60,6 @@ export default function RedePage() {
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
   const [detalhe, setDetalhe] = useState(null)
 
-  // Marca o lugar da requisição da Fase 2.
   useEffect(() => {
     const timer = setTimeout(() => setCarregando(false), 400)
     return () => clearTimeout(timer)
@@ -188,10 +175,6 @@ export default function RedePage() {
           </div>
         </article>
 
-        {/*
-          Não é vaidade de indicador: perfil sem competência declarada não é
-          comparável, então essa pessoa é invisível para o matching (RF06).
-        */}
         <article className="stat-card stat-card--alert">
           <FontAwesomeIcon icon={appIcons.warning} className="stat-card__icon" />
           <div>

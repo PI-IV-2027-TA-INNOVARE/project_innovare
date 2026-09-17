@@ -6,23 +6,6 @@ import { appIcons } from '../lib/icons'
 import { ROLES, isAdministrador, roleLabel } from '../lib/roles'
 import ThemeToggle from './ThemeToggle'
 
-/**
- * Barra da área autenticada.
- *
- * Os itens dependem do papel: "Administração" só aparece para o Administrador,
- * espelhando o guard de rota em ProtectedRoute.
- *
- * Perfil e sair moram num único menu do avatar — antes eram controles soltos
- * competindo com a navegação. Os destinos que a Fase 2 ainda vai entregar (perfil
- * e configurações da conta) aparecem desabilitados e rotulados: item que some da
- * barra faz o usuário procurar; item que promete e não leva a lugar nenhum é pior.
- *
- * O alternador de tema NÃO entrou nesse menu: claro/escuro é preferência de
- * qualquer pessoa, em qualquer tela, e enterrá-lo atrás de um clique o tornaria
- * privilégio de quem sabe onde procurar. Personalizar a PALETA continua sendo
- * exclusivo do Administrador, em /admin — trocar de tema e trocar as cores da
- * organização são decisões de escopos diferentes.
- */
 export default function AuthNav() {
   const { user, logout } = useAuth()
   const location = useLocation()
@@ -38,12 +21,14 @@ export default function AuthNav() {
 
   const ehSupervisor = user?.role === ROLES.SUPERVISOR
   const ehPesquisador = user?.role === ROLES.PESQUISADOR
+  const ehDemandante = user?.role === ROLES.DEMANDANTE
 
   const navItems = [
     { to: '/painel', label: 'Painel' },
     ...(ehSupervisor || ehPesquisador
       ? [{ to: '/oportunidades', label: ehSupervisor ? 'Oportunidades' : 'Minhas oportunidades' }]
       : []),
+    ...(ehDemandante ? [{ to: '/problemas', label: 'Meus problemas' }] : []),
     ...(ehSupervisor ? [{ to: '/rede', label: 'Rede interna' }] : []),
     ...(ehPesquisador ? [{ to: '/perfil', label: 'Meu perfil' }] : []),
     ...(isAdministrador(user) ? [{ to: '/admin', label: 'Administração' }] : []),
@@ -102,7 +87,7 @@ export default function AuthNav() {
 
   const goToAppearance = () => {
     setProfileOpen(false)
-    navigate('/admin')
+    navigate('/admin/aparencia')
   }
 
   const profileMenu = (

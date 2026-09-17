@@ -1,16 +1,5 @@
 import { useState } from 'react'
 
-/**
- * Prévia ao vivo da paleta.
- *
- * Não recebe nenhuma cor por prop: todo elemento aqui lê as mesmas CSS custom
- * properties que o resto da aplicação, então mudar um token no painel repinta
- * esta prévia no mesmo frame, sem estado intermediário.
- *
- * Mostra os componentes que de fato carregam a identidade — botões, campos,
- * selos, cartão de oportunidade e alertas. Uma prévia que só exibisse um botão
- * esconderia justamente o que quebra quando alguém escurece o texto de apoio.
- */
 export default function LivePreview() {
   const [alerta, setAlerta] = useState(true)
   const [revisado, setRevisado] = useState(false)

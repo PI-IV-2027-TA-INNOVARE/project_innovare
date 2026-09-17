@@ -2,14 +2,6 @@ import { useId, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { appIcons } from '../../../lib/icons'
 
-/**
- * Lista de termos em chips — competências, técnicas, linhas de pesquisa.
- *
- * Entrada livre por enquanto. O vocabulário definitivo (controlado, livre ou
- * híbrido) é P11 no plano: é a decisão que mais afeta a meta de ≥ 80% de
- * pertinência do matching, e não é minha para tomar. Quando houver catálogo,
- * muda a fonte das sugestões — não este componente.
- */
 export default function ListaEditavel({ label, placeholder, values = [], onChange }) {
   const [rascunho, setRascunho] = useState('')
   const inputId = useId()
@@ -18,8 +10,6 @@ export default function ListaEditavel({ label, placeholder, values = [], onChang
     const termo = rascunho.trim()
 
     if (!termo) return
-    // Comparação sem acento e sem caixa: "Fermentação" e "fermentacao" são o
-    // mesmo termo para quem lê, e duas features distintas para o matching.
     const jaExiste = values.some(
       (valor) => valor.localeCompare(termo, 'pt-BR', { sensitivity: 'base' }) === 0
     )
@@ -48,7 +38,6 @@ export default function ListaEditavel({ label, placeholder, values = [], onChang
           onChange={(event) => setRascunho(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter') return
-            // Enter num campo dentro de <form> submeteria a página.
             event.preventDefault()
             adicionar()
           }}

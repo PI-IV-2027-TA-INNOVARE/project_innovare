@@ -19,29 +19,12 @@ import {
 } from './oportunidadesData'
 import './OportunidadesPage.scss'
 
-/**
- * Oportunidade — shell de condução.
- *
- * Abas, e não sete páginas soltas: as etapas do fluxo (`CONTEXT.md` §5) são uma
- * sequência, e sair da estruturação para conferir competências não pode custar
- * renavegação e perda de contexto.
- *
- * As abas do miolo do fluxo aparecem marcadas como **planejadas**. Não é
- * enfeite de roadmap: o Copiloto, o matching e a pré-análise produzem saídas
- * cujo formato ainda não existe (`match_reasons`, `score_features`, dimensões
- * da pré-análise — P4). Desenhar um miolo falso aqui inventaria justamente o
- * contrato que a DoD §4.4 cobra.
- *
- * Contexto, Histórico e Decisão são reais: os três dependem da baseline, não de
- * saída de algoritmo.
- */
-
 const ABAS = [
   { id: 'contexto', label: 'Contexto', icon: appIcons.folder },
-  { id: 'proposta', label: 'Proposta estruturada', icon: appIcons.edit, planejada: 'Fase 3.2' },
-  { id: 'competencias', label: 'Competências', icon: appIcons.role, planejada: 'Fase 3.3' },
-  { id: 'equipe', label: 'Equipe potencial', icon: appIcons.users, planejada: 'Fase 3.3' },
-  { id: 'pre-analise', label: 'Pré-análise', icon: appIcons.researcher, planejada: 'Fase 3.4' },
+  { id: 'proposta', label: 'Proposta estruturada', icon: appIcons.edit, planejada: true },
+  { id: 'competencias', label: 'Competências', icon: appIcons.role, planejada: true },
+  { id: 'equipe', label: 'Equipe potencial', icon: appIcons.users, planejada: true },
+  { id: 'pre-analise', label: 'Pré-análise', icon: appIcons.researcher, planejada: true },
   { id: 'decisao', label: 'Decisão', icon: appIcons.decision },
   { id: 'historico', label: 'Histórico', icon: appIcons.history },
 ]
@@ -50,17 +33,17 @@ const DETALHE_PLANEJADO = {
   proposta: {
     titulo: 'Proposta estruturada',
     texto:
-      'Problema de pesquisa, hipótese, objetivos, metodologia, resultados esperados, inovação, infraestrutura e recursos — trabalhados com o Copiloto e revisados por humano (RF04).',
+      'Problema de pesquisa, hipótese, objetivos, metodologia, resultados esperados, inovação, infraestrutura e recursos — trabalhados com o Copiloto e revisados por humano.',
   },
   competencias: {
     titulo: 'Competências necessárias',
     texto:
-      'Conhecimento científico e técnico exigido pela oportunidade, derivado da proposta estruturada e ajustável pelo Supervisor (RF05).',
+      'Conhecimento científico e técnico exigido pela oportunidade, derivado da proposta estruturada e ajustável pelo Supervisor.',
   },
   equipe: {
     titulo: 'Equipe potencial',
     texto:
-      'Sugestões da rede interna com justificativa visível e lacunas de competência. Sugestão, nunca convocação — não há aceite nem recusa (RN-A06).',
+      'Sugestões da rede interna com justificativa visível e lacunas de competência. Sugestão, nunca convocação — não há aceite nem recusa.',
   },
   'pre-analise': {
     titulo: 'Pré-análise PIPE/FAPESP',
@@ -76,15 +59,6 @@ export default function OportunidadePage() {
 
   const ehSupervisor = user?.role === ROLES.SUPERVISOR
 
-  /**
-   * O escopo vale no detalhe, não só na lista.
-   *
-   * Escopar a listagem e deixar o detalhe aberto é escopo nenhum: bastaria
-   * digitar o código na URL. O Pesquisador só alcança as oportunidades em que
-   * integra a equipe potencial (D02); as demais respondem "não encontrada", e
-   * não "sem permissão" — dizer que existe já é contar mais do que ele pode
-   * saber.
-   */
   const registro = useMemo(() => {
     const alcance = ehSupervisor
       ? OPORTUNIDADES_EXEMPLO
@@ -174,7 +148,6 @@ export default function OportunidadePage() {
 
         {aba.planejada ? (
           <AbaPlanejada
-            fase={aba.planejada}
             titulo={DETALHE_PLANEJADO[aba.id].titulo}
             texto={DETALHE_PLANEJADO[aba.id].texto}
           />

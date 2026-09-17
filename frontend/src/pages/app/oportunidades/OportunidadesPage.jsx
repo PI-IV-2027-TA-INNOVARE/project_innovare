@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   SkeletonRows,
@@ -10,29 +10,16 @@ import { useAuth } from '../../../context/AuthContext'
 import { appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
+import { listOportunidades } from '../../../services/pdConnectApi'
 import {
   ORIGENS,
-  OPORTUNIDADES_EXEMPLO,
   SITUACOES,
-  disponibilizadasPara,
+  daApi,
   origemLabel,
   resumoPorSituacao,
   situacaoLabel,
 } from './oportunidadesData'
 import './OportunidadesPage.scss'
-
-/**
- * Oportunidades (RF14).
- *
- * Uma tela, dois públicos, e a diferença não é cosmética:
- *
- * - **Supervisor** vê a fila inteira e conduz — é dele a decisão (RN-A07).
- * - **Pesquisador** vê apenas as oportunidades em que integra a equipe potencial
- *   (D02), em acompanhamento. Não há catálogo para navegar, nem botão de aceitar
- *   ou recusar: o matching sugere, o Supervisor valida (RN-A06 / D07).
- *
- * Placeholder local; os endpoints são da Fase 3.1.
- */
 
 const COLUNAS = [
   { id: 'titulo', label: 'Oportunidade', ordenavel: true },
@@ -58,41 +45,54 @@ function comparar(a, b, campo) {
 export default function OportunidadesPage() {
   const { user } = useAuth()
 
-  // Papel explícito, e não "tudo que não for Supervisor é Pesquisador": tratar a
-  // ausência de um papel como a presença de outro fazia o Administrador cair na
-  // tela do Pesquisador e ler que seria "indicado para uma equipe potencial" —
-  // coisa que a baseline não prevê para ele (CONTEXT.md §3).
   const ehSupervisor = user?.role === ROLES.SUPERVISOR
   const ehPesquisador = user?.role === ROLES.PESQUISADOR
 
+  const [parametros, setParametros] = useSearchParams()
+
+  const [oportunidades, setOportunidades] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [busca, setBusca] = useState('')
-  const [situacaoFiltro, setSituacaoFiltro] = useState('todas')
+  const [situacaoFiltro, setSituacaoFiltro] = useState(
+    () => parametros.get('situacao') || 'todas'
+  )
   const [origemFiltro, setOrigemFiltro] = useState('todas')
   const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
 
+  const acompanhaFila = ehSupervisor || ehPesquisador
+
+  const carregar = useCallback(async () => {
+    if (!acompanhaFila) {
+      setOportunidades([])
+      setCarregando(false)
+      return
+    }
+
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const resposta = await listOportunidades()
+      setOportunidades((resposta.results || resposta).map(daApi))
+    } catch (erro) {
+      setOportunidades([])
+      setErroCarga(erro.message || 'Não foi possível carregar as oportunidades.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [acompanhaFila])
+
   useEffect(() => {
-    const timer = setTimeout(() => setCarregando(false), 400)
-    return () => clearTimeout(timer)
-  }, [])
+    carregar()
+  }, [carregar])
 
-  // O escopo é resolvido aqui, não pelo filtro: o Pesquisador não deve nem
-  // conseguir pedir a lista completa.
-  const escopo = useMemo(() => {
-    if (ehSupervisor) return OPORTUNIDADES_EXEMPLO
-    if (ehPesquisador) return disponibilizadasPara(user?.displayName || '')
-
-    // Defesa em profundidade: a rota já barra os outros papéis, mas uma tela que
-    // devolve lista vazia é melhor que uma que devolve a lista de outra pessoa.
-    return []
-  }, [ehPesquisador, ehSupervisor, user?.displayName])
-
-  const indicadores = useMemo(() => resumoPorSituacao(escopo), [escopo])
+  const indicadores = useMemo(() => resumoPorSituacao(oportunidades), [oportunidades])
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
-    return escopo.filter((item) => {
+    return oportunidades.filter((item) => {
       const situacaoOk = situacaoFiltro === 'todas' || item.situacao === situacaoFiltro
       const origemOk = origemFiltro === 'todas' || item.origem === origemFiltro
       const buscaOk =
@@ -103,7 +103,7 @@ export default function OportunidadesPage() {
 
       return situacaoOk && origemOk && buscaOk
     })
-  }, [busca, escopo, origemFiltro, situacaoFiltro])
+  }, [busca, oportunidades, origemFiltro, situacaoFiltro])
 
   const ordenadas = useMemo(() => {
     const fator = ordem.direcao === 'asc' ? 1 : -1
@@ -119,9 +119,14 @@ export default function OportunidadesPage() {
     }))
   }
 
+  const trocarSituacao = (valor) => {
+    setSituacaoFiltro(valor)
+    setParametros(valor === 'todas' ? {} : { situacao: valor }, { replace: true })
+  }
+
   const limparFiltros = () => {
     setBusca('')
-    setSituacaoFiltro('todas')
+    trocarSituacao('todas')
     setOrigemFiltro('todas')
   }
 
@@ -142,33 +147,23 @@ export default function OportunidadesPage() {
           </p>
         </div>
 
-        {/*
-          A tela de cadastro de ideia interna (RN-A03 / D05) ainda não existe —
-          é a próxima da fila em §6.7. O botão fica visível e desabilitado, como
-          os itens "em breve" do menu da conta: apontar para uma rota inexistente
-          levava a pessoa a um "código não encontrado" e parecia defeito.
-        */}
         {ehSupervisor ? (
-          <button
-            type="button"
-            className="admin-btn"
-            disabled
-            title="Cadastro de ideia interna — em breve"
-          >
+          <Link className="admin-btn" to="/oportunidades/nova">
             <FontAwesomeIcon icon={appIcons.addUser} />
             Nova ideia interna
-            <span className="admin-btn__soon">em breve</span>
-          </button>
+          </Link>
         ) : null}
       </header>
 
-      <div className="admin-callout" role="note">
-        <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          Interface preliminar — os registros são um exemplo local. O módulo de
-          Oportunidade entra na Fase 3.1 do plano.
-        </p>
-      </div>
+      {erroCarga ? (
+        <div className="admin-callout" role="alert">
+          <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroCarga}</p>
+          <button type="button" className="link-button" onClick={carregar}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : null}
 
       {ehSupervisor ? (
         <div className="stat-grid">
@@ -236,7 +231,7 @@ export default function OportunidadesPage() {
             id="filtro-situacao"
             className="admin-input admin-input--select"
             value={situacaoFiltro}
-            onChange={(event) => setSituacaoFiltro(event.target.value)}
+            onChange={(event) => trocarSituacao(event.target.value)}
           >
             <option value="todas">Todas as situações</option>
             {SITUACOES.map((situacao) => (
@@ -261,7 +256,7 @@ export default function OportunidadesPage() {
 
       {temFiltro ? (
         <div className="active-filters">
-          <span className="rede-page__count">{ordenadas.length} de {escopo.length}</span>
+          <span className="rede-page__count">{ordenadas.length} de {oportunidades.length}</span>
           <button type="button" className="link-button" onClick={limparFiltros}>
             Limpar filtros
           </button>

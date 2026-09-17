@@ -6,13 +6,6 @@ import RedeFormPage from './RedeFormPage'
 import RedePage from './RedePage'
 import { completudeDoPerfil, titulacaoLabel } from './redeData'
 
-/**
- * Rede interna (RF02) e cadastro de pesquisador (RN-A04 / D06).
- *
- * A regra que estes testes protegem: cadastrar alguém na rede e dar-lhe acesso
- * são passos separados, e perfil sem competência declarada é invisível para o
- * matching — a tela precisa dizer isso, não escondê-lo.
- */
 function renderRede(rota = '/rede') {
   return render(
     <MemoryRouter initialEntries={[rota]}>
@@ -37,7 +30,6 @@ describe('RedePage', () => {
     const alerta = screen.getByText('Sem competência declarada').closest('.stat-card')
     expect(within(alerta).getByText('1')).toBeInTheDocument()
 
-    // E marca a linha, não só o total.
     const linha = screen.getByText('Núcleo de P&D — Bancada 2').closest('tr')
     expect(within(linha).getByText(/invisível ao matching/i)).toBeInTheDocument()
   })
@@ -61,7 +53,6 @@ describe('RedePage', () => {
     await user.click(screen.getByRole('button', { name: /ordenar por titulação/i }))
 
     const primeiro = document.querySelectorAll('.user-cell__name')[0].textContent
-    // Graduação vem antes de Doutorado; em ordem alfabética seria o contrário.
     expect(primeiro).toBe('Pedro Salgado')
   })
 
@@ -102,7 +93,6 @@ describe('RedeFormPage', () => {
     const acesso = screen.getByRole('heading', { name: 'Acesso à plataforma', level: 2 })
       .closest('.perfil-card')
 
-    // O interruptor nasce desligado: cadastrar não implica dar login (RN-A04).
     expect(within(acesso).getByRole('checkbox')).not.toBeChecked()
   })
 

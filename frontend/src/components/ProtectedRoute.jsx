@@ -1,16 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-/**
- * Guarda de rota autenticada.
- *
- * `requiredRole` restringe a rota a um papel da baseline, ou a uma lista deles
- * (ver lib/roles.js) — há telas que dois atores leem, como a de Oportunidades,
- * que o Supervisor conduz e o Pesquisador acompanha (D02).
- * Quem não tem o papel vai para `/sem-acesso`, e não para o painel: redirecionar
- * em silêncio transforma "você não tem acesso" em "o link está quebrado", e o
- * chamado que chega depois é sobre a coisa errada.
- */
 export default function ProtectedRoute({ requiredRole = null }) {
   const { isAuthenticated, isBootstrapping, user } = useAuth()
   const location = useLocation()

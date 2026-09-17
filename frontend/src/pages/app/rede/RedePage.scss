@@ -1,6 +1,3 @@
-// Rede interna do Supervisor — reaproveita o console compartilhado
-// (`styles/components/_console.scss`) e os cartões de seção do perfil.
-
 .rede-page {
   width: 100%;
   padding: 32px var(--admin-gutter) 64px;
@@ -55,8 +52,6 @@
   color: var(--text-muted);
 }
 
-// Cartão de alerta da barra de indicadores: perfil sem competência declarada é
-// perfil invisível ao matching, e isso é um problema da rede, não uma métrica.
 .stat-card--alert {
   &::before {
     background: var(--accent-error);
@@ -86,37 +81,3 @@
   }
 }
 
-// --- Formulário de cadastro -------------------------------------------------
-
-.rede-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  align-items: start;
-  gap: var(--admin-gap);
-  margin-top: var(--admin-pad);
-}
-
-.rede-form__switch {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  color: var(--text-primary);
-  cursor: pointer;
-
-  input {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    accent-color: var(--accent-primary);
-  }
-}
-
-.rede-form__footer {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}

@@ -7,9 +7,6 @@ import { ThemeProvider } from './context/ThemeContext'
 import { BrandingProvider } from './context/BrandingContext'
 import './styles/index.scss'
 
-// Pinta o tema antes do React montar, para nao piscar claro no primeiro frame.
-// A regra tem de ser a MESMA de `getStoredTheme()` em ThemeContext.jsx:
-// preferencia salva > preferencia do sistema > claro.
 const storedTheme = window.localStorage.getItem('pdconnect.theme')
 const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
 const initialTheme = storedTheme === 'dark' || storedTheme === 'light'

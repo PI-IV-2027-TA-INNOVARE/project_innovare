@@ -1,6 +1,3 @@
-// Meu Perfil do Pesquisador — usa o console compartilhado
-// (`styles/components/_console.scss`) e acrescenta só o que é próprio da tela.
-
 .perfil-page {
   width: 100%;
   padding: 32px var(--admin-gutter) 64px;
@@ -42,12 +39,6 @@
   font-size: 0.875rem;
   color: var(--text-muted);
 }
-
-// --- Completude -------------------------------------------------------------
-//
-// Não é enfeite: cada dimensão vazia é uma feature a menos para o matching
-// comparar. Por isso o número aparece antes dos campos, e a linha de baixo diz
-// exatamente o que falta — barra sem nome não faz ninguém preencher nada.
 
 .perfil-completude {
   flex: 0 1 320px;
@@ -102,12 +93,10 @@
   color: var(--text-muted);
 }
 
-// --- Cartões de seção -------------------------------------------------------
-
 .perfil-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  align-items: start; // sem isto o cartão curto estica até a altura do vizinho
+  align-items: start;
   gap: var(--admin-gap);
   margin-top: var(--admin-pad);
 }

@@ -11,24 +11,9 @@ import {
 } from '../../../theme/brandTokens'
 import LivePreview from './LivePreview'
 
-/**
- * Painel de Aparência.
- *
- * Cada alteração chama `setTokenValue`, que reescreve a CSS custom property no
- * <html>. Como toda a aplicação lê essas variáveis, a mudança aparece na hora —
- * não há salvar, recarregar nem rebuild. O ajuste vale por tema: claro e escuro
- * guardam paletas independentes.
- *
- * A tela separa dois públicos na mesma superfície: quem quer trocar uma cor vê
- * nome, amostra e HEX; quem precisa do nome da custom property abre "Avançado".
- * Deixar a variável sempre à mostra fazia o cartão parecer configuração de
- * sistema, não escolha de identidade.
- */
-
 const TOAST_MS = 2600
 const COPIED_MS = 1600
 
-/** Remove acentos para que "superfície" encontre "Superficie" e vice-versa. */
 function normalize(text) {
   return String(text || '')
     .normalize('NFD')
@@ -37,16 +22,10 @@ function normalize(text) {
     .trim()
 }
 
-/** Valor seguro para o <input type="color">, que só aceita #rrggbb. */
 function toColorInputValue(value, fallback) {
   return isValidHex(value) ? value : fallback
 }
 
-/**
- * Copia sem depender da Clipboard API: navegadores antigos e contextos não
- * seguros (http://) não expõem `navigator.clipboard`, e o painel roda em rede
- * interna. Devolve `false` quando nada foi copiado, para a UI não mentir.
- */
 async function copyText(text) {
   try {
     if (navigator?.clipboard?.writeText) {
@@ -54,7 +33,6 @@ async function copyText(text) {
       return true
     }
   } catch {
-    // Permissão negada ou contexto inseguro: cai no fallback abaixo.
   }
 
   try {
@@ -236,11 +214,6 @@ export default function AppearanceSection() {
   } = useBranding()
 
   const [query, setQuery] = useState('')
-  // Só o primeiro grupo — Marca — nasce aberto. É a identidade da AC2 e o que
-  // quase toda visita vem mexer; abrir os quatro faz a tela nascer com doze
-  // cartões e empurra a prévia para fora da dobra. Recolher TODOS seria pior:
-  // a tela abriria sem nenhuma cor à vista, e a prévia ao vivo perde o sentido
-  // quando não há o que comparar com ela.
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => new Set(groups.slice(1).map((group) => group.id))
   )
@@ -306,8 +279,6 @@ export default function AppearanceSection() {
     })
   }, [])
 
-  // Busca por nome da cor, valor, grupo, uso ou nome da custom property — a
-  // pessoa pode chegar por qualquer um deles.
   const visibleGroups = useMemo(() => {
     const term = normalize(query)
 

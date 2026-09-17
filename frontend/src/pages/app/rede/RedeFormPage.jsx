@@ -13,19 +13,6 @@ import {
 } from './redeData'
 import './RedePage.scss'
 
-/**
- * Cadastro e edição de alguém da rede interna (RF02 / RF03).
- *
- * Só o Supervisor cadastra: **não há autocadastro de pesquisador** (RN-A04 /
- * D06). O cadastro cria o registro na rede; a liberação de acesso é um segundo
- * passo, deliberadamente separado — cadastrar alguém para o matching enxergar e
- * dar-lhe login são decisões distintas, e juntá-las num único botão faria a
- * primeira arrastar a segunda sem querer.
- *
- * Página inteira, e não modal: são sete dimensões do RF03: modal com essa
- * altura vira scroll dentro de scroll.
- */
-
 const VAZIO = {
   nome: '',
   email: '',
@@ -92,7 +79,6 @@ export default function RedeFormPage() {
       editando ? 'Cadastro atualizado.' : 'Pesquisador cadastrado na rede.'
     )
 
-    // Sem endpoint ainda: volta para a lista, que relê o exemplo local.
     window.setTimeout(() => navigate('/rede'), 600)
   }
 
@@ -115,7 +101,7 @@ export default function RedeFormPage() {
         </div>
       </header>
 
-      <form className="rede-form" onSubmit={enviar} noValidate>
+      <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
           <header className="perfil-card__header">
             <div>
@@ -184,7 +170,7 @@ export default function RedeFormPage() {
               <h2 className="perfil-card__title">Qualificação</h2>
               <p className="perfil-card__description">
                 Titulação é lista fechada porque o matching de supervisão filtra
-                por ela (RF07).
+                por ela.
               </p>
             </div>
           </header>
@@ -237,7 +223,7 @@ export default function RedeFormPage() {
               <h2 className="perfil-card__title">O que o matching compara</h2>
               <p className="perfil-card__description">
                 Sem competência declarada a pessoa entra na rede, mas fica
-                invisível para as sugestões (RF06).
+                invisível para as sugestões.
               </p>
             </div>
           </header>
@@ -272,13 +258,13 @@ export default function RedeFormPage() {
               <h2 className="perfil-card__title">Acesso à plataforma</h2>
               <p className="perfil-card__description">
                 Passo separado do cadastro: a pessoa pode integrar a rede antes de
-                receber login (RN-A04).
+                receber login.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
-            <label className="rede-form__switch">
+            <label className="console-form__switch">
               <input
                 type="checkbox"
                 checked={valores.liberarAcesso}
@@ -289,7 +275,7 @@ export default function RedeFormPage() {
           </div>
         </section>
 
-        <footer className="rede-form__footer">
+        <footer className="console-form__footer">
           <Link className="admin-btn admin-btn--outline" to="/rede">Cancelar</Link>
           <button type="submit" className="admin-btn">
             <FontAwesomeIcon icon={editando ? appIcons.done : appIcons.addUser} />
