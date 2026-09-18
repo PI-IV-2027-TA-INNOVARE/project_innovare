@@ -1,17 +1,28 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrandingProvider } from '../../../context/BrandingContext'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import AppearanceSection from './AppearanceSection'
 
-/**
- * Testes do painel de Aparência.
- *
- * O que importa aqui é o comportamento da tela: quem enxerga o quê, o que a
- * busca filtra, o que o bloco Avançado esconde e qual retorno a pessoa recebe
- * depois de mexer numa cor. As cores em si são contrato de `brandTokens.js`.
- */
+const estado = vi.hoisted(() => ({ salvarTema: null }))
+
+vi.mock('../../../services/pdConnectApi', () => ({
+  carregarTema: () => new Promise(() => {}),
+  salvarTema: (...args) => estado.salvarTema(...args),
+}))
+
+beforeEach(() => {
+  window.localStorage.clear()
+
+  estado.salvarTema = vi.fn().mockResolvedValue({
+    secao: 'tema',
+    payload: { light: { accentPrimary: '#123456' }, dark: {} },
+    revisao: 1,
+    atualizado_por_nome: 'Administração da plataforma',
+  })
+})
+
 function renderAppearance() {
   return render(
     <ThemeProvider>
@@ -22,7 +33,6 @@ function renderAppearance() {
   )
 }
 
-/** O cartão de um token, localizado pelo nome visível da cor. */
 function cartaoDaCor(nome) {
   return screen.getByRole('heading', { name: nome, level: 4 }).closest('.token-card')
 }
@@ -58,7 +68,6 @@ describe('AppearanceSection', () => {
 
     await user.type(screen.getByLabelText(/buscar configuração/i), 'sucesso')
 
-    // Match escondido atrás de um grupo fechado é match perdido.
     expect(screen.getByText('Sucesso')).toBeVisible()
   })
 
@@ -72,7 +81,6 @@ describe('AppearanceSection', () => {
     await user.click(within(cartao).getByRole('button', { name: /avançado/i }))
 
     expect(within(cartao).getByText('--accent-primary')).toBeVisible()
-    // O laranja recalcula outras cinco variaveis; o bloco precisa dizer isso.
     expect(within(cartao).getByText('--shadow-focus')).toBeVisible()
   })
 
@@ -115,7 +123,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByText('Laranja institucional')).toBeVisible()
   })
 
-  it('confirma a gravacao automatica depois de trocar uma cor', async () => {
+  it('nao publica a troca de cor sozinha: marca como nao salva', async () => {
     const user = userEvent.setup()
     renderAppearance()
 
@@ -125,8 +133,49 @@ describe('AppearanceSection', () => {
     await user.clear(campo)
     await user.type(campo, '#123456')
 
-    expect(await screen.findByText('Aparência salva automaticamente.')).toBeInTheDocument()
     expect(within(cartao).getByText('alterado')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/não salvas?/i)
+    expect(estado.salvarTema).not.toHaveBeenCalled()
+  })
+
+  it('publica a paleta so quando o admin aperta Salvar', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const salvar = screen.getByRole('button', { name: /salvar alterações/i })
+    expect(salvar).toBeDisabled()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, '#123456')
+
+    expect(salvar).toBeEnabled()
+
+    await user.click(salvar)
+
+    expect(estado.salvarTema).toHaveBeenCalledTimes(1)
+    expect(Object.values(estado.salvarTema.mock.calls[0][0].light)).toContain('#123456')
+
+    expect(await screen.findByText(/aparência publicada/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeDisabled()
+  })
+
+  it('descarta o rascunho e volta para a paleta publicada', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, '#123456')
+
+    await user.click(screen.getByRole('button', { name: /descartar/i }))
+
+    expect(estado.salvarTema).not.toHaveBeenCalled()
+    expect(screen.getByText('12 cores · 0 alteradas')).toBeInTheDocument()
   })
 
   it('so habilita "Restaurar padroes" quando ha algo alterado', async () => {
@@ -146,14 +195,12 @@ describe('AppearanceSection', () => {
     await user.click(restaurar)
 
     expect(restaurar).toBeDisabled()
-    expect(screen.getByText('Identidade oficial da AC2 restaurada.')).toBeInTheDocument()
+    expect(screen.getByText('Identidade oficial da AC2 pronta para salvar.')).toBeInTheDocument()
   })
 
   it('copia o valor da cor para a area de transferencia', async () => {
     const user = userEvent.setup()
 
-    // O `setup()` do user-event instala a propria area de transferencia; o
-    // dublê precisa entrar depois dele, ou e sobrescrito.
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText },

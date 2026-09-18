@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useBranding } from '../../../context/BrandingContext'
 import { useTheme } from '../../../context/ThemeContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import {
   TOKEN_KIND_LABELS,
   getDerivedVariables,
@@ -11,24 +10,9 @@ import {
 } from '../../../theme/brandTokens'
 import LivePreview from './LivePreview'
 
-/**
- * Painel de Aparência.
- *
- * Cada alteração chama `setTokenValue`, que reescreve a CSS custom property no
- * <html>. Como toda a aplicação lê essas variáveis, a mudança aparece na hora —
- * não há salvar, recarregar nem rebuild. O ajuste vale por tema: claro e escuro
- * guardam paletas independentes.
- *
- * A tela separa dois públicos na mesma superfície: quem quer trocar uma cor vê
- * nome, amostra e HEX; quem precisa do nome da custom property abre "Avançado".
- * Deixar a variável sempre à mostra fazia o cartão parecer configuração de
- * sistema, não escolha de identidade.
- */
-
 const TOAST_MS = 2600
 const COPIED_MS = 1600
 
-/** Remove acentos para que "superfície" encontre "Superficie" e vice-versa. */
 function normalize(text) {
   return String(text || '')
     .normalize('NFD')
@@ -37,16 +21,10 @@ function normalize(text) {
     .trim()
 }
 
-/** Valor seguro para o <input type="color">, que só aceita #rrggbb. */
 function toColorInputValue(value, fallback) {
   return isValidHex(value) ? value : fallback
 }
 
-/**
- * Copia sem depender da Clipboard API: navegadores antigos e contextos não
- * seguros (http://) não expõem `navigator.clipboard`, e o painel roda em rede
- * interna. Devolve `false` quando nada foi copiado, para a UI não mentir.
- */
 async function copyText(text) {
   try {
     if (navigator?.clipboard?.writeText) {
@@ -54,7 +32,6 @@ async function copyText(text) {
       return true
     }
   } catch {
-    // Permissão negada ou contexto inseguro: cai no fallback abaixo.
   }
 
   try {
@@ -120,7 +97,7 @@ function TokenCard({ token, value, isCustomized, onChange, onReset, onCopy, copi
             title={`Copiar ${value}`}
             aria-label={`Copiar ${value}`}
           >
-            <FontAwesomeIcon icon={copied ? appIcons.done : appIcons.copy} />
+            <Icone icon={copied ? appIcons.done : appIcons.copy} />
           </button>
         </div>
 
@@ -132,7 +109,7 @@ function TokenCard({ token, value, isCustomized, onChange, onReset, onCopy, copi
             aria-controls={advancedId}
             onClick={() => setAdvancedOpen((open) => !open)}
           >
-            <FontAwesomeIcon
+            <Icone
               icon={appIcons.disclosure}
               className={`disclosure__chevron${advancedOpen ? ' is-open' : ''}`}
             />
@@ -194,7 +171,7 @@ function TokenGroup({ group, branding, customized, collapsed, onToggle, cardProp
         aria-controls={panelId}
         onClick={onToggle}
       >
-        <FontAwesomeIcon
+        <Icone
           icon={appIcons.disclosure}
           className={`disclosure__chevron${collapsed ? '' : ' is-open'}`}
         />
@@ -230,17 +207,20 @@ export default function AppearanceSection() {
     groups,
     customizedTokenIds,
     isCustomized,
+    alterado,
+    pendentes,
+    salvando,
+    erroAoSalvar,
+    revisao,
+    autor,
     setTokenValue,
     resetToken,
     resetTheme,
+    descartarRascunho,
+    salvar,
   } = useBranding()
 
   const [query, setQuery] = useState('')
-  // Só o primeiro grupo — Marca — nasce aberto. É a identidade da AC2 e o que
-  // quase toda visita vem mexer; abrir os quatro faz a tela nascer com doze
-  // cartões e empurra a prévia para fora da dobra. Recolher TODOS seria pior:
-  // a tela abriria sem nenhuma cor à vista, e a prévia ao vivo perde o sentido
-  // quando não há o que comparar com ela.
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => new Set(groups.slice(1).map((group) => group.id))
   )
@@ -265,18 +245,30 @@ export default function AppearanceSection() {
 
   const handleChange = useCallback((tokenId, value) => {
     setTokenValue(tokenId, value)
-    showToast('Aparência salva automaticamente.')
-  }, [setTokenValue, showToast])
+  }, [setTokenValue])
 
   const handleReset = useCallback((tokenId, label) => {
     resetToken(tokenId)
-    showToast(`${label} voltou ao padrão da AC2.`)
+    showToast(`${label} volta ao padrão da AC2 quando você salvar.`)
   }, [resetToken, showToast])
 
   const handleResetTheme = useCallback(() => {
     resetTheme()
-    showToast('Identidade oficial da AC2 restaurada.')
+    showToast('Identidade oficial da AC2 pronta para salvar.')
   }, [resetTheme, showToast])
+
+  const handleSalvar = useCallback(async () => {
+    const resultado = await salvar()
+
+    if (resultado.ok) {
+      showToast('Aparência publicada. Todos os usuários passam a ver esta paleta.')
+    }
+  }, [salvar, showToast])
+
+  const handleDescartar = useCallback(() => {
+    descartarRascunho()
+    showToast('Alterações descartadas. A paleta publicada continua valendo.')
+  }, [descartarRascunho, showToast])
 
   const handleCopy = useCallback(async (tokenId, value) => {
     const ok = await copyText(value)
@@ -306,8 +298,6 @@ export default function AppearanceSection() {
     })
   }, [])
 
-  // Busca por nome da cor, valor, grupo, uso ou nome da custom property — a
-  // pessoa pode chegar por qualquer um deles.
   const visibleGroups = useMemo(() => {
     const term = normalize(query)
 
@@ -350,8 +340,8 @@ export default function AppearanceSection() {
         <div className="admin-section__heading">
           <h2 className="admin-section__title">Aparência</h2>
           <p className="admin-section__subtitle">
-            Ajuste as cores da plataforma. As mudanças valem imediatamente, sem
-            recarregar a página, e cada tema guarda sua própria paleta.
+            Ajuste as cores da plataforma. Você vê a mudança na hora; os outros
+            usuários só depois que você salvar. Cada tema guarda a própria paleta.
           </p>
         </div>
 
@@ -362,7 +352,7 @@ export default function AppearanceSection() {
             onClick={toggleTheme}
             title="Alternar entre o tema claro e o escuro"
           >
-            <FontAwesomeIcon icon={theme === 'dark' ? appIcons.themeDark : appIcons.themeLight} />
+            <Icone icon={theme === 'dark' ? appIcons.themeDark : appIcons.themeLight} />
             Tema: {theme === 'dark' ? 'escuro' : 'claro'}
           </button>
 
@@ -373,17 +363,62 @@ export default function AppearanceSection() {
             disabled={!isCustomized}
             title="Restaurar identidade oficial da AC2."
           >
-            <FontAwesomeIcon icon={appIcons.reset} />
+            <Icone icon={appIcons.reset} />
             Restaurar padrões
+          </button>
+
+          <button
+            type="button"
+            className="admin-btn admin-btn--outline"
+            onClick={handleDescartar}
+            disabled={!alterado || salvando}
+            title="Voltar para a paleta que está publicada."
+          >
+            Descartar
+          </button>
+
+          <button
+            type="button"
+            className="admin-btn"
+            onClick={handleSalvar}
+            disabled={!alterado || salvando}
+          >
+            <Icone icon={appIcons.save} />
+            {salvando ? 'Salvando...' : 'Salvar alterações'}
           </button>
         </div>
       </header>
+
+      {alterado ? (
+        <div className="admin-callout" role="status">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">
+            {pendentes} {pendentes === 1 ? 'alteração não salva' : 'alterações não salvas'}.
+            Até você salvar, a paleta nova é só sua — os outros usuários continuam
+            vendo a que está publicada.
+          </p>
+        </div>
+      ) : null}
+
+      {erroAoSalvar ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroAoSalvar}</p>
+        </div>
+      ) : null}
+
+      {!alterado && revisao > 0 ? (
+        <p className="admin-section__subtitle">
+          Paleta publicada — revisão {revisao}
+          {autor ? ` · última alteração por ${autor}` : ''}.
+        </p>
+      ) : null}
 
       <div className="appearance-layout">
         <div className="appearance-main">
           <div className="appearance-toolbar">
             <div className="admin-search">
-              <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+              <Icone icon={appIcons.search} className="admin-search__icon" />
               <input
                 type="search"
                 className="admin-search__input"
@@ -429,7 +464,7 @@ export default function AppearanceSection() {
 
       {toast ? (
         <div className="admin-toast" role="status" aria-live="polite">
-          <FontAwesomeIcon icon={appIcons.done} className="admin-toast__icon" />
+          <Icone icon={appIcons.done} className="admin-toast__icon" />
           {toast.message}
         </div>
       ) : null}

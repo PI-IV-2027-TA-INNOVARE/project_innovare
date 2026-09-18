@@ -5,11 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import LoginPage from './LoginPage'
 
-/**
- * O AuthContext e dublado: estes testes descrevem a TELA de login — validacao,
- * foco, estado de erro e acessibilidade. A sessao real (JWT, hidratacao de
- * perfil, refresh) e responsabilidade do AuthContext e merece arquivo proprio.
- */
 const auth = {
   authError: '',
   isAuthenticated: false,
@@ -30,11 +25,6 @@ function renderLogin() {
   )
 }
 
-/**
- * O `fireEvent` monta o KeyboardEvent pelo construtor nativo, que descarta
- * `getModifierState` vindo no init. O SyntheticEvent do React delega a leitura
- * ao evento nativo, entao a funcao precisa ser posta na instancia.
- */
 function teclar(elemento, tipo, { capsLock }) {
   const evento = new KeyboardEvent(tipo, { key: 'a', bubbles: true, cancelable: true })
   evento.getModifierState = () => capsLock
@@ -160,7 +150,6 @@ describe('LoginPage — envio', () => {
     const alerta = await screen.findByRole('alert')
 
     expect(alerta).toHaveTextContent('E-mail ou senha inválidos.')
-    // O backend nao diz qual dos dois falhou: os dois ficam marcados.
     expect(campoEmail()).toHaveAttribute('aria-invalid', 'true')
     expect(campoSenha()).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(alerta).toHaveFocus())

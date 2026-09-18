@@ -1,11 +1,3 @@
-/**
- * Os quatro atores funcionais do P&D Connect (baseline de atores v1.0).
- *
- * O backend ainda modela apenas `pesquisador` e `empresa`; o front já trabalha
- * com os quatro papéis para que as telas e os guards de rota nasçam alinhados à
- * baseline. A convergência do backend está na Fase 2 do PLANO_IMPLEMENTACAO.md.
- */
-
 export const ROLES = Object.freeze({
   DEMANDANTE: 'demandante',
   PESQUISADOR: 'pesquisador',

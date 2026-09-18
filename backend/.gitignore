@@ -1,0 +1,27 @@
+# Segredos — `.env` também é pego pelo .gitignore da raiz; repetido aqui para
+# que a regra continue valendo se este diretório virar submódulo (P2).
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/media/
+/staticfiles/
+
+# Ferramentas
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/

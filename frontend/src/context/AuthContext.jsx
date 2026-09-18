@@ -5,7 +5,7 @@ import {
   getApiAuthSession,
   setApiAuthSession,
 } from '../lib/api'
-import { getAuthenticatedProfile, requestAuthToken } from '../services/pdConnectApi'
+import { encerrarSessao, getAuthenticatedProfile, requestAuthToken } from '../services/pdConnectApi'
 import {
   IS_MOCK_AUTH_ENABLED,
   mockRestoreSession,
@@ -14,32 +14,16 @@ import {
 } from '../services/mockAuth'
 import { ROLES, roleLabel } from '../lib/roles'
 
-/**
- * Sessao autenticada do P&D Connect.
- *
- * Dois caminhos possiveis:
- *  - real: JWT via `/api/auth/token/`, hidratado por `/api/auth/profile/`;
- *  - demonstracao: usuarios ficticios, quando `VITE_AUTH_MOCK=true` (ver
- *    `services/mockAuth.js`). Serve para navegar no front sem backend.
- *
- * Nao existe autocadastro: pesquisadores sao cadastrados por um Supervisor e as
- * demais contas provisionadas pelo Administrador (RN-A04 / D06).
- */
-
 const STORAGE_KEY = 'pdconnect-auth-session-v2'
 
 const AuthContext = createContext(null)
 
-/**
- * Traduz o tipo de usuario do backend atual para os papeis da baseline.
- * O backend so conhece `pesquisador` e `empresa`; Supervisor e Administrador
- * chegam na Fase 2 do plano.
- */
-function resolveRole(profilePayload) {
-  if (profilePayload?.pesquisador) return ROLES.PESQUISADOR
-  if (profilePayload?.empresa) return ROLES.DEMANDANTE
+const VALID_ROLES = new Set(Object.values(ROLES))
 
-  return null
+function resolveRole(profilePayload) {
+  const role = profilePayload?.papel
+
+  return VALID_ROLES.has(role) ? role : null
 }
 
 function normalizeStoredSession(session) {
@@ -93,7 +77,6 @@ function buildFriendlyErrorMessage(error, fallback) {
   return translateApiMessage(error.message) || fallback
 }
 
-/** Monta o usuario da aplicacao a partir do payload de `/api/auth/profile/`. */
 function buildUser(profilePayload) {
   const role = resolveRole(profilePayload)
 
@@ -101,19 +84,15 @@ function buildUser(profilePayload) {
     throw new Error('A API autenticada nao retornou um perfil reconhecido.')
   }
 
-  const profile = profilePayload.pesquisador || profilePayload.empresa
-
   return {
-    idUser: profilePayload.id_user,
+    idUser: profilePayload.id_usuario,
     email: profilePayload.email,
     role,
-    roleLabel: roleLabel(role),
-    displayName:
-      profile?.name ||
-      profile?.razao_social ||
-      profile?.legal_name ||
-      profilePayload.email,
-    profileId: profile?.id_researcher ?? profile?.id_company ?? null,
+    roleLabel: profilePayload.papel_rotulo || roleLabel(role),
+    displayName: profilePayload.nome || profilePayload.email,
+    organizacao: profilePayload.organizacao || null,
+    permissions: profilePayload.permissoes || [],
+    lastAccess: profilePayload.ultimo_acesso || null,
     isMock: false,
   }
 }
@@ -168,7 +147,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // --- Bootstrap -----------------------------------------------------------
   useEffect(() => {
     if (IS_MOCK_AUTH_ENABLED) {
       mockRestoreSession()
@@ -205,8 +183,6 @@ export function AuthProvider({ children }) {
 
     return () => { configureApiAuth() }
   }, [])
-
-  // --- Acoes ---------------------------------------------------------------
 
   const signInWithCredentials = async ({ email, password }) => {
     if (IS_MOCK_AUTH_ENABLED) {

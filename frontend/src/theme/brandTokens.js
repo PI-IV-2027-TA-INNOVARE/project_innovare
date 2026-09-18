@@ -1,18 +1,3 @@
-/**
- * Fonte unica de verdade dos tokens de marca que o painel de Aparencia do admin
- * pode reescrever em tempo real.
- *
- * Cada token aponta para uma CSS custom property declarada em
- * `src/styles/base/_globals.scss`. Sobrescrever a property no elemento <html>
- * repinta a aplicacao inteira, porque todo componente le a variavel e nunca o
- * valor literal.
- *
- * Os defaults de MARCA sao a paleta oficial da AC2, extraida do :root de
- * https://ac2microbiologia.com.br. Os defaults de SUPERFICIE (fundo, cartao,
- * texto, borda) sao uma rampa suavizada — ver `UI_SURFACES` abaixo.
- */
-
-/** Paleta institucional da AC2 — nao alterar sem validacao com o cliente. */
 export const AC2_PALETTE = Object.freeze({
   orange: '#E07B1A',
   orangeDark: '#B8610F',
@@ -26,17 +11,6 @@ export const AC2_PALETTE = Object.freeze({
   white: '#FFFFFF',
 })
 
-/**
- * Superficies da aplicacao no tema claro.
- *
- * Diferem de proposito da AC2_PALETTE. O site usa branco puro em superficie e
- * preto puro em texto; esse par da 21:1 e ofusca em tela grande. Esta rampa
- * desce ~12% de luminancia e mantem 15:1 no texto.
- *
- * ATENCAO: estes valores espelham `styles/variables/_colors.scss`. Os dois
- * arquivos precisam andar juntos — se so um mudar, "restaurar padrao AC2" no
- * painel de Aparencia devolve a paleta antiga.
- */
 export const UI_SURFACES = Object.freeze({
   background: '#E4E9F0',
   backgroundAlt: '#DBE2EC',
@@ -45,11 +19,6 @@ export const UI_SURFACES = Object.freeze({
   border: '#CED6E1',
 })
 
-/**
- * Grupos de tokens exibidos no painel. `light` e `dark` sao os valores padrao
- * de cada tema; `derive` gera variaveis dependentes (tints, sombras, bordas)
- * a partir do valor escolhido, para que a troca de uma cor continue coerente.
- */
 export const BRAND_TOKEN_GROUPS = Object.freeze([
   {
     id: 'marca',
@@ -89,10 +58,6 @@ export const BRAND_TOKEN_GROUPS = Object.freeze([
         cssVar: '--accent-secondary',
         light: AC2_PALETTE.navy,
         dark: '#6F9AD1',
-        // O painel de login NAO deriva daqui. No tema escuro este token e um
-        // azul claro (acento sobre fundo escuro); usa-lo como fundo do painel
-        // deixava a primeira tela do produto clara enquanto o resto e navy.
-        // O navy escolhido tinge o brilho e os elementos de acento.
         derive: (value) => ({
           '--accent-secondary-dim': withAlpha(value, 0.1),
           '--brand-panel-glow': withAlpha(value, 0.18),
@@ -205,11 +170,6 @@ export const BRAND_TOKEN_GROUPS = Object.freeze([
   },
 ])
 
-/**
- * Rotulo do selo exibido em cada cartao de cor. `kind` responde "para que serve
- * esta cor", que e a pergunta de quem abre o painel — o nome da CSS custom
- * property responde outra, e por isso mora no bloco Avancado.
- */
 export const TOKEN_KIND_LABELS = Object.freeze({
   primaria: 'Primária',
   hover: 'Hover',
@@ -221,10 +181,8 @@ export const TOKEN_KIND_LABELS = Object.freeze({
   estado: 'Estado',
 })
 
-/** Lista plana de todos os tokens, na ordem em que aparecem no painel. */
 export const BRAND_TOKENS = BRAND_TOKEN_GROUPS.flatMap((group) => group.tokens)
 
-/** Valores padrao da AC2 para um tema (`light` | `dark`). */
 export function getDefaultBranding(theme = 'light') {
   const key = theme === 'dark' ? 'dark' : 'light'
 
@@ -234,10 +192,6 @@ export function getDefaultBranding(theme = 'light') {
   }, {})
 }
 
-/**
- * Converte o estado do painel no conjunto de CSS custom properties a aplicar,
- * ja incluindo as variaveis derivadas de cada token.
- */
 export function buildCssVariables(branding = {}) {
   const variables = {}
 
@@ -256,9 +210,6 @@ export function buildCssVariables(branding = {}) {
   return variables
 }
 
-// --- utilitarios de cor -----------------------------------------------------
-
-/** Normaliza `#abc` / `#aabbcc` para os componentes r, g, b. */
 function parseHex(color) {
   const hex = String(color || '').trim().replace('#', '')
 
@@ -281,7 +232,6 @@ function parseHex(color) {
   return null
 }
 
-/** `#E07B1A` + 0.14 -> `rgba(224, 123, 26, 0.14)`. Passa adiante o que nao for hex. */
 export function withAlpha(color, alpha) {
   const rgb = parseHex(color)
 
@@ -290,7 +240,6 @@ export function withAlpha(color, alpha) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
 }
 
-/** Escurece um hex por um fator entre 0 (preto) e 1 (cor original). */
 export function shade(color, factor) {
   const rgb = parseHex(color)
 
@@ -302,12 +251,10 @@ export function shade(color, factor) {
   return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
 }
 
-/** Aceita apenas `#rgb` ou `#rrggbb` — usado para validar entrada manual. */
 export function isValidHex(color) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(color || '').trim())
 }
 
-/** `#E07B1A` -> `rgba(224, 123, 26, 1)`. Passa adiante o que nao for hex. */
 export function toRgbaString(color, alpha = 1) {
   const rgb = parseHex(color)
 
@@ -316,13 +263,6 @@ export function toRgbaString(color, alpha = 1) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
 }
 
-/**
- * Variaveis que o token recalcula ao mudar (tints, sombras, bordas).
- *
- * O painel mostra esta lista no bloco Avancado: mudar o laranja mexe em cinco
- * outras properties, e esconder isso faz o efeito parecer maior do que o
- * controle que a pessoa tocou.
- */
 export function getDerivedVariables(token, value) {
   if (!token || typeof token.derive !== 'function' || !value) return []
 

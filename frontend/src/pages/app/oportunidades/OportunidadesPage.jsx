@@ -1,38 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   SkeletonRows,
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
+import { listOportunidades } from '../../../services/pdConnectApi'
 import {
   ORIGENS,
-  OPORTUNIDADES_EXEMPLO,
   SITUACOES,
-  disponibilizadasPara,
+  daApi,
   origemLabel,
   resumoPorSituacao,
   situacaoLabel,
 } from './oportunidadesData'
 import './OportunidadesPage.scss'
-
-/**
- * Oportunidades (RF14).
- *
- * Uma tela, dois públicos, e a diferença não é cosmética:
- *
- * - **Supervisor** vê a fila inteira e conduz — é dele a decisão (RN-A07).
- * - **Pesquisador** vê apenas as oportunidades em que integra a equipe potencial
- *   (D02), em acompanhamento. Não há catálogo para navegar, nem botão de aceitar
- *   ou recusar: o matching sugere, o Supervisor valida (RN-A06 / D07).
- *
- * Placeholder local; os endpoints são da Fase 3.1.
- */
 
 const COLUNAS = [
   { id: 'titulo', label: 'Oportunidade', ordenavel: true },
@@ -58,41 +44,54 @@ function comparar(a, b, campo) {
 export default function OportunidadesPage() {
   const { user } = useAuth()
 
-  // Papel explícito, e não "tudo que não for Supervisor é Pesquisador": tratar a
-  // ausência de um papel como a presença de outro fazia o Administrador cair na
-  // tela do Pesquisador e ler que seria "indicado para uma equipe potencial" —
-  // coisa que a baseline não prevê para ele (CONTEXT.md §3).
   const ehSupervisor = user?.role === ROLES.SUPERVISOR
   const ehPesquisador = user?.role === ROLES.PESQUISADOR
 
+  const [parametros, setParametros] = useSearchParams()
+
+  const [oportunidades, setOportunidades] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [busca, setBusca] = useState('')
-  const [situacaoFiltro, setSituacaoFiltro] = useState('todas')
+  const [situacaoFiltro, setSituacaoFiltro] = useState(
+    () => parametros.get('situacao') || 'todas'
+  )
   const [origemFiltro, setOrigemFiltro] = useState('todas')
   const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
 
+  const acompanhaFila = ehSupervisor || ehPesquisador
+
+  const carregar = useCallback(async () => {
+    if (!acompanhaFila) {
+      setOportunidades([])
+      setCarregando(false)
+      return
+    }
+
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const resposta = await listOportunidades()
+      setOportunidades((resposta.results || resposta).map(daApi))
+    } catch (erro) {
+      setOportunidades([])
+      setErroCarga(erro.message || 'Não foi possível carregar as oportunidades.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [acompanhaFila])
+
   useEffect(() => {
-    const timer = setTimeout(() => setCarregando(false), 400)
-    return () => clearTimeout(timer)
-  }, [])
+    carregar()
+  }, [carregar])
 
-  // O escopo é resolvido aqui, não pelo filtro: o Pesquisador não deve nem
-  // conseguir pedir a lista completa.
-  const escopo = useMemo(() => {
-    if (ehSupervisor) return OPORTUNIDADES_EXEMPLO
-    if (ehPesquisador) return disponibilizadasPara(user?.displayName || '')
-
-    // Defesa em profundidade: a rota já barra os outros papéis, mas uma tela que
-    // devolve lista vazia é melhor que uma que devolve a lista de outra pessoa.
-    return []
-  }, [ehPesquisador, ehSupervisor, user?.displayName])
-
-  const indicadores = useMemo(() => resumoPorSituacao(escopo), [escopo])
+  const indicadores = useMemo(() => resumoPorSituacao(oportunidades), [oportunidades])
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
-    return escopo.filter((item) => {
+    return oportunidades.filter((item) => {
       const situacaoOk = situacaoFiltro === 'todas' || item.situacao === situacaoFiltro
       const origemOk = origemFiltro === 'todas' || item.origem === origemFiltro
       const buscaOk =
@@ -103,7 +102,7 @@ export default function OportunidadesPage() {
 
       return situacaoOk && origemOk && buscaOk
     })
-  }, [busca, escopo, origemFiltro, situacaoFiltro])
+  }, [busca, oportunidades, origemFiltro, situacaoFiltro])
 
   const ordenadas = useMemo(() => {
     const fator = ordem.direcao === 'asc' ? 1 : -1
@@ -119,9 +118,14 @@ export default function OportunidadesPage() {
     }))
   }
 
+  const trocarSituacao = (valor) => {
+    setSituacaoFiltro(valor)
+    setParametros(valor === 'todas' ? {} : { situacao: valor }, { replace: true })
+  }
+
   const limparFiltros = () => {
     setBusca('')
-    setSituacaoFiltro('todas')
+    trocarSituacao('todas')
     setOrigemFiltro('todas')
   }
 
@@ -142,38 +146,28 @@ export default function OportunidadesPage() {
           </p>
         </div>
 
-        {/*
-          A tela de cadastro de ideia interna (RN-A03 / D05) ainda não existe —
-          é a próxima da fila em §6.7. O botão fica visível e desabilitado, como
-          os itens "em breve" do menu da conta: apontar para uma rota inexistente
-          levava a pessoa a um "código não encontrado" e parecia defeito.
-        */}
         {ehSupervisor ? (
-          <button
-            type="button"
-            className="admin-btn"
-            disabled
-            title="Cadastro de ideia interna — em breve"
-          >
-            <FontAwesomeIcon icon={appIcons.addUser} />
+          <Link className="admin-btn" to="/oportunidades/nova">
+            <Icone icon={appIcons.addUser} />
             Nova ideia interna
-            <span className="admin-btn__soon">em breve</span>
-          </button>
+          </Link>
         ) : null}
       </header>
 
-      <div className="admin-callout" role="note">
-        <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          Interface preliminar — os registros são um exemplo local. O módulo de
-          Oportunidade entra na Fase 3.1 do plano.
-        </p>
-      </div>
+      {erroCarga ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.info} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroCarga}</p>
+          <button type="button" className="link-button" onClick={carregar}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : null}
 
       {ehSupervisor ? (
         <div className="stat-grid">
           <article className="stat-card">
-            <FontAwesomeIcon icon={appIcons.folder} className="stat-card__icon" />
+            <Icone icon={appIcons.folder} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Oportunidades</p>
               <p className="stat-card__value">{indicadores.total}</p>
@@ -181,7 +175,7 @@ export default function OportunidadesPage() {
           </article>
 
           <article className="stat-card stat-card--ok">
-            <FontAwesomeIcon icon={appIcons.flow} className="stat-card__icon" />
+            <Icone icon={appIcons.flow} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Em andamento</p>
               <p className="stat-card__value">{indicadores.emAndamento}</p>
@@ -189,7 +183,7 @@ export default function OportunidadesPage() {
           </article>
 
           <article className="stat-card">
-            <FontAwesomeIcon icon={appIcons.decision} className="stat-card__icon" />
+            <Icone icon={appIcons.decision} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Aguardando sua decisão</p>
               <p className="stat-card__value">{indicadores.aguardandoDecisao}</p>
@@ -197,7 +191,7 @@ export default function OportunidadesPage() {
           </article>
 
           <article className="stat-card stat-card--alert">
-            <FontAwesomeIcon icon={appIcons.warning} className="stat-card__icon" />
+            <Icone icon={appIcons.warning} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Com lacuna de competência</p>
               <p className="stat-card__value">{indicadores.comLacuna}</p>
@@ -208,7 +202,7 @@ export default function OportunidadesPage() {
 
       <div className="admin-toolbar">
         <div className="admin-search">
-          <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+          <Icone icon={appIcons.search} className="admin-search__icon" />
           <input
             type="search"
             className="admin-search__input"
@@ -225,7 +219,7 @@ export default function OportunidadesPage() {
               title="Limpar pesquisa"
               aria-label="Limpar pesquisa"
             >
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
             </button>
           ) : null}
         </div>
@@ -236,7 +230,7 @@ export default function OportunidadesPage() {
             id="filtro-situacao"
             className="admin-input admin-input--select"
             value={situacaoFiltro}
-            onChange={(event) => setSituacaoFiltro(event.target.value)}
+            onChange={(event) => trocarSituacao(event.target.value)}
           >
             <option value="todas">Todas as situações</option>
             {SITUACOES.map((situacao) => (
@@ -261,7 +255,7 @@ export default function OportunidadesPage() {
 
       {temFiltro ? (
         <div className="active-filters">
-          <span className="rede-page__count">{ordenadas.length} de {escopo.length}</span>
+          <span className="rede-page__count">{ordenadas.length} de {oportunidades.length}</span>
           <button type="button" className="link-button" onClick={limparFiltros}>
             Limpar filtros
           </button>
@@ -270,6 +264,7 @@ export default function OportunidadesPage() {
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
+          <caption className="sr-only">Fila de oportunidades</caption>
           <thead>
             <tr>
               {COLUNAS.map((coluna) => (
@@ -324,7 +319,7 @@ export default function OportunidadesPage() {
                       {item.equipe.length} {item.equipe.length === 1 ? 'pessoa' : 'pessoas'}
                       {item.lacunas.length > 0 ? (
                         <span className="oportunidade-lacuna" title={item.lacunas.join(' · ')}>
-                          <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                          <Icone icon={appIcons.warning} aria-hidden="true" />
                           {item.lacunas.length} lacuna
                         </span>
                       ) : null}

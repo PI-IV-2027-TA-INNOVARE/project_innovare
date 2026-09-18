@@ -52,7 +52,6 @@
   to { transform: rotate(360deg); }
 }
 
-// ─── Responsive ───────────────────────────────────────────────
 @include media-down(lg) {
   .auth-nav__inner {
     grid-template-columns: 1fr;

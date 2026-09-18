@@ -1,6 +1,3 @@
-// Oportunidades — lista e shell de condução.
-// Herdam o console compartilhado (`styles/components/_console.scss`).
-
 .oportunidades-page,
 .oportunidade-page {
   width: 100%;
@@ -68,11 +65,9 @@
   color: var(--text-muted);
 
   a {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 }
-
-// --- Selos do fluxo ---------------------------------------------------------
 
 .origem-badge {
   display: inline-block;
@@ -82,15 +77,13 @@
   border-radius: 999px;
   white-space: nowrap;
 
-  // Problema externo x ideia interna: as duas portas de entrada do produto
-  // precisam ser distinguíveis de relance na fila.
   &--externo {
     color: var(--accent-secondary);
     background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
   }
 
   &--interna {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 }
@@ -105,10 +98,8 @@
   border-radius: 999px;
   white-space: nowrap;
 
-  // Só os desfechos ganham cor: durante o fluxo, todas as etapas valem o mesmo,
-  // e colorir cada uma faria a fila parecer um semáforo sem significado.
   &--aguardando_decisao {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -118,7 +109,7 @@
   }
 
   &--revisar {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -134,7 +125,7 @@
   gap: 2px;
 
   &:hover .oportunidade-link__titulo {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 }
 
@@ -175,8 +166,6 @@
   border-radius: 999px;
 }
 
-// --- Abas do shell ----------------------------------------------------------
-
 .oportunidade-abas {
   display: flex;
   gap: 4px;
@@ -208,12 +197,10 @@
   }
 
   &.is-active {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     border-bottom-color: var(--accent-primary);
   }
 
-  // Etapa planejada: continua alcançável (o shell é o mapa do fluxo), mas sem
-  // o peso visual de uma etapa que já funciona.
   &.is-planned {
     font-weight: 500;
     opacity: 0.75;
@@ -234,8 +221,6 @@
   border: 1px solid var(--border-color);
   border-radius: 999px;
 }
-
-// --- Conteúdo das abas ------------------------------------------------------
 
 .oportunidade-grid {
   display: grid;
@@ -282,8 +267,6 @@
   }
 }
 
-// --- Decisão ----------------------------------------------------------------
-
 .decisao-opcoes {
   display: grid;
   gap: 8px;
@@ -321,8 +304,6 @@
     background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
   }
 
-  // Arquivar é destrutivo para o fluxo: destacar em vermelho quando escolhido
-  // evita o clique distraído no último item da lista.
   &--danger.is-selected {
     border-color: color-mix(in srgb, var(--accent-error) 45%, transparent);
     background: var(--bg-danger-soft);
@@ -363,7 +344,7 @@
   }
 
   &--revisar {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -383,8 +364,6 @@
   border-radius: var(--admin-radius-sm);
 }
 
-// --- Trilha do histórico ----------------------------------------------------
-
 .trilha {
   display: grid;
   gap: 2px;
@@ -399,8 +378,6 @@
   gap: 14px;
   padding: 12px 0;
 
-  // Linha ligando os marcadores: a trilha é uma sequência, não uma pilha de
-  // avisos soltos.
   &:not(:last-child)::before {
     content: '';
     position: absolute;
@@ -425,7 +402,7 @@
   border-radius: 50%;
 
   &--decisao {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     border-color: var(--border-accent);
     background: var(--accent-primary-dim);
   }
@@ -457,29 +434,3 @@
   font-weight: 600;
 }
 
-// --- Etapa planejada --------------------------------------------------------
-
-.etapa-planejada {
-  border-style: dashed;
-}
-
-.etapa-planejada__selo {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.etapa-planejada__nota {
-  max-width: 72ch;
-  font-size: 0.875rem;
-  line-height: 1.65;
-  color: var(--text-muted);
-}

@@ -1,30 +1,23 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
+import {
+  atualizarMembroRede,
+  criarMembroRede,
+  liberarAcessoMembro,
+  obterMembroRede,
+} from '../../../services/pdConnectApi'
 import ListaEditavel from '../perfil/ListaEditavel'
 import {
   DISPONIBILIDADES,
   PAPEIS_REDE,
-  REDE_EXEMPLO,
   TITULACOES,
+  membroDaApi,
+  membroParaApi,
 } from './redeData'
 import './RedePage.scss'
-
-/**
- * Cadastro e edição de alguém da rede interna (RF02 / RF03).
- *
- * Só o Supervisor cadastra: **não há autocadastro de pesquisador** (RN-A04 /
- * D06). O cadastro cria o registro na rede; a liberação de acesso é um segundo
- * passo, deliberadamente separado — cadastrar alguém para o matching enxergar e
- * dar-lhe login são decisões distintas, e juntá-las num único botão faria a
- * primeira arrastar a segunda sem querer.
- *
- * Página inteira, e não modal: são sete dimensões do RF03: modal com essa
- * altura vira scroll dentro de scroll.
- */
 
 const VAZIO = {
   nome: '',
@@ -59,17 +52,37 @@ export default function RedeFormPage() {
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
-  const registro = useMemo(
-    () => REDE_EXEMPLO.find((pessoa) => String(pessoa.id) === String(id)),
-    [id]
-  )
+  const editando = Boolean(id)
 
-  const editando = Boolean(registro)
-
-  const [valores, setValores] = useState(() =>
-    registro ? { ...VAZIO, ...registro, liberarAcesso: registro.situacao === 'ativo' } : VAZIO
-  )
+  const [valores, setValores] = useState(VAZIO)
   const [erros, setErros] = useState({})
+  const [temAcesso, setTemAcesso] = useState(false)
+  const [carregando, setCarregando] = useState(editando)
+  const [erroCarga, setErroCarga] = useState('')
+  const [erroEnvio, setErroEnvio] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const carregar = useCallback(async () => {
+    if (!editando) return
+
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const membro = membroDaApi(await obterMembroRede(id))
+
+      setValores({ ...VAZIO, ...membro, liberarAcesso: membro.temAcesso })
+      setTemAcesso(membro.temAcesso)
+    } catch (falha) {
+      setErroCarga(falha?.message || 'Não foi possível carregar este cadastro.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [editando, id])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
 
   const alterar = (campo) => (valor) => {
     setValores((atual) => ({ ...atual, [campo]: valor }))
@@ -78,7 +91,7 @@ export default function RedeFormPage() {
 
   const alterarCampo = (campo) => (event) => alterar(campo)(event.target.value)
 
-  const enviar = (event) => {
+  const enviar = async (event) => {
     event.preventDefault()
 
     const encontrados = validar(valores)
@@ -88,12 +101,51 @@ export default function RedeFormPage() {
       return
     }
 
-    showToast(
-      editando ? 'Cadastro atualizado.' : 'Pesquisador cadastrado na rede.'
-    )
+    setSalvando(true)
+    setErroEnvio('')
 
-    // Sem endpoint ainda: volta para a lista, que relê o exemplo local.
-    window.setTimeout(() => navigate('/rede'), 600)
+    try {
+      const corpo = membroParaApi(valores)
+
+      const membro = editando
+        ? await atualizarMembroRede(id, corpo)
+        : await criarMembroRede(corpo)
+
+      if (valores.liberarAcesso && !membro.tem_acesso) {
+        await liberarAcessoMembro(membro.id_membro)
+      }
+
+      showToast(
+        editando ? 'Cadastro atualizado.' : 'Pesquisador cadastrado na rede.'
+      )
+
+      window.setTimeout(() => navigate('/rede'), 600)
+    } catch (falha) {
+      setErroEnvio(falha?.message || 'Não foi possível gravar o cadastro.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (carregando) {
+    return (
+      <div className="console rede-page">
+        <BackLink to="/rede">Voltar para a rede interna</BackLink>
+        <p className="oportunidade-page__vazio" role="status">Carregando o cadastro...</p>
+      </div>
+    )
+  }
+
+  if (erroCarga) {
+    return (
+      <div className="console rede-page">
+        <BackLink to="/rede">Voltar para a rede interna</BackLink>
+        <p className="oportunidade-page__vazio">{erroCarga}</p>
+        <button type="button" className="admin-btn admin-btn--outline" onClick={carregar}>
+          Tentar de novo
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -115,7 +167,7 @@ export default function RedeFormPage() {
         </div>
       </header>
 
-      <form className="rede-form" onSubmit={enviar} noValidate>
+      <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
           <header className="perfil-card__header">
             <div>
@@ -135,9 +187,12 @@ export default function RedeFormPage() {
                 value={valores.nome}
                 onChange={alterarCampo('nome')}
                 aria-invalid={Boolean(erros.nome)}
+                aria-describedby={erros.nome ? 'erro-rede-nome' : undefined}
               />
               {erros.nome ? (
-                <span className="admin-field__error" role="alert">{erros.nome}</span>
+                <span id="erro-rede-nome" className="admin-field__error" role="alert">
+                  {erros.nome}
+                </span>
               ) : null}
             </label>
 
@@ -149,9 +204,12 @@ export default function RedeFormPage() {
                 value={valores.email}
                 onChange={alterarCampo('email')}
                 aria-invalid={Boolean(erros.email)}
+                aria-describedby={erros.email ? 'erro-rede-email' : undefined}
               />
               {erros.email ? (
-                <span className="admin-field__error" role="alert">{erros.email}</span>
+                <span id="erro-rede-email" className="admin-field__error" role="alert">
+                  {erros.email}
+                </span>
               ) : null}
             </label>
 
@@ -171,9 +229,14 @@ export default function RedeFormPage() {
                   type="text"
                   className="admin-input"
                   value={valores.instituicao}
-                  onChange={alterarCampo('instituicao')}
+                  readOnly
+                  aria-readonly="true"
+                  aria-describedby="dica-instituicao"
                 />
               </label>
+              <span id="dica-instituicao" className="admin-field__hint">
+                O vínculo institucional vem do cadastro de organizações.
+              </span>
             </div>
           </div>
         </section>
@@ -184,7 +247,7 @@ export default function RedeFormPage() {
               <h2 className="perfil-card__title">Qualificação</h2>
               <p className="perfil-card__description">
                 Titulação é lista fechada porque o matching de supervisão filtra
-                por ela (RF07).
+                por ela.
               </p>
             </div>
           </header>
@@ -237,7 +300,7 @@ export default function RedeFormPage() {
               <h2 className="perfil-card__title">O que o matching compara</h2>
               <p className="perfil-card__description">
                 Sem competência declarada a pessoa entra na rede, mas fica
-                invisível para as sugestões (RF06).
+                invisível para as sugestões.
               </p>
             </div>
           </header>
@@ -272,28 +335,42 @@ export default function RedeFormPage() {
               <h2 className="perfil-card__title">Acesso à plataforma</h2>
               <p className="perfil-card__description">
                 Passo separado do cadastro: a pessoa pode integrar a rede antes de
-                receber login (RN-A04).
+                receber login.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
-            <label className="rede-form__switch">
+            <label className="console-form__switch">
               <input
                 type="checkbox"
                 checked={valores.liberarAcesso}
+                disabled={temAcesso}
                 onChange={(event) => alterar('liberarAcesso')(event.target.checked)}
               />
-              <span>Liberar acesso agora — as credenciais chegam por e-mail</span>
+              <span>
+                {temAcesso
+                  ? 'Esta pessoa já tem login na plataforma'
+                  : 'Liberar acesso agora — o convite chega por e-mail'}
+              </span>
             </label>
           </div>
         </section>
 
-        <footer className="rede-form__footer">
+        {erroEnvio ? (
+          <div className="admin-callout" role="alert">
+            <Icone icon={appIcons.warning} className="admin-callout__icon" />
+            <p className="admin-callout__text">{erroEnvio}</p>
+          </div>
+        ) : null}
+
+        <footer className="console-form__footer">
           <Link className="admin-btn admin-btn--outline" to="/rede">Cancelar</Link>
-          <button type="submit" className="admin-btn">
-            <FontAwesomeIcon icon={editando ? appIcons.done : appIcons.addUser} />
-            {editando ? 'Salvar cadastro' : 'Cadastrar na rede'}
+          <button type="submit" className="admin-btn" disabled={salvando}>
+            <Icone icon={editando ? appIcons.save : appIcons.addUser} />
+            {salvando
+              ? 'Gravando...'
+              : (editando ? 'Salvar cadastro' : 'Cadastrar na rede')}
           </button>
         </footer>
       </form>

@@ -1,20 +1,7 @@
-// Console — pecas compartilhadas pelas telas de gestao.
-//
-// Servem ao painel do Administrador (/admin) e as telas de gestao do Supervisor
-// (/rede, /perfil): mesma grade de 8px, mesmos botoes, campos, tabela, selos,
-// menus de linha, paginacao e modais.
-//
-// NENHUMA cor literal: tudo sai das CSS custom properties, porque o painel de
-// Aparencia as reescreve em tempo real. Profundidade e brilho saem da paleta
-// institucional via `color-mix`, sem cores novas.
-
-// Tokens e anel de foco de todo o console — o painel do Administrador e as
-// telas de gestao do Supervisor usam a mesma grade e o mesmo ritmo.
 .console,
 .admin-page {
-  // Grade e ritmo
   --admin-gutter: clamp(18px, 2.4vw, 40px);
-  --admin-nav-offset: 88px; // 68px da AuthNav sticky + respiro
+  --admin-nav-offset: 88px;
   --admin-radius: 16px;
   --admin-radius-sm: 12px;
   --admin-pad: 24px;
@@ -22,22 +9,17 @@
   --admin-section-gap: 32px;
   --admin-motion: 180ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  // Superficies derivadas: elevacao por luz, nao por sombra pesada.
   --admin-card-border: var(--border-color);
   --admin-card-border-hover: color-mix(in srgb, var(--accent-secondary) 34%, var(--border-color));
   --admin-glow: 0 10px 28px color-mix(in srgb, var(--accent-secondary) 16%, transparent);
   --admin-glow-soft: 0 2px 10px color-mix(in srgb, var(--accent-secondary) 8%, transparent);
 
 
-  // Anel de foco unico para tudo que e clicavel (WCAG 2.4.7). `:where` mantem
-  // especificidade zero, entao as regras de componente continuam vencendo.
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--accent-primary);
     outline-offset: 2px;
   }
 }
-
-// --- Cabecalho de secao -----------------------------------------------------
 
 .admin-section__header {
   display: flex;
@@ -53,7 +35,7 @@
 }
 
 .admin-section__title {
-  font-size: 1.375rem; // 22px
+  font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -73,8 +55,6 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-
-// --- Botoes -----------------------------------------------------------------
 
 .admin-btn {
   display: inline-flex;
@@ -110,7 +90,7 @@
     border-color: var(--border-color);
 
     &:hover:not(:disabled) {
-      color: var(--accent-primary);
+      color: var(--accent-primary-text);
       background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
       border-color: var(--border-accent);
     }
@@ -122,7 +102,7 @@
     border-color: transparent;
 
     &:hover:not(:disabled) {
-      color: var(--accent-primary);
+      color: var(--accent-primary-text);
       background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
     }
   }
@@ -136,10 +116,8 @@
     }
   }
 
-  // Filtro ligado: o botao continua outline, so ganha o acento — preencher aqui
-  // competiria com "Novo usuario", que e a acao primaria da barra.
   &--outline.is-active {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
     border-color: var(--border-accent);
   }
@@ -150,8 +128,6 @@
   }
 }
 
-// Capacidade que a baseline prevê e a tela ainda não entrega. Visível e
-// desabilitada, nunca um link para rota inexistente.
 .admin-btn__soon {
   padding: 2px 7px;
   font-size: 0.625rem;
@@ -182,7 +158,7 @@
     border-color var(--admin-motion);
 
   &:hover {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
     border-color: var(--border-accent);
   }
@@ -198,7 +174,7 @@
   font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: none;
   border: none;
   cursor: pointer;
@@ -225,7 +201,7 @@
   transition: color var(--admin-motion);
 
   &:hover {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 }
 
@@ -237,8 +213,6 @@
     transform: rotate(180deg);
   }
 }
-
-// --- Campos -----------------------------------------------------------------
 
 .admin-input {
   width: 100%;
@@ -264,7 +238,6 @@
   }
 }
 
-// Campo de texto longo: mesma moldura do input, altura livre.
 .admin-input--area {
   min-height: 96px;
   padding: 12px 14px;
@@ -313,8 +286,6 @@
   }
 }
 
-// --- Aviso ------------------------------------------------------------------
-
 .admin-banner {
   margin-bottom: var(--admin-pad);
   padding: 16px 20px;
@@ -345,8 +316,6 @@
   }
 }
 
-// --- Toast ------------------------------------------------------------------
-
 .admin-toast {
   position: fixed;
   right: 24px;
@@ -376,7 +345,7 @@
 }
 
 .admin-toast--info .admin-toast__icon {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
 }
 
 @keyframes admin-toast-in {
@@ -389,8 +358,6 @@
     transform: none;
   }
 }
-
-// --- Usuarios: aviso compacto -----------------------------------------------
 
 .admin-callout {
   display: flex;
@@ -406,7 +373,7 @@
 }
 
 .admin-callout__icon {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
 }
 
 .admin-callout__text {
@@ -433,13 +400,64 @@
   }
 }
 
-// --- Usuarios: cartoes de estatistica ---------------------------------------
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: var(--admin-gap);
   margin-bottom: var(--admin-pad);
+}
+
+.user-cell--botao {
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--admin-radius-sm);
+  cursor: pointer;
+
+  .user-cell__name {
+    transition: color var(--admin-motion);
+  }
+
+  &:hover .user-cell__name {
+    color: var(--accent-primary-text);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+.stat-card--link {
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-soft);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.stat-card__seta {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--admin-motion), color var(--admin-motion);
+
+  .stat-card--link:hover & {
+    color: var(--accent-primary-text);
+    transform: translateX(2px);
+  }
 }
 
 .stat-card {
@@ -457,8 +475,6 @@
     border-color var(--admin-motion),
     box-shadow var(--admin-motion);
 
-  // Indicador lateral: e o unico laranja do cartao, entao continua significando
-  // "isto e da marca" sem competir com os botoes de acao.
   &::before {
     content: '';
     position: absolute;
@@ -486,7 +502,7 @@
 
 .stat-card__icon {
   font-size: 1.1rem;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   opacity: 0.9;
 }
 
@@ -503,8 +519,6 @@
   color: var(--text-primary);
   opacity: 0.96;
 }
-
-// --- Usuarios: barra de acoes -----------------------------------------------
 
 .admin-toolbar {
   display: flex;
@@ -540,12 +554,10 @@
   transition: color var(--admin-motion), background var(--admin-motion);
 
   &:hover {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   }
 }
-
-// --- Usuarios: filtros ------------------------------------------------------
 
 .filter-panel {
   display: grid;
@@ -603,7 +615,7 @@
   }
 
   &.is-selected {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
     border-color: var(--border-accent);
   }
@@ -632,8 +644,6 @@
   flex-wrap: wrap;
 }
 
-// --- Usuarios: tabela -------------------------------------------------------
-
 .admin-table-wrap {
   overflow-x: auto;
   background: var(--bg-card);
@@ -653,7 +663,7 @@
     z-index: 1;
     padding: 12px 20px;
     text-align: left;
-    font-size: 0.75rem; // 12px
+    font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.07em;
@@ -703,7 +713,7 @@
   transition: color var(--admin-motion);
 
   &:hover {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 
   &.is-active {
@@ -721,8 +731,6 @@
     opacity: 0.8;
   }
 }
-
-// --- Usuarios: celula de identidade -----------------------------------------
 
 .user-cell {
   display: flex;
@@ -743,10 +751,8 @@
   letter-spacing: 0.02em;
   border-radius: 12px;
 
-  // Tres tons, todos institucionais: o avatar distribui as cores existentes,
-  // nao introduz nenhuma.
   &[data-tone='1'] {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -793,8 +799,6 @@
   color: var(--text-muted);
 }
 
-// --- Usuarios: selos --------------------------------------------------------
-
 .role-badge {
   display: inline-block;
   padding: 4px 12px;
@@ -803,14 +807,12 @@
   border-radius: 999px;
   white-space: nowrap;
 
-  // Supervisor: contorno laranja — conduz a oportunidade, mas nao administra.
   &--supervisor {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: transparent;
     border: 1px solid var(--border-accent);
   }
 
-  // Administrador: preenchido, o unico com peso solido na tabela.
   &--administrador {
     color: var(--text-on-accent, #fff);
     background: var(--accent-primary);
@@ -857,10 +859,8 @@
     background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   }
 
-  // Cadastrado na rede, ainda sem login liberado — estado proprio, porque o
-  // Supervisor precisa distinguir "nao entrou ainda" de "saiu" (RN-A04).
   &--sem_acesso {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -869,8 +869,6 @@
     background: var(--bg-danger-soft);
   }
 }
-
-// --- Usuarios: menu da linha ------------------------------------------------
 
 .row-menu {
   position: relative;
@@ -881,7 +879,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px; // area clicavel minima (WCAG 2.5.8)
+  width: 44px;
   height: 44px;
   color: var(--text-muted);
   background: transparent;
@@ -892,7 +890,7 @@
 
   &:hover,
   &[aria-expanded='true'] {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
     border-color: var(--border-accent);
   }
@@ -951,11 +949,11 @@
   }
 
   &:hover {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 
     svg {
-      color: var(--accent-primary);
+      color: var(--accent-primary-text);
     }
   }
 
@@ -976,8 +974,6 @@
     }
   }
 }
-
-// --- Usuarios: carregamento e vazio -----------------------------------------
 
 .skeleton {
   display: block;
@@ -1029,8 +1025,6 @@
   margin-top: 8px;
 }
 
-// --- Usuarios: paginacao ----------------------------------------------------
-
 .pagination {
   display: flex;
   align-items: center;
@@ -1081,8 +1075,6 @@
   min-height: 36px;
   padding: 0 8px;
 }
-
-// --- Modais -----------------------------------------------------------------
 
 .admin-modal {
   position: fixed;
@@ -1181,6 +1173,12 @@
   color: var(--accent-error);
 }
 
+.admin-field__hint {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .detail-list {
   display: grid;
   gap: 12px;
@@ -1206,12 +1204,6 @@
     overflow-wrap: anywhere;
   }
 }
-
-// --- Cartao de secao e lista de termos --------------------------------------
-//
-// Compartilhados pelo Meu Perfil do Pesquisador e pelo cadastro da Rede: as
-// duas telas editam as mesmas sete dimensoes do RF03.
-// --- (fim da nota) -------------------------------------------------------
 
 .perfil-card {
   padding: var(--admin-pad);
@@ -1250,8 +1242,6 @@
   opacity: 0.85;
 }
 
-// Selo do campo que pertence ao Supervisor. O campo continua visível — esconder
-// faria o pesquisador achar que o dado não existe.
 .perfil-card__lock {
   display: inline-flex;
   align-items: center;
@@ -1270,8 +1260,6 @@
   }
 }
 
-// `fieldset` neutro de layout: sem isto o navegador aplica borda e margem
-// próprias e o cartão desalinha dos vizinhos.
 .perfil-card__body {
   display: grid;
   gap: var(--admin-gap);
@@ -1290,8 +1278,6 @@
   font-size: 0.8125rem;
   color: var(--text-muted);
 }
-
-// --- Lista de termos --------------------------------------------------------
 
 .lista-editavel__entrada {
   display: flex;
@@ -1320,19 +1306,13 @@
   opacity: 0.85;
 }
 
-// --- Volta para a lista -----------------------------------------------------
-//
-// Alvo de 44px no canto superior esquerdo — onde a mão procura. Fica ACIMA do
-// título, e não ao lado: ao lado, ele compete com o nome do registro; acima,
-// lê-se primeiro "de onde eu saio" e depois "onde eu estou".
-
 .back-link {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-height: 36px;
   margin-bottom: 4px;
-  margin-left: -10px; // alinha o texto com o título, não o padding
+  margin-left: -10px;
   padding: 0 10px;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -1346,7 +1326,7 @@
   }
 
   &:hover {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 
     svg {
@@ -1360,9 +1340,6 @@
   }
 }
 
-// --- Responsivo do console -------------------------------------------------
-
-// Tablet: a barra de acoes quebra em duas linhas e a tabela rola na horizontal.
 @media (max-width: 860px) {
   .admin-toolbar__actions {
     margin-left: 0;
@@ -1374,8 +1351,6 @@
   }
 }
 
-// Mobile: cada usuario vira um cartao. Os rotulos saem do `data-label` que a
-// celula ja carrega — sem segunda arvore de marcacao para manter em sincronia.
 @media (max-width: 760px) {
   .admin-table--users {
     thead {
@@ -1458,8 +1433,6 @@
   }
 }
 
-// --- Movimento reduzido -----------------------------------------------------
-
 @media (prefers-reduced-motion: reduce) {
   .console *,
   .admin-page * {
@@ -1472,4 +1445,83 @@
   .preview-card:hover {
     transform: none;
   }
+}
+
+.guarda-saida__nota {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.console-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  gap: var(--admin-gap);
+  margin-top: var(--admin-pad);
+}
+
+.console-form__switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: var(--accent-primary);
+  }
+}
+
+.console-form__footer {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.console-kicker {
+  margin-top: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.etapa-planejada {
+  border-style: dashed;
+}
+
+.etapa-planejada__selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.etapa-planejada__nota {
+  max-width: 72ch;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.console-vazio {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
 }

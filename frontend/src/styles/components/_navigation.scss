@@ -7,7 +7,6 @@
   border-bottom: 1px solid var(--border-soft);
   background: var(--nav-auth-bg);
   backdrop-filter: blur(18px);
-  // necessário para o drawer posicionar corretamente (position: absolute)
   overflow: visible;
 }
 
@@ -17,16 +16,32 @@
   align-items: center;
   gap: 20px;
   min-height: 68px;
+  max-width: none;
+  padding-inline: 16px;
 }
 
 .auth-nav__brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: -8px;
+  padding: 6px 10px 6px 8px;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--bg-chip);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
 }
 
 .auth-nav__brand-title {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   font-family: var(--font-primary);
   font-size: 1rem;
   font-weight: 800;
@@ -40,7 +55,6 @@
   min-width: 0;
 }
 
-// Clean text links — underline active state, no chip
 .auth-nav__link {
   display: inline-flex;
   align-items: center;
@@ -60,16 +74,15 @@
 
 .auth-nav__link:hover {
   background: var(--bg-chip);
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
 }
 
 .auth-nav__link.active {
   background: var(--bg-chip-strong);
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   font-weight: 700;
 }
 
-// Mobile-right: sino + hamburger (só visível em mobile)
 .auth-nav__mobile-right {
   display: none;
   align-items: center;
@@ -117,7 +130,6 @@
   &.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
 }
 
-// Drawer mobile
 .auth-nav__drawer {
   position: absolute;
   top: 100%;
@@ -151,12 +163,12 @@
 
   &:hover {
     background: var(--bg-chip);
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 
   &.active {
     background: var(--bg-chip-strong);
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     font-weight: 700;
   }
 }
@@ -208,7 +220,7 @@
   display: block;
   max-width: 180px;
   overflow: hidden;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   font-size: 0.88rem;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -231,7 +243,6 @@
   max-width: min(38vw, 400px);
 }
 
-// Avatar initial circle
 .auth-nav__profile-text {
   display: flex;
   align-items: center;
@@ -256,7 +267,6 @@
   box-shadow: var(--shadow-focus);
 }
 
-// Avatar circle before name
 .auth-nav__profile-text::before {
   content: attr(data-initial);
   display: inline-flex;
@@ -277,18 +287,13 @@
   display: block;
   max-width: 160px;
   overflow: hidden;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   font-size: 0.88rem;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-
-// --- Menu da conta ----------------------------------------------------------
-//
-// Perfil, tema e sair viviam soltos na barra, competindo com a navegacao. Aqui
-// viram um menu unico ancorado no avatar.
 
 .auth-nav__profile-chevron {
   font-size: 0.62rem;
@@ -364,7 +369,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 44px; // area clicavel minima (WCAG 2.5.8)
+  min-height: 44px;
   padding: 0 12px;
   font-family: inherit;
   font-size: 0.86rem;
@@ -383,11 +388,11 @@
   }
 
   &:hover:not(:disabled) {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--bg-chip);
 
     svg {
-      color: var(--accent-primary);
+      color: var(--accent-primary-text);
     }
   }
 
@@ -419,18 +424,6 @@
   }
 }
 
-.profile-menu__soon {
-  margin-left: auto;
-  padding: 2px 8px;
-  font-size: 0.66rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  background: var(--bg-chip);
-  border-radius: 999px;
-}
-
 .auth-nav__logout {
   min-height: 36px;
   padding: 0 14px;
@@ -447,7 +440,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--bg-chip);
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   cursor: pointer;
   font-size: 1rem;
   transition:
@@ -471,7 +464,6 @@
   box-shadow: var(--shadow-focus);
 }
 
-// AuthNav autenticada — hamburger a partir de lg (1024px)
 @include media-down(lg) {
   .auth-nav {
     position: sticky;

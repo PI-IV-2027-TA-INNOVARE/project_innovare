@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import AdminModal from '../../../components/console/AdminModal'
 import {
   Avatar,
@@ -9,26 +8,25 @@ import {
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { AdminToast, useToast } from '../../../components/console/toast'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import UserFormModal from './users/UserFormModal'
+import {
+  createUsuario,
+  listUsuarios,
+  reenviarConvite,
+  setSituacaoUsuario,
+  updateUsuario,
+} from '../../../services/pdConnectApi'
 import {
   PERFIS,
   STATUS,
-  USUARIOS_EXEMPLO,
+  daApi,
   formatarUltimoAcesso,
+  paraApi,
   perfilLabel,
   statusLabel,
   usuariosParaCsv,
 } from './users/usersData'
-
-/**
- * Gestão de contas, perfis e acessos.
- *
- * A lista é um placeholder local, sinalizado na interface: o backend ainda não
- * expõe os quatro atores da baseline, e inventar contrato de API violaria
- * "contratos blindados" (AGENTS.md §1). Criar, editar e excluir mexem em estado
- * de sessão — a ligação real está na Fase 2 do PLANO_IMPLEMENTACAO.md.
- */
 
 const COLUNAS = [
   { id: 'nome', label: 'Usuário', ordenavel: true },
@@ -50,8 +48,10 @@ function comparar(a, b, campo) {
 }
 
 export default function UsersSection() {
-  const [usuarios, setUsuarios] = useState(USUARIOS_EXEMPLO)
+  const [usuarios, setUsuarios] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
+  const [salvando, setSalvando] = useState(false)
 
   const [busca, setBusca] = useState('')
   const [perfilFiltro, setPerfilFiltro] = useState('todos')
@@ -63,15 +63,25 @@ export default function UsersSection() {
   const [porPagina, setPorPagina] = useState(10)
 
   const [modal, setModal] = useState(null)
-  const [avisoAberto, setAvisoAberto] = useState(false)
 
   const { toast, showToast } = useToast()
 
-  // Marca o lugar da requisição da Fase 2: a tabela já nasce sabendo desenhar o
-  // estado de carregamento, para não virar refatoração quando o endpoint chegar.
+  const carregar = async () => {
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const resposta = await listUsuarios()
+      setUsuarios((resposta.results || resposta).map(daApi))
+    } catch (erro) {
+      setErroCarga(erro.message || 'Não foi possível carregar as contas.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
   useEffect(() => {
-    const timer = setTimeout(() => setCarregando(false), 450)
-    return () => clearTimeout(timer)
+    carregar()
   }, [])
 
   useEffect(() => {
@@ -125,34 +135,62 @@ export default function UsersSection() {
     setStatusFiltro('todos')
   }
 
-  const criarUsuario = (dados) => {
-    const id = Math.max(0, ...usuarios.map((usuario) => usuario.id)) + 1
-
-    setUsuarios((atual) => [{ ...dados, id, ultimoAcesso: null }, ...atual])
-    setModal(null)
-    showToast('Usuário criado com sucesso.')
-  }
-
-  const salvarUsuario = (dados) => {
-    setUsuarios((atual) => atual.map((usuario) => (usuario.id === dados.id ? { ...usuario, ...dados } : usuario)))
-    setModal(null)
-    showToast('Alterações salvas.')
-  }
-
-  const excluirUsuario = (usuario) => {
-    setUsuarios((atual) => atual.filter((item) => item.id !== usuario.id))
-    setModal(null)
-    showToast('Usuário removido.', 'error')
-  }
-
-  const alternarStatus = (usuario) => {
-    const proximo = usuario.status === 'ativo' ? 'inativo' : 'ativo'
+  const substituir = (registro) => {
+    const atualizado = daApi(registro)
 
     setUsuarios((atual) =>
-      atual.map((item) => (item.id === usuario.id ? { ...item, status: proximo } : item))
+      atual.map((item) => (item.id === atualizado.id ? atualizado : item))
     )
+  }
 
-    showToast(`Acesso de ${usuario.nome} ${proximo === 'ativo' ? 'ativado' : 'inativado'}.`)
+  const criarUsuario = async (dados) => {
+    setSalvando(true)
+
+    try {
+      const criado = await createUsuario(paraApi(dados))
+
+      setUsuarios((atual) => [daApi(criado), ...atual])
+      setModal(null)
+      showToast(`Convite enviado para ${criado.email}.`)
+    } catch (erro) {
+      showToast(erro.message || 'Não foi possível criar a conta.', 'error')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const salvarUsuario = async (dados) => {
+    setSalvando(true)
+
+    try {
+      substituir(await updateUsuario(dados.id, paraApi(dados)))
+      setModal(null)
+      showToast('Alterações salvas.')
+    } catch (erro) {
+      showToast(erro.message || 'Não foi possível salvar.', 'error')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const alterarSituacao = async (usuario, situacao) => {
+    setModal(null)
+
+    try {
+      substituir(await setSituacaoUsuario(usuario.id, situacao))
+      showToast(`${usuario.nome}: acesso ${statusLabel(situacao).toLowerCase()}.`)
+    } catch (erro) {
+      showToast(erro.message || 'Não foi possível alterar a situação.', 'error')
+    }
+  }
+
+  const reenviarConviteDe = async (usuario) => {
+    try {
+      await reenviarConvite(usuario.id)
+      showToast(`Novo convite enviado para ${usuario.email}.`)
+    } catch (erro) {
+      showToast(erro.message || 'Não foi possível reenviar o convite.', 'error')
+    }
   }
 
   const exportarCsv = () => {
@@ -189,33 +227,19 @@ export default function UsersSection() {
         </div>
       </header>
 
-      <div className="admin-callout" role="note">
-        <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          Interface preliminar — os registros são um exemplo local.
-        </p>
-        <button
-          type="button"
-          className="link-button"
-          aria-expanded={avisoAberto}
-          onClick={() => setAvisoAberto((aberto) => !aberto)}
-        >
-          {avisoAberto ? 'Ocultar' : 'Saiba mais'}
-        </button>
-
-        {avisoAberto ? (
-          <p className="admin-callout__detail">
-            O backend ainda modela apenas <code>pesquisador</code> e{' '}
-            <code>empresa</code>. Os quatro atores da baseline v1.0 e os endpoints
-            de administração entram na Fase 2 do plano; criar, editar e excluir
-            valem só para esta sessão.
-          </p>
-        ) : null}
-      </div>
+      {erroCarga ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.info} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroCarga}</p>
+          <button type="button" className="link-button" onClick={carregar}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : null}
 
       <div className="stat-grid">
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.users} className="stat-card__icon" />
+          <Icone icon={appIcons.users} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Usuários totais</p>
             <p className="stat-card__value">{estatisticas.total}</p>
@@ -223,7 +247,7 @@ export default function UsersSection() {
         </article>
 
         <article className="stat-card stat-card--ok">
-          <FontAwesomeIcon icon={appIcons.active} className="stat-card__icon" />
+          <Icone icon={appIcons.active} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Usuários ativos</p>
             <p className="stat-card__value">{estatisticas.ativos}</p>
@@ -231,7 +255,7 @@ export default function UsersSection() {
         </article>
 
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.researcher} className="stat-card__icon" />
+          <Icone icon={appIcons.researcher} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Pesquisadores</p>
             <p className="stat-card__value">{estatisticas.pesquisadores}</p>
@@ -239,7 +263,7 @@ export default function UsersSection() {
         </article>
 
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.company} className="stat-card__icon" />
+          <Icone icon={appIcons.company} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Demandantes</p>
             <p className="stat-card__value">{estatisticas.demandantes}</p>
@@ -249,7 +273,7 @@ export default function UsersSection() {
 
       <div className="admin-toolbar">
         <div className="admin-search">
-          <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+          <Icone icon={appIcons.search} className="admin-search__icon" />
           <input
             type="search"
             className="admin-search__input"
@@ -267,7 +291,7 @@ export default function UsersSection() {
               title="Limpar pesquisa"
               aria-label="Limpar pesquisa"
             >
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
             </button>
           ) : null}
         </div>
@@ -280,7 +304,7 @@ export default function UsersSection() {
             onClick={() => setFiltrosAbertos((aberto) => !aberto)}
             title="Filtros avançados"
           >
-            <FontAwesomeIcon icon={appIcons.filter} />
+            <Icone icon={appIcons.filter} />
             Filtros avançados
           </button>
 
@@ -290,7 +314,7 @@ export default function UsersSection() {
             onClick={exportarCsv}
             title="Exportar a lista filtrada em CSV"
           >
-            <FontAwesomeIcon icon={appIcons.export} />
+            <Icone icon={appIcons.export} />
             Exportar CSV
           </button>
 
@@ -300,7 +324,7 @@ export default function UsersSection() {
             onClick={() => setModal({ tipo: 'novo' })}
             title="Cadastrar uma nova conta"
           >
-            <FontAwesomeIcon icon={appIcons.addUser} />
+            <Icone icon={appIcons.addUser} />
             Novo usuário
           </button>
         </div>
@@ -367,7 +391,7 @@ export default function UsersSection() {
           {busca ? (
             <button type="button" className="chip chip--removable" onClick={() => setBusca('')}>
               Busca: {busca}
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
               <span className="sr-only">Remover filtro de busca</span>
             </button>
           ) : null}
@@ -379,7 +403,7 @@ export default function UsersSection() {
               onClick={() => setPerfilFiltro('todos')}
             >
               Perfil: {perfilLabel(perfilFiltro)}
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
               <span className="sr-only">Remover filtro de perfil</span>
             </button>
           ) : null}
@@ -391,7 +415,7 @@ export default function UsersSection() {
               onClick={() => setStatusFiltro('todos')}
             >
               Situação: {statusLabel(statusFiltro)}
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
               <span className="sr-only">Remover filtro de situação</span>
             </button>
           ) : null}
@@ -404,6 +428,7 @@ export default function UsersSection() {
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
+          <caption className="sr-only">Contas de acesso à plataforma</caption>
           <thead>
             <tr>
               {COLUNAS.map((coluna) => (
@@ -460,7 +485,11 @@ export default function UsersSection() {
                 </td>
 
                 <td data-label="Último acesso">
-                  <span className="user-cell__meta">{formatarUltimoAcesso(usuario.ultimoAcesso)}</span>
+                  <span className="user-cell__meta">
+                    {usuario.aguardandoPrimeiroAcesso
+                      ? 'Aguardando primeiro acesso'
+                      : formatarUltimoAcesso(usuario.ultimoAcesso)}
+                  </span>
                 </td>
 
                 <td data-label="Ações" className="admin-table__actions-col">
@@ -477,22 +506,32 @@ export default function UsersSection() {
                         icon: appIcons.edit,
                         onSelect: () => setModal({ tipo: 'editar', usuario }),
                       },
-                      {
-                        label: 'Alterar perfil',
-                        icon: appIcons.role,
-                        onSelect: () => setModal({ tipo: 'editar', usuario }),
-                      },
-                      {
-                        label: usuario.status === 'ativo' ? 'Inativar acesso' : 'Ativar acesso',
-                        icon: usuario.status === 'ativo' ? appIcons.deactivate : appIcons.activate,
-                        onSelect: () => alternarStatus(usuario),
-                      },
-                      {
-                        label: 'Excluir usuário',
-                        icon: appIcons.remove,
-                        tone: 'danger',
-                        onSelect: () => setModal({ tipo: 'excluir', usuario }),
-                      },
+                      ...(usuario.aguardandoPrimeiroAcesso
+                        ? [{
+                          label: 'Reenviar convite',
+                          icon: appIcons.addUser,
+                          onSelect: () => reenviarConviteDe(usuario),
+                        }]
+                        : []),
+                      ...(usuario.status === 'ativo'
+                        ? [
+                          {
+                            label: 'Inativar acesso',
+                            icon: appIcons.deactivate,
+                            onSelect: () => setModal({ tipo: 'situacao', usuario, alvo: 'inativo' }),
+                          },
+                          {
+                            label: 'Suspender acesso',
+                            icon: appIcons.deactivate,
+                            tone: 'danger',
+                            onSelect: () => setModal({ tipo: 'situacao', usuario, alvo: 'suspenso' }),
+                          },
+                        ]
+                        : [{
+                          label: 'Ativar acesso',
+                          icon: appIcons.activate,
+                          onSelect: () => alterarSituacao(usuario, 'ativo'),
+                        }]),
                     ]}
                   />
                 </td>
@@ -517,7 +556,7 @@ export default function UsersSection() {
                         </button>
                       ) : (
                         <button type="button" className="admin-btn" onClick={() => setModal({ tipo: 'novo' })}>
-                          <FontAwesomeIcon icon={appIcons.addUser} />
+                          <Icone icon={appIcons.addUser} />
                           Criar primeiro usuário
                         </button>
                       )
@@ -564,7 +603,7 @@ export default function UsersSection() {
               title="Primeira página"
               aria-label="Primeira página"
             >
-              <FontAwesomeIcon icon={appIcons.first} />
+              <Icone icon={appIcons.first} />
             </button>
 
             <button
@@ -575,7 +614,7 @@ export default function UsersSection() {
               title="Página anterior"
               aria-label="Página anterior"
             >
-              <FontAwesomeIcon icon={appIcons.previous} />
+              <Icone icon={appIcons.previous} />
             </button>
 
             <button
@@ -586,7 +625,7 @@ export default function UsersSection() {
               title="Próxima página"
               aria-label="Próxima página"
             >
-              <FontAwesomeIcon icon={appIcons.next} />
+              <Icone icon={appIcons.next} />
             </button>
 
             <button
@@ -597,14 +636,14 @@ export default function UsersSection() {
               title="Última página"
               aria-label="Última página"
             >
-              <FontAwesomeIcon icon={appIcons.last} />
+              <Icone icon={appIcons.last} />
             </button>
           </div>
         </div>
       </nav>
 
       {modal?.tipo === 'novo' ? (
-        <UserFormModal onSubmit={criarUsuario} onClose={() => setModal(null)} />
+        <UserFormModal onSubmit={criarUsuario} onClose={() => setModal(null)} salvando={salvando} />
       ) : null}
 
       {modal?.tipo === 'editar' ? (
@@ -612,6 +651,7 @@ export default function UsersSection() {
           usuario={modal.usuario}
           onSubmit={salvarUsuario}
           onClose={() => setModal(null)}
+          salvando={salvando}
         />
       ) : null}
 
@@ -652,10 +692,13 @@ export default function UsersSection() {
         </AdminModal>
       ) : null}
 
-      {modal?.tipo === 'excluir' ? (
+      {modal?.tipo === 'situacao' ? (
         <AdminModal
-          title="Excluir usuário"
-          description={`A conta de ${modal.usuario.nome} perde o acesso imediatamente. A ação não pode ser desfeita.`}
+          title={modal.alvo === 'suspenso' ? 'Suspender acesso' : 'Inativar acesso'}
+          description={
+            `${modal.usuario.nome} perde o acesso na próxima requisição — inclusive numa sessão já aberta. ` +
+            'A conta e todo o histórico permanecem; é reversível a qualquer momento.'
+          }
           size="sm"
           onClose={() => setModal(null)}
           footer={
@@ -666,10 +709,10 @@ export default function UsersSection() {
               <button
                 type="button"
                 className="admin-btn admin-btn--danger"
-                onClick={() => excluirUsuario(modal.usuario)}
+                onClick={() => alterarSituacao(modal.usuario, modal.alvo)}
               >
-                <FontAwesomeIcon icon={appIcons.remove} />
-                Excluir usuário
+                <Icone icon={appIcons.deactivate} />
+                {modal.alvo === 'suspenso' ? 'Suspender' : 'Inativar'}
               </button>
             </>
           }

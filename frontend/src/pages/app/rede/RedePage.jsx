@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import AdminModal from '../../../components/console/AdminModal'
 import {
   Avatar,
@@ -10,31 +9,19 @@ import {
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { AdminToast, useToast } from '../../../components/console/toast'
-import { appIcons } from '../../../lib/icons'
-import { formatarUltimoAcesso } from '../../../lib/people'
+import { Icone, appIcons } from '../../../lib/icons'
+import { liberarAcessoMembro, listarRede } from '../../../services/pdConnectApi'
 import {
   PAPEIS_REDE,
-  REDE_EXEMPLO,
   SITUACOES,
   TITULACOES,
   disponibilidadeLabel,
+  membroDaApi,
   papelLabel,
   situacaoLabel,
   titulacaoLabel,
 } from './redeData'
 import './RedePage.scss'
-
-/**
- * Rede interna da AC2 (RF02) — tela do Supervisor.
- *
- * É ele quem cadastra pesquisadores e libera o acesso: **não há autocadastro**
- * (RN-A04 / D06). O matching opera somente sobre esta lista (CONTEXT.md §4), o
- * que dá à tela um segundo papel além do cadastral — mostrar onde a rede está
- * cega. Daí a coluna de competências e o indicador de perfis incompletos: um
- * pesquisador sem competência declarada é invisível para o matching.
- *
- * Placeholder local; os endpoints entram na Fase 2 (ver `redeData.js`).
- */
 
 const COLUNAS = [
   { id: 'nome', label: 'Pessoa', ordenavel: true },
@@ -42,12 +29,15 @@ const COLUNAS = [
   { id: 'titulacao', label: 'Titulação', ordenavel: true },
   { id: 'competencias', label: 'Competências', ordenavel: false },
   { id: 'situacao', label: 'Situação', ordenavel: true },
-  { id: 'ultimoAcesso', label: 'Último acesso', ordenavel: true },
+  { id: 'disponibilidade', label: 'Disponibilidade', ordenavel: true },
   { id: 'acoes', label: 'Ações', ordenavel: false },
 ]
 
 function comparar(a, b, campo) {
-  if (campo === 'ultimoAcesso') return (a.ultimoAcesso || 0) - (b.ultimoAcesso || 0)
+  if (campo === 'disponibilidade') {
+    return disponibilidadeLabel(a.disponibilidade)
+      .localeCompare(disponibilidadeLabel(b.disponibilidade), 'pt-BR')
+  }
 
   if (campo === 'titulacao') {
     const nivel = (id) => TITULACOES.find((item) => item.id === id)?.nivel || 0
@@ -64,19 +54,33 @@ export default function RedePage() {
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
-  const [pessoas, setPessoas] = useState(REDE_EXEMPLO)
+  const [pessoas, setPessoas] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [busca, setBusca] = useState('')
   const [papelFiltro, setPapelFiltro] = useState('todos')
   const [situacaoFiltro, setSituacaoFiltro] = useState('todos')
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
   const [detalhe, setDetalhe] = useState(null)
 
-  // Marca o lugar da requisição da Fase 2.
-  useEffect(() => {
-    const timer = setTimeout(() => setCarregando(false), 400)
-    return () => clearTimeout(timer)
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const resposta = await listarRede()
+      setPessoas((resposta.results || resposta).map(membroDaApi))
+    } catch (falha) {
+      setPessoas([])
+      setErroCarga(falha?.message || 'Não foi possível carregar a rede interna.')
+    } finally {
+      setCarregando(false)
+    }
   }, [])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
 
   const estatisticas = useMemo(() => ({
     total: pessoas.length,
@@ -121,18 +125,17 @@ export default function RedePage() {
     setSituacaoFiltro('todos')
   }
 
-  const liberarAcesso = (pessoa) => {
-    setPessoas((atual) =>
-      atual.map((item) => (item.id === pessoa.id ? { ...item, situacao: 'ativo' } : item))
-    )
-    showToast(`Acesso liberado para ${pessoa.nome}.`)
-  }
+  const liberarAcesso = async (pessoa) => {
+    try {
+      const atualizado = membroDaApi(await liberarAcessoMembro(pessoa.id))
 
-  const inativar = (pessoa) => {
-    setPessoas((atual) =>
-      atual.map((item) => (item.id === pessoa.id ? { ...item, situacao: 'inativo' } : item))
-    )
-    showToast(`${pessoa.nome} saiu da rede ativa.`)
+      setPessoas((atual) =>
+        atual.map((item) => (item.id === pessoa.id ? atualizado : item))
+      )
+      showToast(`Acesso liberado para ${pessoa.nome}. O convite saiu por e-mail.`)
+    } catch (falha) {
+      showToast(falha?.message || `Não foi possível liberar o acesso de ${pessoa.nome}.`)
+    }
   }
 
   return (
@@ -145,27 +148,29 @@ export default function RedePage() {
           <h1 className="rede-page__title">Rede interna</h1>
           <p className="rede-page__description">
             Pesquisadores, colaboradores e supervisores da AC2. O matching opera
-            somente sobre esta rede — quem não está aqui não é sugerido.
+            somente sobre esta rede.
           </p>
         </div>
 
         <Link className="admin-btn" to="/rede/novo">
-          <FontAwesomeIcon icon={appIcons.addUser} />
+          <Icone icon={appIcons.addUser} />
           Cadastrar pesquisador
         </Link>
       </header>
 
-      <div className="admin-callout" role="note">
-        <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          Interface preliminar — os registros são um exemplo local. Cadastro e
-          liberação de acesso valem só para esta sessão.
-        </p>
-      </div>
+      {erroCarga ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroCarga}</p>
+          <button type="button" className="link-button" onClick={carregar}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : null}
 
       <div className="stat-grid">
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.users} className="stat-card__icon" />
+          <Icone icon={appIcons.users} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Na rede</p>
             <p className="stat-card__value">{estatisticas.total}</p>
@@ -173,7 +178,7 @@ export default function RedePage() {
         </article>
 
         <article className="stat-card stat-card--ok">
-          <FontAwesomeIcon icon={appIcons.active} className="stat-card__icon" />
+          <Icone icon={appIcons.active} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Com acesso ativo</p>
             <p className="stat-card__value">{estatisticas.ativos}</p>
@@ -181,19 +186,15 @@ export default function RedePage() {
         </article>
 
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.researcher} className="stat-card__icon" />
+          <Icone icon={appIcons.researcher} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Mestres e doutores</p>
             <p className="stat-card__value">{estatisticas.titulados}</p>
           </div>
         </article>
 
-        {/*
-          Não é vaidade de indicador: perfil sem competência declarada não é
-          comparável, então essa pessoa é invisível para o matching (RF06).
-        */}
         <article className="stat-card stat-card--alert">
-          <FontAwesomeIcon icon={appIcons.warning} className="stat-card__icon" />
+          <Icone icon={appIcons.warning} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Sem competência declarada</p>
             <p className="stat-card__value">{estatisticas.semCompetencia}</p>
@@ -203,7 +204,7 @@ export default function RedePage() {
 
       <div className="admin-toolbar">
         <div className="admin-search">
-          <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+          <Icone icon={appIcons.search} className="admin-search__icon" />
           <input
             type="search"
             className="admin-search__input"
@@ -220,7 +221,7 @@ export default function RedePage() {
               title="Limpar pesquisa"
               aria-label="Limpar pesquisa"
             >
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
             </button>
           ) : null}
         </div>
@@ -265,6 +266,7 @@ export default function RedePage() {
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
+          <caption className="sr-only">Pessoas cadastradas na rede interna da AC2</caption>
           <thead>
             <tr>
               {COLUNAS.map((coluna) => (
@@ -296,13 +298,18 @@ export default function RedePage() {
             {!carregando && ordenadas.map((pessoa) => (
               <tr key={pessoa.id}>
                 <td data-label="Pessoa">
-                  <div className="user-cell">
+                  <button
+                    type="button"
+                    className="user-cell user-cell--botao"
+                    onClick={() => setDetalhe(pessoa)}
+                    aria-label={`Abrir a ficha de ${pessoa.nome}`}
+                  >
                     <Avatar nome={pessoa.nome} />
                     <span className="user-cell__text">
                       <span className="user-cell__name">{pessoa.nome}</span>
                       <span className="user-cell__meta">{pessoa.email}</span>
                     </span>
-                  </div>
+                  </button>
                 </td>
 
                 <td data-label="Papel">
@@ -327,7 +334,7 @@ export default function RedePage() {
                     </span>
                   ) : (
                     <span className="competencia-lista__vazio">
-                      <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                      <Icone icon={appIcons.warning} aria-hidden="true" />
                       Invisível ao matching
                     </span>
                   )}
@@ -340,8 +347,10 @@ export default function RedePage() {
                   </span>
                 </td>
 
-                <td data-label="Último acesso">
-                  <span className="user-cell__meta">{formatarUltimoAcesso(pessoa.ultimoAcesso)}</span>
+                <td data-label="Disponibilidade">
+                  <span className="user-cell__meta">
+                    {disponibilidadeLabel(pessoa.disponibilidade)}
+                  </span>
                 </td>
 
                 <td data-label="Ações" className="admin-table__actions-col">
@@ -349,21 +358,12 @@ export default function RedePage() {
                     label={pessoa.nome}
                     items={[
                       {
-                        label: 'Ver ficha',
-                        icon: appIcons.view,
-                        onSelect: () => setDetalhe(pessoa),
-                      },
-                      {
                         label: 'Editar cadastro',
                         icon: appIcons.edit,
                         onSelect: () => navigate(`/rede/${pessoa.id}`),
                       },
-                      ...(pessoa.situacao === 'ativo'
-                        ? [{
-                            label: 'Inativar na rede',
-                            icon: appIcons.deactivate,
-                            onSelect: () => inativar(pessoa),
-                          }]
+                      ...(pessoa.temAcesso
+                        ? []
                         : [{
                             label: 'Liberar acesso',
                             icon: appIcons.activate,
@@ -393,7 +393,7 @@ export default function RedePage() {
                         </button>
                       ) : (
                         <Link className="admin-btn" to="/rede/novo">
-                          <FontAwesomeIcon icon={appIcons.addUser} />
+                          <Icone icon={appIcons.addUser} />
                           Cadastrar pesquisador
                         </Link>
                       )
@@ -424,6 +424,15 @@ export default function RedePage() {
             <div className="detail-list__row">
               <dt>E-mail</dt>
               <dd>{detalhe.email}</dd>
+            </div>
+            <div className="detail-list__row">
+              <dt>Situação</dt>
+              <dd>
+                <span className={`status-badge status-badge--${detalhe.situacao}`}>
+                  <span className="status-badge__dot" aria-hidden="true" />
+                  {situacaoLabel(detalhe.situacao)}
+                </span>
+              </dd>
             </div>
             <div className="detail-list__row">
               <dt>Instituição</dt>

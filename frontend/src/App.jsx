@@ -4,21 +4,36 @@ import ScrollToTop from './components/ScrollToTop'
 import ProtectedRoute from './components/ProtectedRoute'
 import AuthenticatedLayout from './components/AuthenticatedLayout'
 import LoginPage from './pages/auth/login'
-import { ROLES } from './lib/roles'
+import SecaoProtegida from './components/console/SecaoProtegida'
+import { useAuth } from './context/AuthContext'
+import { PERMISSOES } from './lib/permissoes'
+import { PAPEIS, rotaInicialDe } from './lib/rotas'
+import { SECAO_INICIAL } from './pages/admin/secoes'
 
-// Code-splitting: so o login entra no bundle inicial. As telas autenticadas
-// (e o painel de admin, o maior deles) sao carregadas sob demanda.
 const PainelPage = lazy(() => import('./pages/app/painel'))
 const PerfilPage = lazy(() => import('./pages/app/perfil'))
 const OportunidadesPage = lazy(() => import('./pages/app/oportunidades'))
 const OportunidadePage = lazy(() => import('./pages/app/oportunidades/detalhe'))
+const IdeiaFormPage = lazy(() => import('./pages/app/oportunidades/nova'))
+const ProblemasPage = lazy(() => import('./pages/app/problemas'))
+const ProblemaFormPage = lazy(() => import('./pages/app/problemas/novo'))
+const ProblemaPage = lazy(() => import('./pages/app/problemas/detalhe'))
 const AcessoRestritoPage = lazy(() => import('./pages/system'))
 const NaoEncontradaPage = lazy(() => import('./pages/system/naoEncontrada'))
 const RedePage = lazy(() => import('./pages/app/rede'))
 const RedeFormPage = lazy(() => import('./pages/app/rede/form'))
 const AdminPage = lazy(() => import('./pages/admin'))
+const AppearanceSection = lazy(() => import('./pages/admin/sections/AppearanceSection'))
+const UsersSection = lazy(() => import('./pages/admin/sections/UsersSection'))
+const ParametrosSection = lazy(() => import('./pages/admin/sections/ParametrosSection'))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
 const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
+
+function RotaInicial() {
+  const { user } = useAuth()
+
+  return <Navigate to={rotaInicialDe(user?.role)} replace />
+}
 
 function RouteFallback() {
   return (
@@ -40,42 +55,42 @@ function App() {
 
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {/* Publicas — o P&D Connect nao tem landing: a porta de entrada e o login. */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/esqueci-minha-senha" element={<ForgotPasswordPage />} />
+          <Route path="/definir-senha" element={<ResetPasswordPage />} />
+          <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Autenticadas */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AuthenticatedLayout />}>
               <Route path="/painel" element={<PainelPage />} />
+              <Route path="/perfil" element={<PerfilPage />} />
               <Route path="/sem-acesso" element={<AcessoRestritoPage />} />
             </Route>
           </Route>
 
-          {/*
-            Oportunidades: dois atores, uma leitura. O Supervisor conduz a fila;
-            o Pesquisador acompanha aquelas em que integra a equipe potencial
-            (D02). O Demandante acompanha os PROPRIOS problemas em /problemas, e
-            o Administrador nao substitui as atribuicoes cientificas do
-            Supervisor (CONTEXT.md §3) — nenhum dos dois entra aqui.
-          */}
-          <Route element={<ProtectedRoute requiredRole={[ROLES.SUPERVISOR, ROLES.PESQUISADOR]} />}>
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.IDEIA_INTERNA} />}>
+            <Route element={<AuthenticatedLayout />}>
+              <Route path="/oportunidades/nova" element={<IdeiaFormPage />} />
+            </Route>
+          </Route>
+
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.OPORTUNIDADES} />}>
             <Route element={<AuthenticatedLayout />}>
               <Route path="/oportunidades" element={<OportunidadesPage />} />
               <Route path="/oportunidades/:id" element={<OportunidadePage />} />
             </Route>
           </Route>
 
-          {/* Pesquisador — mantem o proprio perfil profissional (RN-A05) */}
-          <Route element={<ProtectedRoute requiredRole={ROLES.PESQUISADOR} />}>
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.PROBLEMAS} />}>
             <Route element={<AuthenticatedLayout />}>
-              <Route path="/perfil" element={<PerfilPage />} />
+              <Route path="/problemas" element={<ProblemasPage />} />
+              <Route path="/problemas/novo" element={<ProblemaFormPage />} />
+              <Route path="/problemas/:id" element={<ProblemaPage />} />
             </Route>
           </Route>
 
-          {/* Supervisor — cadastra e gere a rede interna (RF02, RN-A04 / D06) */}
-          <Route element={<ProtectedRoute requiredRole={ROLES.SUPERVISOR} />}>
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.REDE} />}>
             <Route element={<AuthenticatedLayout />}>
               <Route path="/rede" element={<RedePage />} />
               <Route path="/rede/novo" element={<RedeFormPage />} />
@@ -83,14 +98,40 @@ function App() {
             </Route>
           </Route>
 
-          {/* Exclusivas do Administrador */}
-          <Route element={<ProtectedRoute requiredRole={ROLES.ADMINISTRADOR} />}>
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.ADMIN} />}>
             <Route element={<AuthenticatedLayout />}>
-              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin" element={<AdminPage />}>
+                <Route index element={<Navigate to={SECAO_INICIAL.rota} replace />} />
+
+                <Route
+                  path="aparencia"
+                  element={
+                    <SecaoProtegida permissao={PERMISSOES.CONFIGURACAO}>
+                      <AppearanceSection />
+                    </SecaoProtegida>
+                  }
+                />
+                <Route
+                  path="usuarios"
+                  element={
+                    <SecaoProtegida permissao={PERMISSOES.CONTAS}>
+                      <UsersSection />
+                    </SecaoProtegida>
+                  }
+                />
+                <Route
+                  path="parametros"
+                  element={
+                    <SecaoProtegida permissao={PERMISSOES.CONFIGURACAO}>
+                      <ParametrosSection />
+                    </SecaoProtegida>
+                  }
+                />
+              </Route>
             </Route>
           </Route>
 
-          <Route path="/" element={<Navigate to="/painel" replace />} />
+          <Route path="/" element={<RotaInicial />} />
           <Route path="*" element={<NaoEncontradaPage />} />
         </Routes>
       </Suspense>

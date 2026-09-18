@@ -1,37 +1,20 @@
-// Console do Administrador — AC2 P&D Connect.
-//
-// Duas regras governam este arquivo:
-//
-// 1. NENHUMA cor literal. Tudo sai das CSS custom properties, porque o proprio
-//    painel de Aparencia reescreve essas properties em tempo real — uma cor
-//    literal aqui seria a unica coisa da tela que nao obedece ao painel.
-// 2. Escala de 8px. Espacamentos sao 8/16/24/32; nada de valores avulsos.
-//
-// Profundidade, brilho e bordas saem da paleta institucional via `color-mix`,
-// entao o tema escuro e o claro derivam do mesmo conjunto sem cores novas.
-
 .admin-page {
   width: 100%;
   padding: 32px var(--admin-gutter) 64px;
   color: var(--text-primary);
 }
 
-// A AuthNav monta seu conteudo dentro de `.container` (1200px, centrado). Numa
-// pagina sangrada isso deixaria a marca da barra flutuando a centenas de pixels
-// da barra lateral. O `:has()` limita o ajuste as rotas que renderizam o admin.
 .authenticated-app:has(.admin-page) .auth-nav__inner {
   max-width: none;
   padding-inline: clamp(18px, 2.4vw, 40px);
 }
-
-// --- Cabecalho da pagina ----------------------------------------------------
 
 .admin-page__header {
   margin-bottom: var(--admin-section-gap);
 }
 
 .admin-page__breadcrumb {
-  font-size: 0.8125rem; // 13px
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -46,7 +29,7 @@
 
 .admin-page__title {
   margin-top: 8px;
-  font-size: clamp(2.125rem, 2.4vw, 2.5rem); // 34 -> 40px
+  font-size: clamp(2.125rem, 2.4vw, 2.5rem);
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -57,12 +40,10 @@
 .admin-page__description {
   margin-top: 16px;
   max-width: 62ch;
-  font-size: 0.875rem; // 14px
+  font-size: 0.875rem;
   line-height: 1.6;
   color: var(--text-muted);
 }
-
-// --- Corpo: barra lateral + conteudo ----------------------------------------
 
 .admin-page__body {
   display: grid;
@@ -76,8 +57,6 @@
   gap: 4px;
   align-content: start;
   position: sticky;
-  // A AuthNav e sticky com z-index 1100: colar em 24px faria a barra lateral
-  // deslizar por baixo dela ao rolar.
   top: var(--admin-nav-offset);
   max-height: calc(100vh - var(--admin-nav-offset) - 24px);
   overflow-y: auto;
@@ -101,7 +80,6 @@
     border-color var(--admin-motion),
     color var(--admin-motion);
 
-  // Barra vertical do estado ativo — cresce a partir do centro.
   &::before {
     content: '';
     position: absolute;
@@ -130,7 +108,7 @@
 
     .admin-nav__icon,
     .admin-nav__label {
-      color: var(--accent-primary);
+      color: var(--accent-primary-text);
     }
   }
 }
@@ -149,13 +127,13 @@
 }
 
 .admin-nav__label {
-  font-size: 0.9375rem; // 15px
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .admin-nav__description {
-  font-size: 0.8125rem; // 13px
+  font-size: 0.8125rem;
   color: var(--text-muted);
   opacity: 0.8;
 }
@@ -163,8 +141,6 @@
 .admin-content {
   min-width: 0;
 }
-
-// --- Aparencia: layout ------------------------------------------------------
 
 .appearance-layout {
   display: grid;
@@ -191,12 +167,6 @@
   opacity: 0.8;
 }
 
-// Os grupos empilhados eram a maior fonte de rolagem da tela. Ha largura para
-// dispo-los em duas colunas; `auto-fit` volta para uma sozinho, sem media query.
-// `align-items: start` NAO e detalhe: sem ele o cartao recolhido estica ate a
-// altura do vizinho aberto (o padrao de grid e `stretch`), e "Superficies" ao
-// lado de "Marca" virava um retangulo alto com um titulo no topo e fundo vazio
-// embaixo — parecia aberto e sem conteudo.
 .appearance-groups {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
@@ -213,8 +183,6 @@
   border: 1px dashed var(--admin-card-border);
   border-radius: var(--admin-radius);
 }
-
-// --- Aparencia: grupo -------------------------------------------------------
 
 .tokens-group {
   padding: 20px;
@@ -244,7 +212,7 @@
 
 .tokens-group__title {
   flex: 1;
-  font-size: 1.125rem; // 18px
+  font-size: 1.125rem;
   font-weight: 500;
   color: var(--text-primary);
   opacity: 0.96;
@@ -273,8 +241,6 @@
   grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
   gap: 12px;
 }
-
-// --- Aparencia: cartao de cor -----------------------------------------------
 
 .token-card {
   display: flex;
@@ -323,8 +289,6 @@
 .token-card__swatch-fill {
   position: absolute;
   inset: 0;
-  // Xadrez discreto por baixo: cores com alfa (o laranja de destaque no tema
-  // escuro e rgba) apareceriam como um bloco chapado sem ele.
   background-image:
     linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 25%, transparent 25%),
     linear-gradient(-45deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 25%, transparent 25%);
@@ -425,7 +389,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: var(--accent-primary-dim);
   border-radius: 999px;
 }
@@ -443,7 +407,7 @@
   &--primaria,
   &--hover,
   &--destaque {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -457,8 +421,6 @@
     background: color-mix(in srgb, var(--accent-green) 14%, transparent);
   }
 }
-
-// --- Aparencia: bloco avancado ----------------------------------------------
 
 .token-advanced {
   display: grid;
@@ -488,7 +450,7 @@
     max-width: 100%;
     overflow-wrap: anywhere;
     font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
-    font-size: 0.6875rem; // 11px
+    font-size: 0.6875rem;
     color: var(--text-muted);
   }
 }
@@ -498,8 +460,6 @@
   gap: 2px;
   list-style: none;
 }
-
-// --- Previa ao vivo ---------------------------------------------------------
 
 .appearance-aside {
   position: sticky;
@@ -528,7 +488,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.11em;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
 }
 
 .preview__note {
@@ -569,7 +529,7 @@
 }
 
 .preview__label {
-  font-size: 0.8125rem; // 13px
+  font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -650,10 +610,8 @@
     background: color-mix(in srgb, var(--accent-green) 14%, transparent);
   }
 
-  // "Aviso" usa o laranja institucional: e o tom de alerta da marca, e a paleta
-  // da AC2 nao tem um amarelo proprio.
   &--warn {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -720,10 +678,6 @@
   }
 }
 
-// --- Responsivo -------------------------------------------------------------
-
-// Tablet: a previa desce para baixo dos cartoes; a coluna de trabalho fica
-// inteira para os grupos de cor.
 @media (max-width: 1180px) {
   .appearance-layout {
     grid-template-columns: 1fr;
@@ -735,7 +689,6 @@
   }
 }
 
-// A barra lateral vira menu superior antes de o conteudo espremer.
 @media (max-width: 900px) {
   .admin-page__body {
     grid-template-columns: 1fr;
@@ -772,4 +725,25 @@
   .tokens-group__grid {
     grid-template-columns: 1fr;
   }
+}
+
+.parametros-contato {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--admin-gap);
+  align-items: start;
+  margin: 0 0 var(--admin-gap);
+  padding: var(--admin-pad);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+}
+
+.parametros-contato__remover {
+  align-self: end;
+  justify-self: start;
+}
+
+.parametros-contato__erro {
+  grid-column: 1 / -1;
 }

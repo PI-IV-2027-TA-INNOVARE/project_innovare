@@ -1,0 +1,80 @@
+.problemas-page {
+  width: 100%;
+  padding: 32px var(--admin-gutter) 64px;
+  color: var(--text-primary);
+}
+
+.problemas-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--admin-pad);
+  flex-wrap: wrap;
+  margin-bottom: var(--admin-pad);
+}
+
+.problemas-page__header--detalhe {
+  display: block;
+}
+
+.problemas-page__title {
+  margin-top: 8px;
+  font-size: clamp(1.75rem, 2.2vw, 2.125rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  opacity: 0.96;
+}
+
+.problemas-page__description {
+  max-width: 68ch;
+  margin-top: 12px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.problemas-page__rodape {
+  margin-top: var(--admin-pad);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.problema-pendencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary-text);
+}
+
+.problema-estagio {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.perfil-card--destaque {
+  border-color: var(--border-accent);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
+.problema-anexos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.problema-anexos__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}

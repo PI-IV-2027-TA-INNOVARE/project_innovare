@@ -1,13 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
 
-/**
- * Diálogo do console de administração.
- *
- * Três coisas que um `<div>` com overlay não faz sozinho e que aqui são
- * obrigatórias: devolver o foco a quem abriu (o menu da linha some ao abrir o
- * modal, então sem isto o foco cairia no <body>), fechar no Escape, e travar a
- * rolagem do fundo enquanto o diálogo está aberto.
- */
 export default function AdminModal({ title, description, onClose, footer, children, size = 'md' }) {
   const titleId = useId()
   const descriptionId = useId()
@@ -30,6 +22,31 @@ export default function AdminModal({ title, description, onClose, footer, childr
       if (event.key === 'Escape') {
         event.stopPropagation()
         onClose()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focaveis = dialogRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]),'
+        + ' select:not([disabled]), textarea:not([disabled]),'
+        + ' [tabindex]:not([tabindex="-1"])'
+      )
+
+      if (!focaveis?.length) return
+
+      const primeiro = focaveis[0]
+      const ultimo = focaveis[focaveis.length - 1]
+
+      if (event.shiftKey && document.activeElement === primeiro) {
+        event.preventDefault()
+        ultimo.focus()
+        return
+      }
+
+      if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault()
+        primeiro.focus()
       }
     }
 
