@@ -1,22 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import BackLink from '../../../components/console/BackLink'
 import GuardaDeSaida from '../../../components/console/GuardaDeSaida'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { useRascunho } from '../../../lib/rascunho'
-import { REDE_EXEMPLO } from '../rede/redeData'
+import { criarOportunidade, listarRede } from '../../../services/pdConnectApi'
+import { membroDaApi } from '../rede/redeData'
 import { origemLabel, situacaoLabel } from './oportunidadesData'
 import './OportunidadesPage.scss'
 
 const LIMITE_RESUMO = 400
 
-const SUPERVISORES = REDE_EXEMPLO.filter((pessoa) => pessoa.papel === 'supervisor')
-
-function validar(valores) {
+function validar(valores, exigirResponsavel) {
   const erros = {}
 
   if (!valores.titulo.trim()) {
@@ -29,7 +27,7 @@ function validar(valores) {
     erros.resumo = `O resumo passa de ${LIMITE_RESUMO} caracteres.`
   }
 
-  if (!valores.responsavel) {
+  if (exigirResponsavel && !valores.responsavel) {
     erros.responsavel = 'Escolha quem conduz a ideia.'
   }
 
@@ -43,17 +41,17 @@ export default function IdeiaFormPage() {
 
   const identificador = user?.email || user?.displayName
 
-  const vazio = useMemo(() => {
-    const proprio = SUPERVISORES.find((pessoa) => pessoa.nome === user?.displayName)
+  const [supervisores, setSupervisores] = useState([])
+  const [responsavelPadrao, setResponsavelPadrao] = useState('')
+  const [erroRede, setErroRede] = useState('')
 
-    return {
-      titulo: '',
-      resumo: '',
-      contexto: '',
-      motivacao: '',
-      responsavel: (proprio || SUPERVISORES[0])?.nome || '',
-    }
-  }, [user?.displayName])
+  const vazio = useMemo(() => ({
+    titulo: '',
+    resumo: '',
+    contexto: '',
+    motivacao: '',
+    responsavel: responsavelPadrao,
+  }), [responsavelPadrao])
 
   const { valores, setValores, alterado, rascunhoEm, descartar, limpar } = useRascunho(
     'ideia-interna', identificador, vazio
@@ -61,6 +59,34 @@ export default function IdeiaFormPage() {
 
   const [erros, setErros] = useState({})
   const [saindoPara, setSaindoPara] = useState(null)
+  const [erroEnvio, setErroEnvio] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  const carregarSupervisores = useCallback(async () => {
+    setErroRede('')
+
+    try {
+      const resposta = await listarRede({ papel_rede: 'supervisor' })
+      const lista = (resposta.results || resposta).map(membroDaApi)
+
+      setSupervisores(lista)
+
+      const proprio = lista.find((pessoa) => pessoa.email === user?.email) || lista[0]
+      const padrao = proprio ? String(proprio.id) : ''
+
+      setResponsavelPadrao(padrao)
+      setValores((atual) => (atual.responsavel ? atual : { ...atual, responsavel: padrao }))
+    } catch (falha) {
+      setSupervisores([])
+      setErroRede(
+        falha?.message || 'Não foi possível carregar os supervisores da rede interna.'
+      )
+    }
+  }, [setValores, user?.email])
+
+  useEffect(() => {
+    carregarSupervisores()
+  }, [carregarSupervisores])
 
   const alterarCampo = (campo) => (event) => {
     const { value } = event.target
@@ -88,20 +114,41 @@ export default function IdeiaFormPage() {
     navigate(destino)
   }
 
-  const enviar = (event) => {
+  const enviar = async (event) => {
     event.preventDefault()
 
-    const encontrados = validar(valores)
+    const encontrados = validar(valores, supervisores.length > 0)
 
     if (Object.keys(encontrados).length > 0) {
       setErros(encontrados)
       return
     }
 
-    limpar()
-    showToast('Ideia interna cadastrada. Ela entra na fila em Entrada.')
+    const contexto = [
+      valores.contexto.trim(),
+      valores.motivacao.trim() ? `Motivação: ${valores.motivacao.trim()}` : '',
+    ].filter(Boolean).join('\n\n')
 
-    window.setTimeout(() => navigate('/oportunidades'), 600)
+    setEnviando(true)
+    setErroEnvio('')
+
+    try {
+      await criarOportunidade({
+        titulo: valores.titulo.trim(),
+        resumo: valores.resumo.trim(),
+        contexto,
+        responsavel: Number(valores.responsavel) || null,
+      })
+
+      limpar()
+      showToast('Ideia interna cadastrada. Ela entra na fila em Entrada.')
+
+      window.setTimeout(() => navigate('/oportunidades'), 600)
+    } catch (falha) {
+      setErroEnvio(falha?.message || 'Não foi possível cadastrar a ideia interna.')
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
@@ -132,16 +179,19 @@ export default function IdeiaFormPage() {
         </div>
       </header>
 
-      <div className="admin-callout" role="note">
-        <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          Interface preliminar — o registro não é persistido.
-        </p>
-      </div>
+      {erroRede ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroRede}</p>
+          <button type="button" className="link-button" onClick={carregarSupervisores}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : null}
 
       {rascunhoEm ? (
         <div className="admin-callout" role="status">
-          <FontAwesomeIcon icon={appIcons.history} className="admin-callout__icon" />
+          <Icone icon={appIcons.history} className="admin-callout__icon" />
           <p className="admin-callout__text">
             Rascunho recuperado deste navegador, de{' '}
             {formatarUltimoAcesso(rascunhoEm).toLowerCase()}. Continue de onde
@@ -184,29 +234,41 @@ export default function IdeiaFormPage() {
                 onChange={alterarCampo('titulo')}
                 placeholder="Ex.: Cultura starter para queijo artesanal"
                 aria-invalid={Boolean(erros.titulo)}
+                aria-describedby={erros.titulo ? 'erro-ideia-titulo' : undefined}
               />
               {erros.titulo ? (
-                <span className="admin-field__error" role="alert">{erros.titulo}</span>
+                <span id="erro-ideia-titulo" className="admin-field__error" role="alert">
+                  {erros.titulo}
+                </span>
               ) : null}
             </label>
 
-            <label className="admin-field">
-              <span className="admin-field__label">Resumo da ideia</span>
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="campo-resumo-ideia">
+                Resumo da ideia
+              </label>
               <textarea
+                id="campo-resumo-ideia"
                 className="admin-input admin-input--area"
                 rows={4}
                 value={valores.resumo}
                 onChange={alterarCampo('resumo')}
                 placeholder="O que se pretende investigar ou desenvolver, e sobre o que se aplica."
                 aria-invalid={Boolean(erros.resumo)}
+                aria-describedby={
+                  ['contador-resumo-ideia', erros.resumo ? 'erro-ideia-resumo' : null]
+                    .filter(Boolean).join(' ')
+                }
               />
-              <span className="admin-field__hint">
+              <span id="contador-resumo-ideia" className="admin-field__hint">
                 {valores.resumo.trim().length} de {LIMITE_RESUMO} caracteres
               </span>
               {erros.resumo ? (
-                <span className="admin-field__error" role="alert">{erros.resumo}</span>
+                <span id="erro-ideia-resumo" className="admin-field__error" role="alert">
+                  {erros.resumo}
+                </span>
               ) : null}
-            </label>
+            </div>
 
             <label className="admin-field">
               <span className="admin-field__label">Contexto técnico</span>
@@ -244,28 +306,44 @@ export default function IdeiaFormPage() {
           </header>
 
           <div className="perfil-card__body">
-            <label className="admin-field">
-              <span className="admin-field__label">Supervisor responsável</span>
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="campo-responsavel">
+                Supervisor responsável
+              </label>
               <select
+                id="campo-responsavel"
                 className="admin-input admin-input--select"
                 value={valores.responsavel}
                 onChange={alterarCampo('responsavel')}
                 aria-invalid={Boolean(erros.responsavel)}
+                aria-describedby={
+                  ['dica-responsavel', erros.responsavel ? 'erro-ideia-responsavel' : null]
+                    .filter(Boolean).join(' ')
+                }
               >
-                {SUPERVISORES.map((pessoa) => (
-                  <option key={pessoa.id} value={pessoa.nome}>{pessoa.nome}</option>
+                {supervisores.map((pessoa) => (
+                  <option key={pessoa.id} value={String(pessoa.id)}>{pessoa.nome}</option>
                 ))}
               </select>
-              <span className="admin-field__hint">
+              <span id="dica-responsavel" className="admin-field__hint">
                 A lista vem da rede interna. Só quem está cadastrado como
                 Supervisor aparece aqui.
               </span>
               {erros.responsavel ? (
-                <span className="admin-field__error" role="alert">{erros.responsavel}</span>
+                <span id="erro-ideia-responsavel" className="admin-field__error" role="alert">
+                  {erros.responsavel}
+                </span>
               ) : null}
-            </label>
+            </div>
           </div>
         </section>
+
+        {erroEnvio ? (
+          <div className="admin-callout" role="alert">
+            <Icone icon={appIcons.warning} className="admin-callout__icon" />
+            <p className="admin-callout__text">{erroEnvio}</p>
+          </div>
+        ) : null}
 
         <footer className="console-form__footer">
           <Link
@@ -275,9 +353,9 @@ export default function IdeiaFormPage() {
           >
             Cancelar
           </Link>
-          <button type="submit" className="admin-btn">
-            <FontAwesomeIcon icon={appIcons.done} />
-            Cadastrar ideia interna
+          <button type="submit" className="admin-btn" disabled={enviando}>
+            <Icone icon={appIcons.done} />
+            {enviando ? 'Cadastrando...' : 'Cadastrar ideia interna'}
           </button>
         </footer>
       </form>

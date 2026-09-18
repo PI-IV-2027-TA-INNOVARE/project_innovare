@@ -13,11 +13,11 @@
     linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
   --bg-auth-radial: #{rgba($color-ac2-orange, 0.12)};
   --bg-input: #{$color-surface};
-  --bg-input-muted: #{rgba($color-ac2-navy, 0.04)};
+  --bg-input-muted: #{rgba($color-ac2-orange, 0.06)};
   --bg-panel: #{rgba($color-surface, 0.9)};
   --bg-panel-strong: #{$color-surface};
-  --bg-chip: #{rgba($color-ac2-navy, 0.07)};
-  --bg-chip-strong: #{rgba($color-ac2-navy, 0.12)};
+  --bg-chip: #{rgba($color-ac2-orange, 0.12)};
+  --bg-chip-strong: #{rgba($color-ac2-orange, 0.2)};
   --bg-danger-soft: #{rgba($color-error, 0.08)};
   --bg-brand-panel: linear-gradient(155deg, #{$color-ac2-navy} 0%, #{$color-ac2-navy-deep} 100%);
   --brand-panel-text: #{$color-ac2-navy-light};

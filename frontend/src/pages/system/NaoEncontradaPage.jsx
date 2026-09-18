@@ -1,7 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useAuth } from '../../context/AuthContext'
-import { appIcons } from '../../lib/icons'
+import { Icone, appIcons } from '../../lib/icons'
 import { ROLES } from '../../lib/roles'
 import './SystemPages.scss'
 
@@ -17,8 +16,8 @@ const DESTINOS_POR_PAPEL = {
     { to: '/perfil', label: 'Meu perfil' },
   ],
   [ROLES.ADMINISTRADOR]: [
-    { to: '/painel', label: 'Painel' },
     { to: '/admin', label: 'Administração' },
+    { to: '/perfil', label: 'Minha conta' },
   ],
   [ROLES.DEMANDANTE]: [
     { to: '/painel', label: 'Painel' },
@@ -36,7 +35,7 @@ export default function NaoEncontradaPage() {
     <div className="system-page">
       <div className="system-card">
         <span className="system-card__icon" aria-hidden="true">
-          <FontAwesomeIcon icon={appIcons.compass} />
+          <Icone icon={appIcons.compass} />
         </span>
 
         <p className="system-card__code">404</p>

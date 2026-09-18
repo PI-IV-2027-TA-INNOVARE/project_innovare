@@ -12,7 +12,7 @@
 }
 
 .btn-ghost {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: var(--bg-chip);
   border: 1px solid var(--border-strong);
 }
@@ -38,7 +38,7 @@
 }
 
 .btn-outline {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
 }

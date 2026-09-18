@@ -150,10 +150,10 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(
-        minutes=config('JWT_ACCESS_MINUTES', default=60, cast=int)
+        minutes=config('JWT_ACCESS_MINUTES', default=30, cast=int)
     ),
     'REFRESH_TOKEN_LIFETIME': timedelta(
-        days=config('JWT_REFRESH_DAYS', default=7, cast=int)
+        days=config('JWT_REFRESH_DAYS', default=1, cast=int)
     ),
     'USER_ID_FIELD': 'id_usuario',
     'USER_ID_CLAIM': 'user_id',
@@ -223,8 +223,8 @@ if RUNNING_TESTS:
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
-TOKEN_RECUPERACAO_HORAS = config('TOKEN_RECUPERACAO_HORAS', default=24, cast=int)
-TOKEN_CONVITE_HORAS = config('TOKEN_CONVITE_HORAS', default=168, cast=int)
+TOKEN_RECUPERACAO_HORAS = config('TOKEN_RECUPERACAO_HORAS', default=2, cast=int)
+TOKEN_CONVITE_HORAS = config('TOKEN_CONVITE_HORAS', default=24, cast=int)
 
 SEARCH_EMBEDDING_DIMENSION = config('SEARCH_EMBEDDING_DIMENSION', default=384, cast=int)
 SEARCH_EMBEDDING_MODEL = config(

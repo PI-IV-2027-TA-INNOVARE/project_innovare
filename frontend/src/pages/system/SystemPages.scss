@@ -39,7 +39,7 @@
   border-radius: 18px;
 
   &--lock {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 }
@@ -106,7 +106,7 @@
 
 .system-contatos__email {
   font-size: 0.875rem;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   overflow-wrap: anywhere;
 
   &:hover {

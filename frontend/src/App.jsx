@@ -5,8 +5,9 @@ import ProtectedRoute from './components/ProtectedRoute'
 import AuthenticatedLayout from './components/AuthenticatedLayout'
 import LoginPage from './pages/auth/login'
 import SecaoProtegida from './components/console/SecaoProtegida'
+import { useAuth } from './context/AuthContext'
 import { PERMISSOES } from './lib/permissoes'
-import { PAPEIS } from './lib/rotas'
+import { PAPEIS, rotaInicialDe } from './lib/rotas'
 import { SECAO_INICIAL } from './pages/admin/secoes'
 
 const PainelPage = lazy(() => import('./pages/app/painel'))
@@ -27,6 +28,12 @@ const UsersSection = lazy(() => import('./pages/admin/sections/UsersSection'))
 const ParametrosSection = lazy(() => import('./pages/admin/sections/ParametrosSection'))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
 const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
+
+function RotaInicial() {
+  const { user } = useAuth()
+
+  return <Navigate to={rotaInicialDe(user?.role)} replace />
+}
 
 function RouteFallback() {
   return (
@@ -57,6 +64,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AuthenticatedLayout />}>
               <Route path="/painel" element={<PainelPage />} />
+              <Route path="/perfil" element={<PerfilPage />} />
               <Route path="/sem-acesso" element={<AcessoRestritoPage />} />
             </Route>
           </Route>
@@ -79,12 +87,6 @@ function App() {
               <Route path="/problemas" element={<ProblemasPage />} />
               <Route path="/problemas/novo" element={<ProblemaFormPage />} />
               <Route path="/problemas/:id" element={<ProblemaPage />} />
-            </Route>
-          </Route>
-
-          <Route element={<ProtectedRoute requiredRole={PAPEIS.PERFIL} />}>
-            <Route element={<AuthenticatedLayout />}>
-              <Route path="/perfil" element={<PerfilPage />} />
             </Route>
           </Route>
 
@@ -129,7 +131,7 @@ function App() {
             </Route>
           </Route>
 
-          <Route path="/" element={<Navigate to="/painel" replace />} />
+          <Route path="/" element={<RotaInicial />} />
           <Route path="*" element={<NaoEncontradaPage />} />
         </Routes>
       </Suspense>

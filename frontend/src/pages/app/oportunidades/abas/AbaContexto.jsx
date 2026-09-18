@@ -1,5 +1,4 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../../lib/icons'
+import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { ORIGENS, origemLabel } from '../oportunidadesData'
 
@@ -72,7 +71,7 @@ export default function AbaContexto({ oportunidade }) {
               <div className="competencia-lista">
                 {oportunidade.lacunas.map((lacuna) => (
                   <span className="lacuna-tag" key={lacuna}>
-                    <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                    <Icone icon={appIcons.warning} aria-hidden="true" />
                     {lacuna}
                   </span>
                 ))}

@@ -1,22 +1,26 @@
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
-  OPORTUNIDADES_EXEMPLO,
+  listOportunidades,
+  listarRede,
+  obterMeuPerfil,
+} from '../../../services/pdConnectApi'
+import {
   agruparPorSituacao,
-  disponibilizadasPara,
+  daApi,
   resumoPorSituacao,
   situacaoLabel,
 } from '../oportunidades/oportunidadesData'
-import { problemasDe, resumoDoDemandante } from '../problemas/problemasData'
-import { REDE_EXEMPLO, completudeDoPerfil } from '../rede/redeData'
+import { resumoDoDemandante } from '../problemas/problemasData'
+import { completudeDoPerfil, membroDaApi, perfilDaApi } from '../rede/redeData'
 
 function Tile({ icon, label, value, tone, to }) {
   const conteudo = (
     <>
-      <FontAwesomeIcon icon={icon} className="stat-card__icon" />
+      <Icone icon={icon} className="stat-card__icon" />
       <div>
         <p className="stat-card__label">{label}</p>
         <p className="stat-card__value">{value}</p>
@@ -26,10 +30,15 @@ function Tile({ icon, label, value, tone, to }) {
 
   const className = `stat-card${tone ? ` stat-card--${tone}` : ''}`
 
-  return to ? (
-    <Link className={className} to={to}>{conteudo}</Link>
-  ) : (
-    <article className={className}>{conteudo}</article>
+  if (!to) {
+    return <article className={className}>{conteudo}</article>
+  }
+
+  return (
+    <Link className={`${className} stat-card--link`} to={to}>
+      {conteudo}
+      <Icone icon={appIcons.next} className="stat-card__seta" />
+    </Link>
   )
 }
 
@@ -40,9 +49,9 @@ function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
 
   return (
     <ul className="painel-lista">
-      {itens.map((item) => {
-        const conteudo = (
-          <>
+      {itens.map((item) => (
+        <li key={item.id}>
+          <Link className="painel-lista__item" to={`${base}/${item.id}`}>
             <span className="painel-lista__texto">
               <span className="painel-lista__titulo">{item.titulo}</span>
               <span className="painel-lista__meta">
@@ -52,37 +61,51 @@ function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
             <span className={`fluxo-badge fluxo-badge--${item.situacao}`}>
               {situacaoLabel(item.situacao)}
             </span>
-          </>
-        )
-
-        return (
-          <li key={item.id}>
-            <Link className="painel-lista__item" to={`${base}/${item.id}`}>
-              {conteudo}
-            </Link>
-          </li>
-        )
-      })}
+          </Link>
+        </li>
+      ))}
     </ul>
   )
 }
 
-function BlocoSupervisor() {
-  const indicadores = resumoPorSituacao(OPORTUNIDADES_EXEMPLO)
+function BlocoSupervisor({ oportunidades, rede }) {
+  const indicadores = resumoPorSituacao(oportunidades)
 
-  const aguardando = OPORTUNIDADES_EXEMPLO
+  const aguardando = oportunidades
     .filter((item) => item.situacao === 'aguardando_decisao')
     .slice(0, 3)
 
-  const semCompetencia = REDE_EXEMPLO.filter((pessoa) => pessoa.competencias.length === 0).length
+  const semCompetencia = rede.filter((pessoa) => pessoa.competencias.length === 0).length
 
   return (
     <>
       <div className="stat-grid">
-        <Tile icon={appIcons.folder} label="Oportunidades" value={indicadores.total} to="/oportunidades" />
-        <Tile icon={appIcons.flow} label="Em andamento" value={indicadores.emAndamento} tone="ok" to="/oportunidades" />
-        <Tile icon={appIcons.decision} label="Aguardando sua decisão" value={indicadores.aguardandoDecisao} to="/oportunidades" />
-        <Tile icon={appIcons.warning} label="Perfis invisíveis ao matching" value={semCompetencia} tone="alert" to="/rede" />
+        <Tile
+          icon={appIcons.folder}
+          label="Oportunidades"
+          value={indicadores.total}
+          to="/oportunidades"
+        />
+        <Tile
+          icon={appIcons.flow}
+          label="Em andamento"
+          value={indicadores.emAndamento}
+          tone="ok"
+          to="/oportunidades"
+        />
+        <Tile
+          icon={appIcons.decision}
+          label="Aguardando sua decisão"
+          value={indicadores.aguardandoDecisao}
+          to="/oportunidades?situacao=aguardando_decisao"
+        />
+        <Tile
+          icon={appIcons.warning}
+          label="Perfis invisíveis ao matching"
+          value={semCompetencia}
+          tone={semCompetencia > 0 ? 'alert' : undefined}
+          to="/rede"
+        />
       </div>
 
       <section className="painel-secao">
@@ -91,21 +114,22 @@ function BlocoSupervisor() {
           <Link className="link-button" to="/oportunidades">Ver a fila</Link>
         </div>
 
-        <ul className="painel-etapas">
-          {agruparPorSituacao(OPORTUNIDADES_EXEMPLO).map((situacao) => (
-            <li key={situacao.id}>
-              <Link
-                className="painel-etapa"
-                to={`/oportunidades?situacao=${situacao.id}`}
-              >
-                <span className={`fluxo-badge fluxo-badge--${situacao.id}`}>
-                  {situacao.label}
-                </span>
-                <span className="painel-etapa__total">{situacao.total}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {oportunidades.length > 0 ? (
+          <ul className="painel-etapas">
+            {agruparPorSituacao(oportunidades).map((situacao) => (
+              <li key={situacao.id}>
+                <Link className="painel-etapa" to={`/oportunidades?situacao=${situacao.id}`}>
+                  <span className={`fluxo-badge fluxo-badge--${situacao.id}`}>
+                    {situacao.label}
+                  </span>
+                  <span className="painel-etapa__total">{situacao.total}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="painel-lista__vazio">Nenhuma oportunidade na fila ainda.</p>
+        )}
 
         <p className="painel-secao__nota">
           Cada etapa abre a fila já filtrada por ela.
@@ -129,22 +153,18 @@ function BlocoSupervisor() {
   )
 }
 
-function BlocoPesquisador({ nome }) {
-  const minhas = disponibilizadasPara(nome)
-
-  const completude = completudeDoPerfil({
-    titulacao: 'mestrado',
-    competencias: ['Microbiologia de alimentos', 'Fermentação'],
-    tecnicas: ['PCR em tempo real'],
-    linhas: ['Bioinsumos agrícolas'],
-    experiencia: '',
-    disponibilidade: 'parcial',
-  })
+function BlocoPesquisador({ oportunidades, perfil }) {
+  const completude = completudeDoPerfil(perfil || {})
 
   return (
     <>
       <div className="stat-grid">
-        <Tile icon={appIcons.folder} label="Oportunidades comigo" value={minhas.length} to="/oportunidades" />
+        <Tile
+          icon={appIcons.folder}
+          label="Oportunidades comigo"
+          value={oportunidades.length}
+          to="/oportunidades"
+        />
         <Tile
           icon={appIcons.profile}
           label="Perfil completo"
@@ -161,7 +181,7 @@ function BlocoPesquisador({ nome }) {
         </div>
 
         <ListaDeOportunidades
-          itens={minhas.slice(0, 3)}
+          itens={oportunidades.slice(0, 3)}
           vazio="Você ainda não integra nenhuma equipe potencial."
         />
 
@@ -174,9 +194,8 @@ function BlocoPesquisador({ nome }) {
   )
 }
 
-function BlocoDemandante({ nome }) {
-  const meus = problemasDe(nome)
-  const indicadores = resumoDoDemandante(meus)
+function BlocoDemandante({ oportunidades }) {
+  const indicadores = resumoDoDemandante(oportunidades)
 
   return (
     <>
@@ -199,7 +218,7 @@ function BlocoDemandante({ nome }) {
           label="Aguardando você"
           value={indicadores.aguardandoVoce}
           tone={indicadores.aguardandoVoce > 0 ? 'alert' : undefined}
-          to="/problemas"
+          to="/problemas?situacao=revisar"
         />
       </div>
 
@@ -210,7 +229,7 @@ function BlocoDemandante({ nome }) {
         </div>
 
         <ListaDeOportunidades
-          itens={meus.slice(0, 3)}
+          itens={oportunidades.slice(0, 3)}
           base="/problemas"
           vazio="Você ainda não cadastrou nenhum problema."
         />
@@ -225,9 +244,75 @@ function BlocoDemandante({ nome }) {
 }
 
 export default function PainelPorPapel({ user }) {
-  if (user?.role === ROLES.SUPERVISOR) return <BlocoSupervisor />
-  if (user?.role === ROLES.PESQUISADOR) return <BlocoPesquisador nome={user?.displayName || ''} />
-  if (user?.role === ROLES.DEMANDANTE) return <BlocoDemandante nome={user?.displayName || ''} />
+  const papel = user?.role
 
-  return null
+  const [oportunidades, setOportunidades] = useState([])
+  const [rede, setRede] = useState([])
+  const [perfil, setPerfil] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+
+  const carregar = useCallback(async () => {
+    if (!papel || papel === ROLES.ADMINISTRADOR) {
+      setCarregando(false)
+      return
+    }
+
+    setCarregando(true)
+    setErro('')
+
+    try {
+      const fila = await listOportunidades()
+      setOportunidades((fila.results || fila).map(daApi))
+
+      if (papel === ROLES.SUPERVISOR) {
+        const membros = await listarRede()
+        setRede((membros.results || membros).map(membroDaApi))
+      }
+
+      if (papel === ROLES.PESQUISADOR) {
+        const meu = await obterMeuPerfil().catch(() => null)
+        setPerfil(meu ? perfilDaApi(meu) : null)
+      }
+    } catch (falha) {
+      setOportunidades([])
+      setErro(falha?.message || 'Não foi possível carregar o painel.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [papel])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
+
+  if (!papel || papel === ROLES.ADMINISTRADOR) return null
+
+  if (carregando) {
+    return (
+      <p className="painel-lista__vazio" role="status">Carregando o seu painel...</p>
+    )
+  }
+
+  if (erro) {
+    return (
+      <div className="admin-callout" role="alert">
+        <Icone icon={appIcons.warning} className="admin-callout__icon" />
+        <p className="admin-callout__text">{erro}</p>
+        <button type="button" className="link-button" onClick={carregar}>
+          Tentar de novo
+        </button>
+      </div>
+    )
+  }
+
+  if (papel === ROLES.SUPERVISOR) {
+    return <BlocoSupervisor oportunidades={oportunidades} rede={rede} />
+  }
+
+  if (papel === ROLES.PESQUISADOR) {
+    return <BlocoPesquisador oportunidades={oportunidades} perfil={perfil} />
+  }
+
+  return <BlocoDemandante oportunidades={oportunidades} />
 }

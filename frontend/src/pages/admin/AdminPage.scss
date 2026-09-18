@@ -108,7 +108,7 @@
 
     .admin-nav__icon,
     .admin-nav__label {
-      color: var(--accent-primary);
+      color: var(--accent-primary-text);
     }
   }
 }
@@ -389,7 +389,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: var(--accent-primary-dim);
   border-radius: 999px;
 }
@@ -407,7 +407,7 @@
   &--primaria,
   &--hover,
   &--destaque {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -488,7 +488,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.11em;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
 }
 
 .preview__note {
@@ -611,7 +611,7 @@
   }
 
   &--warn {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 

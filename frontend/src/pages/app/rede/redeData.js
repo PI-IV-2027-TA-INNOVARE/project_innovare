@@ -139,6 +139,51 @@ export const REDE_EXEMPLO = Object.freeze([
   },
 ])
 
+export function membroDaApi(registro) {
+  return {
+    id: registro.id_membro,
+    nome: registro.nome,
+    email: registro.email,
+    papel: registro.papel_rede,
+    titulacao: registro.titulacao_codigo || '',
+    situacao: registro.situacao,
+    instituicao: registro.organizacao_nome || 'AC2 Microbiologia',
+    disponibilidade: registro.disponibilidade || 'parcial',
+    competencias: registro.competencias || [],
+    tecnicas: registro.tecnicas || [],
+    linhas: registro.linhas || [],
+    experiencia: registro.experiencia || '',
+    temAcesso: Boolean(registro.tem_acesso),
+  }
+}
+
+export function perfilDaApi(registro) {
+  const membro = membroDaApi(registro)
+
+  return {
+    titulacao: membro.titulacao,
+    disponibilidade: membro.disponibilidade,
+    experiencia: membro.experiencia,
+    competencias: membro.competencias,
+    tecnicas: membro.tecnicas,
+    linhas: membro.linhas,
+  }
+}
+
+export function membroParaApi(valores) {
+  return {
+    nome: valores.nome.trim(),
+    email: valores.email.trim(),
+    papel_rede: valores.papel,
+    titulacao_codigo: valores.titulacao || null,
+    disponibilidade: valores.disponibilidade,
+    experiencia: valores.experiencia || '',
+    competencias: valores.competencias || [],
+    tecnicas: valores.tecnicas || [],
+    linhas: valores.linhas || [],
+  }
+}
+
 const rotulo = (lista, id) => lista.find((item) => item.id === id)?.label || id
 
 export const papelLabel = (id) => rotulo(PAPEIS_REDE, id)

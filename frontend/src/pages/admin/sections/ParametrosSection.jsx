@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { AdminToast, useToast } from '../../../components/console/toast'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { gravarContatos, lerContatos, restaurarContatos } from '../../system/contatosSuporte'
 
 const CONTATO_VAZIO = { nome: '', email: '', papel: '' }
@@ -93,7 +92,7 @@ export default function ParametrosSection() {
           </div>
 
           <button type="button" className="admin-btn admin-btn--outline" onClick={restaurar}>
-            <FontAwesomeIcon icon={appIcons.reset} />
+            <Icone icon={appIcons.reset} />
             Restaurar padrão
           </button>
         </header>
@@ -144,7 +143,7 @@ export default function ParametrosSection() {
                 onClick={() => remover(indice)}
                 aria-label={`Remover contato ${contato.nome || indice + 1}`}
               >
-                <FontAwesomeIcon icon={appIcons.remove} />
+                <Icone icon={appIcons.remove} />
               </button>
 
               {erros[indice] ? (
@@ -164,11 +163,11 @@ export default function ParametrosSection() {
 
           <div className="console-form__footer">
             <button type="button" className="admin-btn admin-btn--outline" onClick={adicionar}>
-              <FontAwesomeIcon icon={appIcons.addUser} />
+              <Icone icon={appIcons.addUser} />
               Adicionar contato
             </button>
             <button type="submit" className="admin-btn">
-              <FontAwesomeIcon icon={appIcons.done} />
+              <Icone icon={appIcons.save} />
               Salvar contatos
             </button>
           </div>
@@ -187,7 +186,7 @@ export default function ParametrosSection() {
           </div>
 
           <span className="etapa-planejada__selo">
-            <FontAwesomeIcon icon={appIcons.info} aria-hidden="true" />
+            <Icone icon={appIcons.info} aria-hidden="true" />
             Planejado
           </span>
         </header>

@@ -1,6 +1,5 @@
 import { useId, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 
 export default function ListaEditavel({ label, placeholder, values = [], onChange }) {
   const [rascunho, setRascunho] = useState('')
@@ -63,7 +62,7 @@ export default function ListaEditavel({ label, placeholder, values = [], onChang
                 aria-label={`Remover ${valor}`}
               >
                 {valor}
-                <FontAwesomeIcon icon={appIcons.clear} />
+                <Icone icon={appIcons.clear} />
               </button>
             </li>
           ))}

@@ -66,9 +66,10 @@ describe('podeAcessar', () => {
     }
   })
 
-  it('restringe o proprio perfil ao Pesquisador (RN-A05)', () => {
-    expect(podeAcessar(ROLES.PESQUISADOR, '/perfil')).toBe(true)
-    expect(podeAcessar(ROLES.SUPERVISOR, '/perfil')).toBe(false)
+  it('abre a propria conta aos quatro atores', () => {
+    for (const papel of Object.values(ROLES)) {
+      expect(podeAcessar(papel, '/perfil')).toBe(true)
+    }
   })
 
   it('recusa caminho desconhecido, vazio ou sem papel', () => {

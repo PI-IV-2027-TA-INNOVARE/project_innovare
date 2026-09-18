@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { ROLES, roleDescription } from '../../../lib/roles'
 import PainelPorPapel from './PainelPorPapel'
 import './PainelPage.scss'
@@ -15,7 +14,7 @@ function DemoNotice() {
 
   return (
     <div className="painel__notice" role="note">
-      <FontAwesomeIcon icon={appIcons.warning} className="painel__notice-icon" />
+      <Icone icon={appIcons.warning} className="painel__notice-icon" />
 
       <div className="painel__notice-body">
         <strong>Ambiente de demonstração</strong>
@@ -46,7 +45,7 @@ function DemoNotice() {
         title="Fechar aviso"
         aria-label="Fechar aviso"
       >
-        <FontAwesomeIcon icon={appIcons.clear} />
+        <Icone icon={appIcons.clear} />
       </button>
     </div>
   )
@@ -54,6 +53,10 @@ function DemoNotice() {
 
 export default function PainelPage() {
   const { user, isMockAuth } = useAuth()
+
+  if (user?.role === ROLES.ADMINISTRADOR) {
+    return <Navigate to="/admin" replace />
+  }
 
   return (
     <div className="painel">
@@ -74,22 +77,6 @@ export default function PainelPage() {
         <PainelPorPapel user={user} />
       </div>
 
-      {user?.role === ROLES.ADMINISTRADOR ? (
-        <section className="painel__modules" aria-label="Módulos administrativos">
-          <h2 className="painel__section-title">Módulos administrativos</h2>
-
-          <div className="painel__module-grid">
-            <article className="module-card">
-              <FontAwesomeIcon icon={appIcons.settings} className="module-card__icon" />
-              <h3 className="module-card__title">Gestão de contas e identidade visual</h3>
-              <p className="module-card__text">
-                Gerencie contas, acessos e a identidade visual da plataforma.
-              </p>
-              <Link className="module-card__link" to="/admin">Abrir painel</Link>
-            </article>
-          </div>
-        </section>
-      ) : null}
     </div>
   )
 }

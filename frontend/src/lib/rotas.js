@@ -5,7 +5,6 @@ export const PAPEIS = Object.freeze({
   OPORTUNIDADES: [ROLES.SUPERVISOR, ROLES.PESQUISADOR],
   IDEIA_INTERNA: [ROLES.SUPERVISOR],
   PROBLEMAS: [ROLES.DEMANDANTE],
-  PERFIL: [ROLES.PESQUISADOR],
   REDE: [ROLES.SUPERVISOR],
   ADMIN: [ROLES.ADMINISTRADOR],
 })
@@ -19,7 +18,7 @@ export const ROTAS_PROTEGIDAS = Object.freeze([
   { padrao: '/problemas', papeis: PAPEIS.PROBLEMAS },
   { padrao: '/problemas/novo', papeis: PAPEIS.PROBLEMAS },
   { padrao: '/problemas/:id', papeis: PAPEIS.PROBLEMAS },
-  { padrao: '/perfil', papeis: PAPEIS.PERFIL },
+  { padrao: '/perfil', papeis: null },
   { padrao: '/rede', papeis: PAPEIS.REDE },
   { padrao: '/rede/novo', papeis: PAPEIS.REDE },
   { padrao: '/rede/:id', papeis: PAPEIS.REDE },
@@ -29,8 +28,8 @@ export const ROTAS_PROTEGIDAS = Object.freeze([
   { padrao: '/admin/parametros', papeis: PAPEIS.ADMIN },
 ])
 
-export function rotaInicialDe() {
-  return '/painel'
+export function rotaInicialDe(papel) {
+  return papel === ROLES.ADMINISTRADOR ? '/admin' : '/painel'
 }
 
 export function podeAcessar(papel, pathname) {

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../lib/icons'
+import { Icone, appIcons } from '../../lib/icons'
 import { iniciais, tomDoAvatar } from '../../lib/people'
 
 export function Avatar({ nome, size }) {
@@ -73,7 +72,7 @@ export function RowActionsMenu({ label, items }) {
         aria-label={`Ações para ${label}`}
         onClick={() => setAberto((atual) => !atual)}
       >
-        <FontAwesomeIcon icon={appIcons.more} />
+        <Icone icon={appIcons.more} />
       </button>
 
       {aberto ? (
@@ -89,7 +88,7 @@ export function RowActionsMenu({ label, items }) {
                 item.onSelect()
               }}
             >
-              <FontAwesomeIcon icon={item.icon} />
+              <Icone icon={item.icon} />
               {item.label}
             </button>
           ))}
@@ -116,7 +115,7 @@ export function SortableHeader({ coluna, ordem, onSort }) {
       aria-label={`Ordenar por ${coluna.label}`}
     >
       {coluna.label}
-      <FontAwesomeIcon icon={icone} className="sort-button__icon" />
+      <Icone icon={icone} className="sort-button__icon" />
     </button>
   )
 }
@@ -124,7 +123,7 @@ export function SortableHeader({ coluna, ordem, onSort }) {
 export function TableEmpty({ icon, title, text, action }) {
   return (
     <div className="table-empty">
-      <FontAwesomeIcon icon={icon || appIcons.users} className="table-empty__icon" />
+      <Icone icon={icon || appIcons.users} className="table-empty__icon" />
       <p className="table-empty__title">{title}</p>
       {text ? <p className="table-empty__text">{text}</p> : null}
       {action}

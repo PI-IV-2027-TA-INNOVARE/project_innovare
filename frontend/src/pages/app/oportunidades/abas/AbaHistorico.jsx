@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../../lib/icons'
+import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { decisaoLabel } from '../oportunidadesData'
 
@@ -77,7 +76,7 @@ export default function AbaHistorico({ historico, decisao }) {
             {eventos.map((evento) => (
               <li className="trilha__item" key={evento.id}>
                 <span className={`trilha__marca trilha__marca--${evento.categoria}`} aria-hidden="true">
-                  <FontAwesomeIcon icon={categoria(evento.categoria)?.icon || appIcons.info} />
+                  <Icone icon={categoria(evento.categoria)?.icon || appIcons.info} />
                 </span>
 
                 <div className="trilha__corpo">

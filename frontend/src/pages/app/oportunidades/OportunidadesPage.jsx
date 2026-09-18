@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   SkeletonRows,
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import { listOportunidades } from '../../../services/pdConnectApi'
@@ -149,7 +148,7 @@ export default function OportunidadesPage() {
 
         {ehSupervisor ? (
           <Link className="admin-btn" to="/oportunidades/nova">
-            <FontAwesomeIcon icon={appIcons.addUser} />
+            <Icone icon={appIcons.addUser} />
             Nova ideia interna
           </Link>
         ) : null}
@@ -157,7 +156,7 @@ export default function OportunidadesPage() {
 
       {erroCarga ? (
         <div className="admin-callout" role="alert">
-          <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
+          <Icone icon={appIcons.info} className="admin-callout__icon" />
           <p className="admin-callout__text">{erroCarga}</p>
           <button type="button" className="link-button" onClick={carregar}>
             Tentar de novo
@@ -168,7 +167,7 @@ export default function OportunidadesPage() {
       {ehSupervisor ? (
         <div className="stat-grid">
           <article className="stat-card">
-            <FontAwesomeIcon icon={appIcons.folder} className="stat-card__icon" />
+            <Icone icon={appIcons.folder} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Oportunidades</p>
               <p className="stat-card__value">{indicadores.total}</p>
@@ -176,7 +175,7 @@ export default function OportunidadesPage() {
           </article>
 
           <article className="stat-card stat-card--ok">
-            <FontAwesomeIcon icon={appIcons.flow} className="stat-card__icon" />
+            <Icone icon={appIcons.flow} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Em andamento</p>
               <p className="stat-card__value">{indicadores.emAndamento}</p>
@@ -184,7 +183,7 @@ export default function OportunidadesPage() {
           </article>
 
           <article className="stat-card">
-            <FontAwesomeIcon icon={appIcons.decision} className="stat-card__icon" />
+            <Icone icon={appIcons.decision} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Aguardando sua decisão</p>
               <p className="stat-card__value">{indicadores.aguardandoDecisao}</p>
@@ -192,7 +191,7 @@ export default function OportunidadesPage() {
           </article>
 
           <article className="stat-card stat-card--alert">
-            <FontAwesomeIcon icon={appIcons.warning} className="stat-card__icon" />
+            <Icone icon={appIcons.warning} className="stat-card__icon" />
             <div>
               <p className="stat-card__label">Com lacuna de competência</p>
               <p className="stat-card__value">{indicadores.comLacuna}</p>
@@ -203,7 +202,7 @@ export default function OportunidadesPage() {
 
       <div className="admin-toolbar">
         <div className="admin-search">
-          <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+          <Icone icon={appIcons.search} className="admin-search__icon" />
           <input
             type="search"
             className="admin-search__input"
@@ -220,7 +219,7 @@ export default function OportunidadesPage() {
               title="Limpar pesquisa"
               aria-label="Limpar pesquisa"
             >
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
             </button>
           ) : null}
         </div>
@@ -265,6 +264,7 @@ export default function OportunidadesPage() {
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
+          <caption className="sr-only">Fila de oportunidades</caption>
           <thead>
             <tr>
               {COLUNAS.map((coluna) => (
@@ -319,7 +319,7 @@ export default function OportunidadesPage() {
                       {item.equipe.length} {item.equipe.length === 1 ? 'pessoa' : 'pessoas'}
                       {item.lacunas.length > 0 ? (
                         <span className="oportunidade-lacuna" title={item.lacunas.join(' · ')}>
-                          <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                          <Icone icon={appIcons.warning} aria-hidden="true" />
                           {item.lacunas.length} lacuna
                         </span>
                       ) : null}

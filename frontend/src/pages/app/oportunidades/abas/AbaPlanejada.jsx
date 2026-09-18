@@ -1,5 +1,4 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../../lib/icons'
+import { Icone, appIcons } from '../../../../lib/icons'
 
 export default function AbaPlanejada({ titulo, texto }) {
   return (
@@ -11,7 +10,7 @@ export default function AbaPlanejada({ titulo, texto }) {
         </div>
 
         <span className="etapa-planejada__selo">
-          <FontAwesomeIcon icon={appIcons.info} aria-hidden="true" />
+          <Icone icon={appIcons.info} aria-hidden="true" />
           Planejado
         </span>
       </header>

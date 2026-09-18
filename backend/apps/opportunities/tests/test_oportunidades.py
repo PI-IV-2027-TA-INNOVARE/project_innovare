@@ -455,3 +455,58 @@ class HistoricoTests(OportunidadeBaseTests):
 
         self.assertIn('oportunidade', categorias)
         self.assertNotIn('matching', categorias)
+
+
+class UltimaDecisaoNaLeituraTests(OportunidadeBaseTests):
+    """
+    A tela de acompanhamento le o desfecho pelo proprio registro.
+
+    PB26 exige que o Demandante leia o pedido de revisao; PB71 mantem fora do
+    alcance dele o raciocinio interno de *Continuar* e *Arquivar*.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo = self.criar_externo().data['codigo']
+
+    def decidir(self, tipo, justificativa):
+        self.como(self.supervisor)
+        return self.client.post(
+            reverse('oportunidade-decisao', args=[self.codigo]),
+            {'tipo': tipo, 'justificativa': justificativa},
+            format='json',
+        )
+
+    def ler_como(self, usuario):
+        self.como(usuario)
+        return self.client.get(reverse('oportunidade-detail', args=[self.codigo]))
+
+    def test_sem_decisao_a_leitura_traz_nulo(self):
+        self.assertIsNone(self.ler_como(self.supervisor).data['ultima_decisao'])
+
+    def test_supervisor_le_a_justificativa_de_qualquer_desfecho(self):
+        self.decidir(TipoDecisao.CONTINUAR, 'Maturidade suficiente para avancar.')
+
+        decisao = self.ler_como(self.supervisor).data['ultima_decisao']
+
+        self.assertEqual(decisao['tipo'], 'continuar')
+        self.assertEqual(decisao['tipo_rotulo'], 'Continuar')
+        self.assertEqual(decisao['justificativa'], 'Maturidade suficiente para avancar.')
+        self.assertEqual(decisao['autor_nome'], 'Rafael Antunes')
+
+    def test_demandante_le_a_justificativa_quando_o_pedido_e_para_ele(self):
+        pedido = 'Faltam os laudos microbiologicos dos lotes afetados.'
+        self.decidir(TipoDecisao.REVISAR, pedido)
+
+        decisao = self.ler_como(self.demandante).data['ultima_decisao']
+
+        self.assertEqual(decisao['tipo'], 'revisar')
+        self.assertEqual(decisao['justificativa'], pedido)
+
+    def test_demandante_nao_le_o_raciocinio_interno_de_arquivar(self):
+        self.decidir(TipoDecisao.ARQUIVAR, 'Escopo ja coberto por projeto em curso.')
+
+        decisao = self.ler_como(self.demandante).data['ultima_decisao']
+
+        self.assertEqual(decisao['tipo'], 'arquivar')
+        self.assertEqual(decisao['justificativa'], '')

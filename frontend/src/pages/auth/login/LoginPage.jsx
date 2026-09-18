@@ -1,9 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import ThemeToggle from '../../../components/ThemeToggle'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { destinoAposLogin } from '../../../lib/rotas'
 import { IS_MOCK_AUTH_ENABLED, MOCK_CREDENTIAL_HINTS } from '../../../services/mockAuth'
 import './LoginPage.scss'
@@ -226,7 +225,7 @@ export default function LoginPage() {
                     title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
                     disabled={isSubmitting}
                   >
-                    <FontAwesomeIcon
+                    <Icone
                       icon={showPassword ? appIcons.passwordHide : appIcons.passwordShow}
                     />
                   </button>
@@ -237,7 +236,7 @@ export default function LoginPage() {
                     id="login-password-hint"
                     className="login-field__hint login-field__hint--warning"
                   >
-                    <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                    <Icone icon={appIcons.warning} aria-hidden="true" />
                     Caps Lock está ativado.
                   </p>
                 ) : null}
@@ -268,7 +267,7 @@ export default function LoginPage() {
                   aria-controls="login-demo-panel"
                   onClick={() => setIsDemoOpen((open) => !open)}
                 >
-                  <FontAwesomeIcon
+                  <Icone
                     icon={appIcons.demo}
                     className="login-demo__icon"
                     aria-hidden="true"
@@ -276,7 +275,7 @@ export default function LoginPage() {
                   <span className="login-demo__title">
                     Modo demonstração — sem backend
                   </span>
-                  <FontAwesomeIcon
+                  <Icone
                     icon={appIcons.disclosure}
                     className={`login-demo__chevron${isDemoOpen ? ' is-open' : ''}`}
                     aria-hidden="true"

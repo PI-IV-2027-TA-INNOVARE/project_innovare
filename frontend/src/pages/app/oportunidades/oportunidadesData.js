@@ -192,6 +192,39 @@ export const OPORTUNIDADES_EXEMPLO = Object.freeze([
 
 export const NUCLEO_INTERNO = 'Núcleo de P&D — AC2'
 
+const TEXTO_DO_EVENTO = Object.freeze({
+  oportunidade_cadastrada: 'Oportunidade cadastrada.',
+  contexto_atualizado: 'Contexto atualizado pelo Núcleo de P&D.',
+  complementacao_enviada: 'Complementação enviada pelo demandante.',
+  anexo_enviado: 'Documento anexado ao registro.',
+  decisao_continuar: 'Decisão registrada: Continuar.',
+  decisao_revisar: 'Decisão registrada: Revisar.',
+  decisao_arquivar: 'Decisão registrada: Arquivar.',
+})
+
+export function decisaoDaApi(ultima) {
+  if (!ultima) return null
+
+  return {
+    tipo: ultima.tipo,
+    justificativa: ultima.justificativa || '',
+    autor: ultima.autor_nome || '',
+    em: Date.parse(ultima.registrada_em),
+  }
+}
+
+export function eventoDaApi(evento, indice) {
+  return {
+    id: `${evento.ocorrido_em}-${indice}`,
+    em: Date.parse(evento.ocorrido_em),
+    categoria: evento.categoria,
+    ator: evento.ator || 'Sistema',
+    texto:
+      TEXTO_DO_EVENTO[evento.tipo] ||
+      String(evento.tipo || '').replace(/[._]/g, ' '),
+  }
+}
+
 export function daApi(registro) {
   return {
     id: registro.codigo,
@@ -205,6 +238,8 @@ export function daApi(registro) {
     totalAnexos: registro.total_anexos || 0,
     criadaEm: Date.parse(registro.criada_em),
     atualizadaEm: Date.parse(registro.atualizada_em),
+    decisao: decisaoDaApi(registro.ultima_decisao),
+    competencias: [],
     equipe: [],
     lacunas: [],
   }

@@ -22,6 +22,31 @@ export default function AdminModal({ title, description, onClose, footer, childr
       if (event.key === 'Escape') {
         event.stopPropagation()
         onClose()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focaveis = dialogRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]),'
+        + ' select:not([disabled]), textarea:not([disabled]),'
+        + ' [tabindex]:not([tabindex="-1"])'
+      )
+
+      if (!focaveis?.length) return
+
+      const primeiro = focaveis[0]
+      const ultimo = focaveis[focaveis.length - 1]
+
+      if (event.shiftKey && document.activeElement === primeiro) {
+        event.preventDefault()
+        ultimo.focus()
+        return
+      }
+
+      if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault()
+        primeiro.focus()
       }
     }
 

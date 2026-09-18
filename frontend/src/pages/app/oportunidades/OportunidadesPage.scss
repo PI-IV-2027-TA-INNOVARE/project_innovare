@@ -65,7 +65,7 @@
   color: var(--text-muted);
 
   a {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 }
 
@@ -83,7 +83,7 @@
   }
 
   &--interna {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 }
@@ -99,7 +99,7 @@
   white-space: nowrap;
 
   &--aguardando_decisao {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -109,7 +109,7 @@
   }
 
   &--revisar {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -125,7 +125,7 @@
   gap: 2px;
 
   &:hover .oportunidade-link__titulo {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 }
 
@@ -197,7 +197,7 @@
   }
 
   &.is-active {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     border-bottom-color: var(--accent-primary);
   }
 
@@ -344,7 +344,7 @@
   }
 
   &--revisar {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 
@@ -402,7 +402,7 @@
   border-radius: 50%;
 
   &--decisao {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     border-color: var(--border-accent);
     background: var(--accent-primary-dim);
   }

@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../../lib/icons'
+import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { DECISOES, decisaoLabel } from '../oportunidadesData'
 
@@ -130,7 +129,7 @@ export default function AbaDecisao({ decisao, podeDecidir, onRegistrar }) {
 
         <div className="decisao-acoes">
           <button type="submit" className="admin-btn">
-            <FontAwesomeIcon icon={appIcons.done} />
+            <Icone icon={appIcons.done} />
             Registrar decisão
           </button>
         </div>

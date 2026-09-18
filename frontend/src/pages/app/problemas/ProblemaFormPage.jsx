@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import BackLink from '../../../components/console/BackLink'
 import GuardaDeSaida from '../../../components/console/GuardaDeSaida'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { useRascunho } from '../../../lib/rascunho'
+import { criarOportunidade } from '../../../services/pdConnectApi'
 import './ProblemasPage.scss'
 
 const VAZIO = {
@@ -49,6 +49,8 @@ export default function ProblemaFormPage() {
   const [erros, setErros] = useState({})
   const [anexos, setAnexos] = useState([])
   const [saindoPara, setSaindoPara] = useState(null)
+  const [erroEnvio, setErroEnvio] = useState('')
+  const [enviando, setEnviando] = useState(false)
 
   const sujo = alterado || anexos.length > 0
 
@@ -88,7 +90,7 @@ export default function ProblemaFormPage() {
     navigate(destino)
   }
 
-  const enviar = (event) => {
+  const enviar = async (event) => {
     event.preventDefault()
 
     const encontrados = validar(valores)
@@ -98,10 +100,34 @@ export default function ProblemaFormPage() {
       return
     }
 
-    limpar()
-    showToast('Problema cadastrado. A AC2 vai analisar e retornar por aqui.')
+    const contexto = [
+      valores.contexto.trim(),
+      valores.resultadoEsperado.trim()
+        ? `Resultado esperado: ${valores.resultadoEsperado.trim()}`
+        : '',
+    ].filter(Boolean).join('\n\n')
 
-    window.setTimeout(() => navigate('/problemas'), 600)
+    setEnviando(true)
+    setErroEnvio('')
+
+    try {
+      const criado = await criarOportunidade({
+        titulo: valores.titulo.trim(),
+        resumo: valores.resumo.trim(),
+        contexto,
+      })
+
+      limpar()
+      showToast(
+        `Problema ${criado?.codigo || ''} cadastrado. A AC2 vai analisar e retornar por aqui.`.replace('  ', ' ')
+      )
+
+      window.setTimeout(() => navigate('/problemas'), 600)
+    } catch (problema) {
+      setErroEnvio(problema?.message || 'Não foi possível cadastrar o problema.')
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
@@ -123,7 +149,7 @@ export default function ProblemaFormPage() {
 
       {rascunhoEm ? (
         <div className="admin-callout" role="status">
-          <FontAwesomeIcon icon={appIcons.history} className="admin-callout__icon" />
+          <Icone icon={appIcons.history} className="admin-callout__icon" />
           <p className="admin-callout__text">
             Rascunho recuperado deste navegador, de{' '}
             {formatarUltimoAcesso(rascunhoEm).toLowerCase()}. Continue de onde
@@ -183,29 +209,41 @@ export default function ProblemaFormPage() {
                 onChange={alterarCampo('titulo')}
                 placeholder="Ex.: Contaminação microbiana na linha de envase"
                 aria-invalid={Boolean(erros.titulo)}
+                aria-describedby={erros.titulo ? 'erro-problema-titulo' : undefined}
               />
               {erros.titulo ? (
-                <span className="admin-field__error" role="alert">{erros.titulo}</span>
+                <span id="erro-problema-titulo" className="admin-field__error" role="alert">
+                  {erros.titulo}
+                </span>
               ) : null}
             </label>
 
-            <label className="admin-field">
-              <span className="admin-field__label">Resumo do problema</span>
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="campo-resumo-problema">
+                Resumo do problema
+              </label>
               <textarea
+                id="campo-resumo-problema"
                 className="admin-input admin-input--area"
                 rows={4}
                 value={valores.resumo}
                 onChange={alterarCampo('resumo')}
                 placeholder="O que acontece hoje, onde acontece e desde quando."
                 aria-invalid={Boolean(erros.resumo)}
+                aria-describedby={
+                  ['contador-resumo-problema', erros.resumo ? 'erro-problema-resumo' : null]
+                    .filter(Boolean).join(' ')
+                }
               />
-              <span className="admin-field__hint">
+              <span id="contador-resumo-problema" className="admin-field__hint">
                 {valores.resumo.trim().length} de {LIMITE_RESUMO} caracteres
               </span>
               {erros.resumo ? (
-                <span className="admin-field__error" role="alert">{erros.resumo}</span>
+                <span id="erro-problema-resumo" className="admin-field__error" role="alert">
+                  {erros.resumo}
+                </span>
               ) : null}
-            </label>
+            </div>
 
             <label className="admin-field">
               <span className="admin-field__label">Contexto e tentativas anteriores</span>
@@ -257,7 +295,7 @@ export default function ProblemaFormPage() {
               <ul className="problema-anexos">
                 {anexos.map((nome) => (
                   <li className="problema-anexos__item" key={nome}>
-                    <FontAwesomeIcon icon={appIcons.folder} aria-hidden="true" />
+                    <Icone icon={appIcons.folder} aria-hidden="true" />
                     {nome}
                   </li>
                 ))}
@@ -265,7 +303,7 @@ export default function ProblemaFormPage() {
             ) : null}
 
             <div className="admin-callout" role="note">
-              <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
+              <Icone icon={appIcons.info} className="admin-callout__icon" />
               <p className="admin-callout__text">
                 Nenhum arquivo sai do seu computador nesta versão: a lista acima é
                 só a sua seleção, e ela não entra no rascunho. O envio real, os
@@ -276,6 +314,13 @@ export default function ProblemaFormPage() {
           </div>
         </section>
 
+        {erroEnvio ? (
+          <div className="admin-callout" role="alert">
+            <Icone icon={appIcons.warning} className="admin-callout__icon" />
+            <p className="admin-callout__text">{erroEnvio}</p>
+          </div>
+        ) : null}
+
         <footer className="console-form__footer">
           <Link
             className="admin-btn admin-btn--outline"
@@ -284,9 +329,9 @@ export default function ProblemaFormPage() {
           >
             Cancelar
           </Link>
-          <button type="submit" className="admin-btn">
-            <FontAwesomeIcon icon={appIcons.done} />
-            Cadastrar problema
+          <button type="submit" className="admin-btn" disabled={enviando}>
+            <Icone icon={appIcons.done} />
+            {enviando ? 'Cadastrando...' : 'Cadastrar problema'}
           </button>
         </footer>
       </form>

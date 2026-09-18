@@ -1,7 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useAuth } from '../../context/AuthContext'
-import { appIcons } from '../../lib/icons'
+import { Icone, appIcons } from '../../lib/icons'
 import { roleLabel } from '../../lib/roles'
 import { lerContatos } from './contatosSuporte'
 import './SystemPages.scss'
@@ -17,7 +16,7 @@ export default function AcessoRestritoPage() {
     <div className="system-page">
       <div className="system-card">
         <span className="system-card__icon system-card__icon--lock" aria-hidden="true">
-          <FontAwesomeIcon icon={appIcons.lock} />
+          <Icone icon={appIcons.lock} />
         </span>
 
         <h1 className="system-card__title">Acesso restrito</h1>

@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useAuth } from '../../context/AuthContext'
+import { Icone } from '../../lib/icons'
 import { podeVer } from '../../lib/permissoes'
 import { SECOES_ADMIN } from './secoes'
 import './AdminPage.scss'
@@ -43,7 +43,7 @@ export default function AdminPage() {
               to={secao.rota}
               className={({ isActive }) => `admin-nav__item${isActive ? ' is-active' : ''}`}
             >
-              <FontAwesomeIcon icon={secao.icon} className="admin-nav__icon" />
+              <Icone icon={secao.icon} className="admin-nav__icon" />
 
               <span className="admin-nav__text">
                 <span className="admin-nav__label">{secao.label}</span>

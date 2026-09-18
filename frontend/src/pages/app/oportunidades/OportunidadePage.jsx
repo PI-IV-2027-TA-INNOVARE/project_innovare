@@ -1,22 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
+import {
+  listarHistorico,
+  obterOportunidade,
+  registrarDecisao as registrarDecisaoNaApi,
+} from '../../../services/pdConnectApi'
 import AbaContexto from './abas/AbaContexto'
 import AbaDecisao from './abas/AbaDecisao'
 import AbaHistorico from './abas/AbaHistorico'
 import AbaPlanejada from './abas/AbaPlanejada'
-import {
-  OPORTUNIDADES_EXEMPLO,
-  disponibilizadasPara,
-  origemLabel,
-  situacaoLabel,
-} from './oportunidadesData'
+import { daApi, eventoDaApi, origemLabel, situacaoLabel } from './oportunidadesData'
 import './OportunidadesPage.scss'
 
 const ABAS = [
@@ -59,16 +58,54 @@ export default function OportunidadePage() {
 
   const ehSupervisor = user?.role === ROLES.SUPERVISOR
 
-  const registro = useMemo(() => {
-    const alcance = ehSupervisor
-      ? OPORTUNIDADES_EXEMPLO
-      : disponibilizadasPara(user?.displayName || '')
-
-    return alcance.find((item) => item.id === id)
-  }, [ehSupervisor, id, user?.displayName])
-
+  const [registro, setRegistro] = useState(null)
+  const [eventos, setEventos] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [abaAtiva, setAbaAtiva] = useState('contexto')
-  const [decisao, setDecisao] = useState(registro?.decisao || null)
+
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const dados = await obterOportunidade(id)
+      const trilha = await listarHistorico(id).catch(() => [])
+
+      setRegistro(daApi(dados))
+      setEventos((trilha.results || trilha).map(eventoDaApi))
+    } catch (falha) {
+      setRegistro(null)
+      setErroCarga(falha?.message || 'Não foi possível carregar esta oportunidade.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
+
+  const registrarDecisao = async (tipo, justificativa) => {
+    try {
+      await registrarDecisaoNaApi(id, { tipo, justificativa })
+      showToast('Decisão registrada no histórico.')
+      await carregar()
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível registrar a decisão.')
+    }
+  }
+
+  if (carregando) {
+    return (
+      <div className="console oportunidade-page">
+        <BackLink to="/oportunidades">Voltar para oportunidades</BackLink>
+        <p className="oportunidade-page__vazio" role="status">
+          Carregando a oportunidade...
+        </p>
+      </div>
+    )
+  }
 
   if (!registro) {
     return (
@@ -76,22 +113,17 @@ export default function OportunidadePage() {
         <BackLink to="/oportunidades">Voltar para oportunidades</BackLink>
         <p className="oportunidade-page__vazio">
           Nenhuma oportunidade com o código <code>{id}</code>.
+          {erroCarga ? ` ${erroCarga}` : ''}
         </p>
+        <button type="button" className="admin-btn admin-btn--outline" onClick={carregar}>
+          Tentar de novo
+        </button>
       </div>
     )
   }
 
-  const registrarDecisao = (tipo, justificativa) => {
-    setDecisao({
-      tipo,
-      justificativa,
-      autor: user?.displayName || 'Supervisor',
-      em: Date.now(),
-    })
-    showToast('Decisão registrada no histórico.')
-  }
-
   const aba = ABAS.find((item) => item.id === abaAtiva) || ABAS[0]
+  const decisao = registro.decisao
 
   return (
     <div className="console oportunidade-page">
@@ -105,8 +137,8 @@ export default function OportunidadePage() {
           <span className={`origem-badge origem-badge--${registro.origem}`}>
             {origemLabel(registro.origem)}
           </span>
-          <span className={`fluxo-badge fluxo-badge--${decisao ? decisao.tipo : registro.situacao}`}>
-            {decisao ? `Decidida: ${situacaoLabel(decisao.tipo)}` : situacaoLabel(registro.situacao)}
+          <span className={`fluxo-badge fluxo-badge--${registro.situacao}`}>
+            {situacaoLabel(registro.situacao)}
           </span>
           <span className="oportunidade-page__demandante">{registro.demandante}</span>
           <span className="user-cell__meta">
@@ -124,7 +156,7 @@ export default function OportunidadePage() {
             aria-current={item.id === abaAtiva ? 'page' : undefined}
             onClick={() => setAbaAtiva(item.id)}
           >
-            <FontAwesomeIcon icon={item.icon} className="oportunidade-aba__icon" />
+            <Icone icon={item.icon} className="oportunidade-aba__icon" />
             {item.label}
             {item.planejada ? <span className="oportunidade-aba__tag">Planejado</span> : null}
           </button>
@@ -142,9 +174,7 @@ export default function OportunidadePage() {
           />
         ) : null}
 
-        {abaAtiva === 'historico' ? (
-          <AbaHistorico historico={registro.historico} decisao={decisao} />
-        ) : null}
+        {abaAtiva === 'historico' ? <AbaHistorico historico={eventos} /> : null}
 
         {aba.planejada ? (
           <AbaPlanejada

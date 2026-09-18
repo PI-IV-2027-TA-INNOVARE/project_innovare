@@ -1,20 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   SkeletonRows,
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
-import { SITUACOES, situacaoLabel } from '../oportunidades/oportunidadesData'
-import {
-  precisaComplementacao,
-  problemasDe,
-  resumoDoDemandante,
-} from './problemasData'
+import { listOportunidades } from '../../../services/pdConnectApi'
+import { SITUACOES, daApi, situacaoLabel } from '../oportunidades/oportunidadesData'
+import { precisaComplementacao, resumoDoDemandante } from './problemasData'
 import './ProblemasPage.scss'
 
 const COLUNAS = [
@@ -38,17 +34,39 @@ function comparar(a, b, campo) {
 export default function ProblemasPage() {
   const { user } = useAuth()
 
+  const [meus, setMeus] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
+  const [parametros, setParametros] = useSearchParams()
   const [busca, setBusca] = useState('')
-  const [situacaoFiltro, setSituacaoFiltro] = useState('todas')
+  const [situacaoFiltro, setSituacaoFiltro] = useState(
+    () => parametros.get('situacao') || 'todas'
+  )
   const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
 
-  useEffect(() => {
-    const timer = setTimeout(() => setCarregando(false), 400)
-    return () => clearTimeout(timer)
+  const trocarSituacao = (valor) => {
+    setSituacaoFiltro(valor)
+    setParametros(valor === 'todas' ? {} : { situacao: valor }, { replace: true })
+  }
+
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const resposta = await listOportunidades()
+      setMeus((resposta.results || resposta).map(daApi))
+    } catch (problema) {
+      setMeus([])
+      setErroCarga(problema?.message || 'Não foi possível carregar os seus problemas.')
+    } finally {
+      setCarregando(false)
+    }
   }, [])
 
-  const meus = useMemo(() => problemasDe(user?.displayName || ''), [user?.displayName])
+  useEffect(() => {
+    carregar()
+  }, [carregar])
 
   const indicadores = useMemo(() => resumoDoDemandante(meus), [meus])
 
@@ -82,7 +100,7 @@ export default function ProblemasPage() {
 
   const limparFiltros = () => {
     setBusca('')
-    setSituacaoFiltro('todas')
+    trocarSituacao('todas')
   }
 
   return (
@@ -101,21 +119,24 @@ export default function ProblemasPage() {
         </div>
 
         <Link className="admin-btn" to="/problemas/novo">
-          <FontAwesomeIcon icon={appIcons.addUser} />
+          <Icone icon={appIcons.addUser} />
           Cadastrar problema
         </Link>
       </header>
 
-      <div className="admin-callout" role="note">
-        <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          Interface preliminar — os registros são um exemplo local.
-        </p>
-      </div>
+      {erroCarga ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">{erroCarga}</p>
+          <button type="button" className="link-button" onClick={carregar}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : null}
 
       <div className="stat-grid">
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.folder} className="stat-card__icon" />
+          <Icone icon={appIcons.folder} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Problemas cadastrados</p>
             <p className="stat-card__value">{indicadores.total}</p>
@@ -123,7 +144,7 @@ export default function ProblemasPage() {
         </article>
 
         <article className="stat-card stat-card--ok">
-          <FontAwesomeIcon icon={appIcons.flow} className="stat-card__icon" />
+          <Icone icon={appIcons.flow} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Em análise pela AC2</p>
             <p className="stat-card__value">{indicadores.emAnalise}</p>
@@ -133,7 +154,7 @@ export default function ProblemasPage() {
         <article
           className={`stat-card${indicadores.aguardandoVoce > 0 ? ' stat-card--alert' : ''}`}
         >
-          <FontAwesomeIcon icon={appIcons.warning} className="stat-card__icon" />
+          <Icone icon={appIcons.warning} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Aguardando você</p>
             <p className="stat-card__value">{indicadores.aguardandoVoce}</p>
@@ -143,7 +164,7 @@ export default function ProblemasPage() {
 
       <div className="admin-toolbar">
         <div className="admin-search">
-          <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+          <Icone icon={appIcons.search} className="admin-search__icon" />
           <input
             type="search"
             className="admin-search__input"
@@ -160,7 +181,7 @@ export default function ProblemasPage() {
               title="Limpar pesquisa"
               aria-label="Limpar pesquisa"
             >
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
             </button>
           ) : null}
         </div>
@@ -173,7 +194,7 @@ export default function ProblemasPage() {
             id="filtro-situacao-problema"
             className="admin-input admin-input--select"
             value={situacaoFiltro}
-            onChange={(event) => setSituacaoFiltro(event.target.value)}
+            onChange={(event) => trocarSituacao(event.target.value)}
           >
             <option value="todas">Todas as situações</option>
             {SITUACOES.map((situacao) => (
@@ -194,6 +215,7 @@ export default function ProblemasPage() {
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
+          <caption className="sr-only">Problemas cadastrados pela sua organização</caption>
           <thead>
             <tr>
               {COLUNAS.map((coluna) => (
@@ -234,7 +256,7 @@ export default function ProblemasPage() {
                   </span>
                   {precisaComplementacao(item) ? (
                     <span className="problema-pendencia">
-                      <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                      <Icone icon={appIcons.warning} aria-hidden="true" />
                       Complementação pedida
                     </span>
                   ) : null}

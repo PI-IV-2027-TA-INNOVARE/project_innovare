@@ -6,12 +6,23 @@ contexto, anexo, decisao, historico.
 """
 from rest_framework import serializers
 
+from apps.accounts.models import Papel
 from apps.decisions.models import TipoDecisao
 from apps.opportunities.models import (
     AnexoOportunidade,
     Oportunidade,
     OrigemOportunidade,
 )
+
+
+class DecisaoResumoSerializer(serializers.Serializer):
+    """A ultima decisao, como a tela de acompanhamento precisa dela."""
+
+    tipo = serializers.CharField(read_only=True)
+    tipo_rotulo = serializers.CharField(source='get_tipo_display', read_only=True)
+    justificativa = serializers.CharField(read_only=True)
+    autor_nome = serializers.CharField(source='autor.nome', read_only=True)
+    registrada_em = serializers.DateTimeField(read_only=True)
 
 
 class AnexoSerializer(serializers.ModelSerializer):
@@ -44,19 +55,43 @@ class OportunidadeSerializer(serializers.ModelSerializer):
     total_anexos = serializers.IntegerField(
         source='anexos.count', read_only=True
     )
+    ultima_decisao = serializers.SerializerMethodField()
 
     class Meta:
         model = Oportunidade
         fields = [
             'codigo', 'titulo', 'origem', 'origem_rotulo', 'resumo', 'contexto',
             'demandante', 'demandante_nome', 'responsavel', 'responsavel_nome',
-            'situacao', 'situacao_rotulo', 'total_anexos',
+            'situacao', 'situacao_rotulo', 'total_anexos', 'ultima_decisao',
             'criada_em', 'atualizada_em',
         ]
         read_only_fields = [
-            'codigo', 'origem', 'demandante', 'situacao',
+            'codigo', 'origem', 'demandante', 'situacao', 'ultima_decisao',
             'criada_em', 'atualizada_em',
         ]
+
+    def get_ultima_decisao(self, oportunidade):
+        """
+        O desfecho mais recente.
+
+        PB26 exige que o Demandante leia o pedido de revisao - e so ele. Em
+        *Continuar* e *Arquivar* a justificativa e raciocinio interno, e PB71
+        mantem o interno fora do alcance dele.
+        """
+        decisao = oportunidade.decisoes.first()
+
+        if decisao is None:
+            return None
+
+        dados = DecisaoResumoSerializer(decisao).data
+        usuario = getattr(self.context.get('request'), 'user', None)
+
+        se_demandante = getattr(usuario, 'papel', None) == Papel.DEMANDANTE
+
+        if se_demandante and decisao.tipo != TipoDecisao.REVISAR:
+            dados['justificativa'] = ''
+
+        return dados
 
 
 class CadastroOportunidadeSerializer(serializers.Serializer):

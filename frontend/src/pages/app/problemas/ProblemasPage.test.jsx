@@ -14,6 +14,52 @@ vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => auth,
 }))
 
+const api = vi.hoisted(() => ({
+  listOportunidades: null,
+  obterOportunidade: null,
+  listarHistorico: null,
+  criarOportunidade: null,
+  complementarOportunidade: null,
+}))
+
+vi.mock('../../../services/pdConnectApi', () => ({
+  listOportunidades: (...args) => api.listOportunidades(...args),
+  obterOportunidade: (...args) => api.obterOportunidade(...args),
+  listarHistorico: (...args) => api.listarHistorico(...args),
+  criarOportunidade: (...args) => api.criarOportunidade(...args),
+  complementarOportunidade: (...args) => api.complementarOportunidade(...args),
+}))
+
+const BIOINSUMO = {
+  codigo: 'OP-2026-014',
+  titulo: 'Bioinsumo para cana-de-açúcar',
+  origem: 'externo',
+  resumo: 'Redução de perdas por contaminação microbiana na moagem.',
+  contexto: '',
+  demandante_nome: 'Agroindústria Vale Verde',
+  responsavel_nome: 'Rafael Antunes',
+  situacao: 'aguardando_decisao',
+  total_anexos: 0,
+  ultima_decisao: null,
+  criada_em: '2026-08-20T10:00:00.000Z',
+  atualizada_em: '2026-09-16T10:00:00.000Z',
+}
+
+const SUCO = {
+  ...BIOINSUMO,
+  codigo: 'OP-2026-012',
+  titulo: 'Vida de prateleira de suco integral',
+  resumo: 'Perda de qualidade sensorial antes do prazo do rótulo.',
+  situacao: 'revisar',
+  ultima_decisao: {
+    tipo: 'revisar',
+    tipo_rotulo: 'Revisar',
+    justificativa: 'Faltam os laudos microbiológicos dos lotes afetados.',
+    autor_nome: 'Rafael Antunes',
+    registrada_em: '2026-09-14T10:00:00.000Z',
+  },
+}
+
 function entrarComo(displayName) {
   auth.user = { role: 'demandante', displayName, email: 'demandante@valeverde.com.br' }
 }
@@ -37,24 +83,35 @@ async function esperarLista() {
 beforeEach(() => {
   window.localStorage.clear()
   entrarComo('Agroindústria Vale Verde')
+
+  api.listOportunidades = vi.fn().mockResolvedValue({ results: [BIOINSUMO, SUCO] })
+  api.obterOportunidade = vi.fn().mockResolvedValue(BIOINSUMO)
+  api.listarHistorico = vi.fn().mockResolvedValue([])
+  api.criarOportunidade = vi.fn().mockResolvedValue({ ...BIOINSUMO, codigo: 'OP-2026-020' })
+  api.complementarOportunidade = vi.fn().mockResolvedValue({})
 })
 
 describe('ProblemasPage', () => {
-  it('lista só os problemas da própria organização', async () => {
+  it('lista o que a API devolve, com o recorte já resolvido no servidor', async () => {
     renderApp()
     await esperarLista()
 
     expect(screen.getByText('Vida de prateleira de suco integral')).toBeInTheDocument()
-    expect(screen.queryByText('Controle de Listeria em linha de laticínios')).not.toBeInTheDocument()
-    expect(screen.queryByText('Redução de nitrito em embutidos')).not.toBeInTheDocument()
+    expect(api.listOportunidades).toHaveBeenCalledTimes(1)
   })
 
-  it('não mostra ideia interna ao Demandante, nem quando o nome bate', async () => {
-    entrarComo('Núcleo de P&D — AC2')
+  it('avisa e oferece nova tentativa quando a API falha', async () => {
+    const user = userEvent.setup()
+    api.listOportunidades = vi.fn().mockRejectedValue(new Error('Servidor fora do ar.'))
+
     renderApp()
 
-    expect(await screen.findByText(/nenhum problema encontrado/i)).toBeInTheDocument()
-    expect(screen.queryByText('Cultura starter para queijo artesanal')).not.toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Servidor fora do ar.')
+
+    api.listOportunidades = vi.fn().mockResolvedValue({ results: [BIOINSUMO] })
+    await user.click(screen.getByRole('button', { name: /tentar de novo/i }))
+
+    expect(await screen.findByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
   })
 
   it('destaca quando a AC2 pediu complementação', async () => {
@@ -80,7 +137,7 @@ describe('ProblemasPage', () => {
   })
 
   it('oferece o cadastro quando a organização ainda não tem problema nenhum', async () => {
-    entrarComo('Laticínios Sem Registro')
+    api.listOportunidades = vi.fn().mockResolvedValue({ results: [] })
     renderApp()
 
     const vazio = (await screen.findByText(/nenhum problema encontrado/i)).closest('.table-empty')
@@ -93,7 +150,7 @@ describe('ProblemasPage', () => {
 })
 
 describe('ProblemaFormPage', () => {
-  it('recusa o cadastro sem título e sem resumo', async () => {
+  it('recusa o cadastro sem título e sem resumo, sem chamar a API', async () => {
     const user = userEvent.setup()
     renderApp('/problemas/novo')
 
@@ -101,6 +158,7 @@ describe('ProblemaFormPage', () => {
 
     expect(screen.getByText(/informe um título/i)).toBeInTheDocument()
     expect(screen.getByText(/descreva o problema/i)).toBeInTheDocument()
+    expect(api.criarOportunidade).not.toHaveBeenCalled()
   })
 
   it('vincula o registro à organização de quem está logado, sem deixar editar', () => {
@@ -112,15 +170,43 @@ describe('ProblemaFormPage', () => {
     expect(campo).toHaveAttribute('readonly')
   })
 
-  it('confirma o cadastro quando título e resumo estão preenchidos', async () => {
+  it('manda o cadastro para a API e confirma com o código devolvido', async () => {
     const user = userEvent.setup()
     renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque de fermentação')
-    await user.type(screen.getByLabelText(/resumo do problema/i), 'Espuma excessiva desde a troca de insumo.')
+    await user.type(
+      screen.getByLabelText(/resumo do problema/i),
+      'Espuma excessiva desde a troca de insumo.'
+    )
+    await user.type(
+      screen.getByLabelText(/resultado esperado/i),
+      'Voltar ao rendimento anterior.'
+    )
     await user.click(screen.getByRole('button', { name: /cadastrar problema/i }))
 
-    expect(await screen.findByText(/problema cadastrado/i)).toBeInTheDocument()
+    expect(api.criarOportunidade).toHaveBeenCalledTimes(1)
+
+    const enviado = api.criarOportunidade.mock.calls[0][0]
+    expect(enviado.titulo).toBe('Espuma no tanque de fermentação')
+    expect(enviado.resumo).toBe('Espuma excessiva desde a troca de insumo.')
+    expect(enviado.contexto).toContain('Resultado esperado: Voltar ao rendimento anterior.')
+
+    expect(await screen.findByText(/OP-2026-020 cadastrado/i)).toBeInTheDocument()
+  })
+
+  it('mostra a recusa do servidor sem perder o que foi digitado', async () => {
+    const user = userEvent.setup()
+    api.criarOportunidade = vi.fn().mockRejectedValue(new Error('titulo: já existe um registro igual.'))
+
+    renderApp('/problemas/novo')
+
+    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/resumo do problema/i), 'Espuma desde a troca.')
+    await user.click(screen.getByRole('button', { name: /cadastrar problema/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/já existe um registro igual/i)
+    expect(screen.getByLabelText(/^título$/i)).toHaveValue('Espuma no tanque')
   })
 
   it('avisa que nenhum anexo sai do computador nesta versão', () => {
@@ -200,7 +286,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
     await user.type(screen.getByLabelText(/resumo do problema/i), 'Espuma desde a troca de insumo.')
     await user.click(screen.getByRole('button', { name: /cadastrar problema/i }))
-    await screen.findByText(/problema cadastrado/i)
+    await screen.findByText(/cadastrado/i)
 
     primeira.unmount()
     renderApp('/problemas/novo')
@@ -235,18 +321,28 @@ describe('ProblemaPage', () => {
     expect(screen.getByText(/aguardando a decisão do núcleo de p&d/i)).toBeInTheDocument()
   })
 
-  it('esconde matching e equipe, e diz que existem registros internos', async () => {
+  it('renderiza a trilha que a API devolve, em linguagem de negócio', async () => {
+    api.listarHistorico = vi.fn().mockResolvedValue([
+      {
+        ocorrido_em: '2026-08-20T10:00:00.000Z',
+        categoria: 'oportunidade',
+        tipo: 'oportunidade_cadastrada',
+        ator: 'Agroindústria Vale Verde',
+        status: 'sucesso',
+        detalhe: {},
+      },
+    ])
+
     renderApp('/problemas/OP-2026-014')
 
-    await screen.findByRole('heading', { name: /bioinsumo/i })
-
-    expect(screen.queryByText(/equipe potencial sugerida/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/pré-análise pipe\/fapesp executada/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/registros internos/i)).toBeInTheDocument()
+    expect(await screen.findByText('Oportunidade cadastrada.')).toBeInTheDocument()
+    expect(screen.getByText(/análise interna do núcleo/i)).toBeInTheDocument()
   })
 
-  it('abre a complementação com o pedido do Supervisor quando a decisão foi Revisar', async () => {
+  it('abre a complementação com o pedido do Supervisor e envia pela API', async () => {
     const user = userEvent.setup()
+    api.obterOportunidade = vi.fn().mockResolvedValue(SUCO)
+
     renderApp('/problemas/OP-2026-012')
 
     expect(await screen.findByRole('heading', { name: /pediu uma complementação/i })).toBeInTheDocument()
@@ -258,10 +354,15 @@ describe('ProblemaPage', () => {
     await user.type(screen.getByLabelText(/sua complementação/i), 'Laudos anexados na próxima semana.')
     await user.click(enviar)
 
+    expect(api.complementarOportunidade).toHaveBeenCalledWith('OP-2026-012', {
+      texto: 'Laudos anexados na próxima semana.',
+    })
     expect(await screen.findByText(/complementação enviada/i, { selector: 'p' })).toBeInTheDocument()
   })
 
-  it('recusa o problema de outra organização mesmo com o código certo', async () => {
+  it('recusa o problema de outra organização com o que a API responder', async () => {
+    api.obterOportunidade = vi.fn().mockRejectedValue(new Error('Não encontrado.'))
+
     renderApp('/problemas/OP-2026-013')
 
     expect(await screen.findByRole('heading', { name: /não encontrado/i })).toBeInTheDocument()
@@ -269,7 +370,20 @@ describe('ProblemaPage', () => {
   })
 
   it('mostra o encaminhamento sem expor a justificativa interna', async () => {
-    entrarComo('Cooperativa Terra Boa')
+    api.obterOportunidade = vi.fn().mockResolvedValue({
+      ...BIOINSUMO,
+      codigo: 'OP-2026-009',
+      titulo: 'Redução de nitrito em embutidos',
+      situacao: 'continuar',
+      ultima_decisao: {
+        tipo: 'continuar',
+        tipo_rotulo: 'Continuar',
+        justificativa: '',
+        autor_nome: 'Rafael Antunes',
+        registrada_em: '2026-09-06T10:00:00.000Z',
+      },
+    })
+
     renderApp('/problemas/OP-2026-009')
 
     await screen.findByRole('heading', { name: /redução de nitrito/i })
@@ -279,7 +393,7 @@ describe('ProblemaPage', () => {
       .closest('.perfil-card')
 
     expect(within(encaminhamento).getByText('Continuar')).toBeInTheDocument()
-    expect(screen.queryByText(/maturidade suficiente e equipe coberta/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/maturidade suficiente/i)).not.toBeInTheDocument()
   })
 })
 

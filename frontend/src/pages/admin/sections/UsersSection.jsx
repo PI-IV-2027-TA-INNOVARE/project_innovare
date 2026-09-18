@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import AdminModal from '../../../components/console/AdminModal'
 import {
   Avatar,
@@ -9,7 +8,7 @@ import {
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { AdminToast, useToast } from '../../../components/console/toast'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import UserFormModal from './users/UserFormModal'
 import {
   createUsuario,
@@ -230,7 +229,7 @@ export default function UsersSection() {
 
       {erroCarga ? (
         <div className="admin-callout" role="alert">
-          <FontAwesomeIcon icon={appIcons.info} className="admin-callout__icon" />
+          <Icone icon={appIcons.info} className="admin-callout__icon" />
           <p className="admin-callout__text">{erroCarga}</p>
           <button type="button" className="link-button" onClick={carregar}>
             Tentar de novo
@@ -240,7 +239,7 @@ export default function UsersSection() {
 
       <div className="stat-grid">
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.users} className="stat-card__icon" />
+          <Icone icon={appIcons.users} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Usuários totais</p>
             <p className="stat-card__value">{estatisticas.total}</p>
@@ -248,7 +247,7 @@ export default function UsersSection() {
         </article>
 
         <article className="stat-card stat-card--ok">
-          <FontAwesomeIcon icon={appIcons.active} className="stat-card__icon" />
+          <Icone icon={appIcons.active} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Usuários ativos</p>
             <p className="stat-card__value">{estatisticas.ativos}</p>
@@ -256,7 +255,7 @@ export default function UsersSection() {
         </article>
 
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.researcher} className="stat-card__icon" />
+          <Icone icon={appIcons.researcher} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Pesquisadores</p>
             <p className="stat-card__value">{estatisticas.pesquisadores}</p>
@@ -264,7 +263,7 @@ export default function UsersSection() {
         </article>
 
         <article className="stat-card">
-          <FontAwesomeIcon icon={appIcons.company} className="stat-card__icon" />
+          <Icone icon={appIcons.company} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Demandantes</p>
             <p className="stat-card__value">{estatisticas.demandantes}</p>
@@ -274,7 +273,7 @@ export default function UsersSection() {
 
       <div className="admin-toolbar">
         <div className="admin-search">
-          <FontAwesomeIcon icon={appIcons.search} className="admin-search__icon" />
+          <Icone icon={appIcons.search} className="admin-search__icon" />
           <input
             type="search"
             className="admin-search__input"
@@ -292,7 +291,7 @@ export default function UsersSection() {
               title="Limpar pesquisa"
               aria-label="Limpar pesquisa"
             >
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
             </button>
           ) : null}
         </div>
@@ -305,7 +304,7 @@ export default function UsersSection() {
             onClick={() => setFiltrosAbertos((aberto) => !aberto)}
             title="Filtros avançados"
           >
-            <FontAwesomeIcon icon={appIcons.filter} />
+            <Icone icon={appIcons.filter} />
             Filtros avançados
           </button>
 
@@ -315,7 +314,7 @@ export default function UsersSection() {
             onClick={exportarCsv}
             title="Exportar a lista filtrada em CSV"
           >
-            <FontAwesomeIcon icon={appIcons.export} />
+            <Icone icon={appIcons.export} />
             Exportar CSV
           </button>
 
@@ -325,7 +324,7 @@ export default function UsersSection() {
             onClick={() => setModal({ tipo: 'novo' })}
             title="Cadastrar uma nova conta"
           >
-            <FontAwesomeIcon icon={appIcons.addUser} />
+            <Icone icon={appIcons.addUser} />
             Novo usuário
           </button>
         </div>
@@ -392,7 +391,7 @@ export default function UsersSection() {
           {busca ? (
             <button type="button" className="chip chip--removable" onClick={() => setBusca('')}>
               Busca: {busca}
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
               <span className="sr-only">Remover filtro de busca</span>
             </button>
           ) : null}
@@ -404,7 +403,7 @@ export default function UsersSection() {
               onClick={() => setPerfilFiltro('todos')}
             >
               Perfil: {perfilLabel(perfilFiltro)}
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
               <span className="sr-only">Remover filtro de perfil</span>
             </button>
           ) : null}
@@ -416,7 +415,7 @@ export default function UsersSection() {
               onClick={() => setStatusFiltro('todos')}
             >
               Situação: {statusLabel(statusFiltro)}
-              <FontAwesomeIcon icon={appIcons.clear} />
+              <Icone icon={appIcons.clear} />
               <span className="sr-only">Remover filtro de situação</span>
             </button>
           ) : null}
@@ -429,6 +428,7 @@ export default function UsersSection() {
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
+          <caption className="sr-only">Contas de acesso à plataforma</caption>
           <thead>
             <tr>
               {COLUNAS.map((coluna) => (
@@ -556,7 +556,7 @@ export default function UsersSection() {
                         </button>
                       ) : (
                         <button type="button" className="admin-btn" onClick={() => setModal({ tipo: 'novo' })}>
-                          <FontAwesomeIcon icon={appIcons.addUser} />
+                          <Icone icon={appIcons.addUser} />
                           Criar primeiro usuário
                         </button>
                       )
@@ -603,7 +603,7 @@ export default function UsersSection() {
               title="Primeira página"
               aria-label="Primeira página"
             >
-              <FontAwesomeIcon icon={appIcons.first} />
+              <Icone icon={appIcons.first} />
             </button>
 
             <button
@@ -614,7 +614,7 @@ export default function UsersSection() {
               title="Página anterior"
               aria-label="Página anterior"
             >
-              <FontAwesomeIcon icon={appIcons.previous} />
+              <Icone icon={appIcons.previous} />
             </button>
 
             <button
@@ -625,7 +625,7 @@ export default function UsersSection() {
               title="Próxima página"
               aria-label="Próxima página"
             >
-              <FontAwesomeIcon icon={appIcons.next} />
+              <Icone icon={appIcons.next} />
             </button>
 
             <button
@@ -636,7 +636,7 @@ export default function UsersSection() {
               title="Última página"
               aria-label="Última página"
             >
-              <FontAwesomeIcon icon={appIcons.last} />
+              <Icone icon={appIcons.last} />
             </button>
           </div>
         </div>
@@ -711,7 +711,7 @@ export default function UsersSection() {
                 className="admin-btn admin-btn--danger"
                 onClick={() => alterarSituacao(modal.usuario, modal.alvo)}
               >
-                <FontAwesomeIcon icon={appIcons.deactivate} />
+                <Icone icon={appIcons.deactivate} />
                 {modal.alvo === 'suspenso' ? 'Suspender' : 'Inativar'}
               </button>
             </>

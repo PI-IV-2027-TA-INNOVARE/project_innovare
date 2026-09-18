@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../lib/icons'
+import { Icone, appIcons } from '../../lib/icons'
 
 const DURACAO_MS = 2600
 
@@ -30,7 +29,7 @@ export function AdminToast({ toast }) {
 
   return (
     <div className={`admin-toast admin-toast--${toast.tone}`} role="status" aria-live="polite">
-      <FontAwesomeIcon icon={ICONE[toast.tone] || ICONE.ok} className="admin-toast__icon" />
+      <Icone icon={ICONE[toast.tone] || ICONE.ok} className="admin-toast__icon" />
       {toast.message}
     </div>
   )

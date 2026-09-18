@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTheme } from './ThemeContext'
+import { carregarTema, salvarTema } from '../services/pdConnectApi'
 import {
   BRAND_TOKEN_GROUPS,
   buildCssVariables,
@@ -11,41 +12,95 @@ const BrandingContext = createContext(null)
 const STORAGE_KEY = 'pdconnect.branding.v1'
 const THEMES = ['light', 'dark']
 
-function readStoredBranding() {
-  if (typeof window === 'undefined') return { light: {}, dark: {} }
+function vazio() {
+  return { light: {}, dark: {} }
+}
 
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
+function normalizar(payload) {
+  if (!payload || typeof payload !== 'object') return vazio()
 
-    if (!parsed || typeof parsed !== 'object') {
-      return { light: {}, dark: {} }
-    }
-
-    return {
-      light: parsed.light && typeof parsed.light === 'object' ? parsed.light : {},
-      dark: parsed.dark && typeof parsed.dark === 'object' ? parsed.dark : {},
-    }
-  } catch {
-    return { light: {}, dark: {} }
+  return {
+    light: payload.light && typeof payload.light === 'object' ? payload.light : {},
+    dark: payload.dark && typeof payload.dark === 'object' ? payload.dark : {},
   }
 }
 
-function persistBranding(overrides) {
+function lerCache() {
+  if (typeof window === 'undefined') return vazio()
+
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides))
+    const bruto = window.localStorage.getItem(STORAGE_KEY)
+    return normalizar(bruto ? JSON.parse(bruto) : null)
+  } catch {
+    return vazio()
+  }
+}
+
+function gravarCache(payload) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
   } catch {
   }
+}
+
+function efetivos(salvo, rascunho, tema) {
+  const aplicados = { ...(salvo[tema] || {}) }
+
+  for (const [id, valor] of Object.entries(rascunho[tema] || {})) {
+    if (valor === null) {
+      delete aplicados[id]
+    } else {
+      aplicados[id] = valor
+    }
+  }
+
+  return aplicados
 }
 
 export function BrandingProvider({ children }) {
   const { theme } = useTheme()
-  const [overrides, setOverrides] = useState(readStoredBranding)
+
+  const [salvo, setSalvo] = useState(lerCache)
+  const [rascunho, setRascunho] = useState(vazio)
+  const [origem, setOrigem] = useState({ revisao: 0, autor: null })
+  const [salvando, setSalvando] = useState(false)
+  const [erroAoSalvar, setErroAoSalvar] = useState('')
+
   const appliedVarsRef = useRef([])
 
+  useEffect(() => {
+    let ativo = true
+
+    carregarTema()
+      .then((resposta) => {
+        if (!ativo) return
+
+        const payload = normalizar(resposta?.payload)
+
+        setSalvo(payload)
+        gravarCache(payload)
+        setOrigem({
+          revisao: resposta?.revisao || 0,
+          autor: resposta?.atualizado_por_nome || null,
+        })
+      })
+      .catch(() => {
+        /* Sem servidor, o cache do navegador continua pintando a tela. */
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  const aplicados = useMemo(
+    () => efetivos(salvo, rascunho, theme),
+    [rascunho, salvo, theme]
+  )
+
   const branding = useMemo(
-    () => ({ ...getDefaultBranding(theme), ...(overrides[theme] || {}) }),
-    [overrides, theme]
+    () => ({ ...getDefaultBranding(theme), ...aplicados }),
+    [aplicados, theme]
   )
 
   useEffect(() => {
@@ -67,37 +122,93 @@ export function BrandingProvider({ children }) {
     appliedVarsRef.current = Object.keys(variables)
   }, [branding])
 
-  useEffect(() => {
-    persistBranding(overrides)
-  }, [overrides])
-
   const setTokenValue = useCallback((tokenId, value) => {
-    setOverrides((current) => ({
-      ...current,
-      [theme]: { ...(current[theme] || {}), [tokenId]: value },
+    setRascunho((atual) => ({
+      ...atual,
+      [theme]: { ...(atual[theme] || {}), [tokenId]: value },
     }))
   }, [theme])
 
   const resetToken = useCallback((tokenId) => {
-    setOverrides((current) => {
-      const next = { ...(current[theme] || {}) }
-      delete next[tokenId]
+    setRascunho((atual) => {
+      const doTema = { ...(atual[theme] || {}) }
 
-      return { ...current, [theme]: next }
+      if (salvo[theme]?.[tokenId] === undefined) {
+        delete doTema[tokenId]
+      } else {
+        doTema[tokenId] = null
+      }
+
+      return { ...atual, [theme]: doTema }
     })
-  }, [theme])
+  }, [salvo, theme])
 
   const resetTheme = useCallback(() => {
-    setOverrides((current) => ({ ...current, [theme]: {} }))
-  }, [theme])
+    setRascunho((atual) => {
+      const doTema = {}
 
-  const resetAll = useCallback(() => {
-    setOverrides({ light: {}, dark: {} })
+      for (const tokenId of Object.keys(salvo[theme] || {})) {
+        doTema[tokenId] = null
+      }
+
+      return { ...atual, [theme]: doTema }
+    })
+  }, [salvo, theme])
+
+  const descartarRascunho = useCallback(() => {
+    setRascunho(vazio())
+    setErroAoSalvar('')
   }, [])
 
-  const customizedTokenIds = useMemo(
-    () => Object.keys(overrides[theme] || {}),
-    [overrides, theme]
+  const salvar = useCallback(async () => {
+    const patch = {}
+
+    for (const nome of THEMES) {
+      const doTema = rascunho[nome] || {}
+
+      if (Object.keys(doTema).length > 0) {
+        patch[nome] = doTema
+      }
+    }
+
+    if (Object.keys(patch).length === 0) return { ok: true }
+
+    setSalvando(true)
+    setErroAoSalvar('')
+
+    try {
+      const resposta = await salvarTema(patch)
+      const payload = normalizar(resposta?.payload)
+
+      setSalvo(payload)
+      gravarCache(payload)
+      setOrigem({
+        revisao: resposta?.revisao || 0,
+        autor: resposta?.atualizado_por_nome || null,
+      })
+      setRascunho(vazio())
+
+      return { ok: true }
+    } catch (problema) {
+      const mensagem = problema?.message || 'Nao foi possivel salvar a aparencia.'
+
+      setErroAoSalvar(mensagem)
+      return { ok: false, message: mensagem }
+    } finally {
+      setSalvando(false)
+    }
+  }, [rascunho])
+
+  const customizedTokenIds = useMemo(() => Object.keys(aplicados), [aplicados])
+
+  const alterado = useMemo(
+    () => THEMES.some((nome) => Object.keys(rascunho[nome] || {}).length > 0),
+    [rascunho]
+  )
+
+  const pendentes = useMemo(
+    () => THEMES.reduce((total, nome) => total + Object.keys(rascunho[nome] || {}).length, 0),
+    [rascunho]
   )
 
   const value = useMemo(() => ({
@@ -106,18 +217,29 @@ export function BrandingProvider({ children }) {
     groups: BRAND_TOKEN_GROUPS,
     customizedTokenIds,
     isCustomized: customizedTokenIds.length > 0,
-    hasAnyCustomization: THEMES.some((name) => Object.keys(overrides[name] || {}).length > 0),
+    alterado,
+    pendentes,
+    salvando,
+    erroAoSalvar,
+    revisao: origem.revisao,
+    autor: origem.autor,
     setTokenValue,
     resetToken,
     resetTheme,
-    resetAll,
+    descartarRascunho,
+    salvar,
   }), [
+    alterado,
     branding,
     customizedTokenIds,
-    overrides,
-    resetAll,
+    descartarRascunho,
+    erroAoSalvar,
+    origem,
+    pendentes,
     resetTheme,
     resetToken,
+    salvando,
+    salvar,
     setTokenValue,
     theme,
   ])

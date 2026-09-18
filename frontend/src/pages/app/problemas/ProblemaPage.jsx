@@ -1,18 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
-import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
-import { decisaoLabel, situacaoLabel } from '../oportunidades/oportunidadesData'
 import {
-  estagioDoDemandante,
-  historicoVisivel,
-  precisaComplementacao,
-  problemaDe,
-} from './problemasData'
+  complementarOportunidade,
+  listarHistorico,
+  obterOportunidade,
+} from '../../../services/pdConnectApi'
+import {
+  daApi,
+  decisaoLabel,
+  eventoDaApi,
+  situacaoLabel,
+} from '../oportunidades/oportunidadesData'
+import { estagioDoDemandante, precisaComplementacao } from './problemasData'
 import './ProblemasPage.scss'
 
 function Bloco({ titulo, children }) {
@@ -31,16 +34,70 @@ function Bloco({ titulo, children }) {
 
 export default function ProblemaPage() {
   const { id } = useParams()
-  const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const problema = useMemo(
-    () => problemaDe(user?.displayName || '', id),
-    [id, user?.displayName]
-  )
+  const [problema, setProblema] = useState(null)
+  const [eventos, setEventos] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
 
   const [complemento, setComplemento] = useState('')
+  const [enviando, setEnviando] = useState(false)
   const [enviado, setEnviado] = useState(false)
+  const [erroEnvio, setErroEnvio] = useState('')
+
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    setErroCarga('')
+
+    try {
+      const registro = await obterOportunidade(id)
+      const trilha = await listarHistorico(id).catch(() => [])
+
+      setProblema(daApi(registro))
+      setEventos((trilha.results || trilha).map(eventoDaApi))
+    } catch (falha) {
+      setProblema(null)
+      setErroCarga(falha?.message || 'Não foi possível carregar este problema.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
+
+  const enviarComplemento = async (event) => {
+    event.preventDefault()
+
+    if (!complemento.trim()) return
+
+    setEnviando(true)
+    setErroEnvio('')
+
+    try {
+      await complementarOportunidade(id, { texto: complemento.trim() })
+
+      setComplemento('')
+      setEnviado(true)
+      showToast('Complementação enviada ao Núcleo de P&D.')
+      await carregar()
+    } catch (falha) {
+      setErroEnvio(falha?.message || 'Não foi possível enviar a complementação.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  if (carregando) {
+    return (
+      <div className="console problemas-page">
+        <BackLink to="/problemas">Voltar para meus problemas</BackLink>
+        <p className="oportunidade-page__vazio" role="status">Carregando o problema...</p>
+      </div>
+    )
+  }
 
   if (!problema) {
     return (
@@ -53,25 +110,17 @@ export default function ProblemaPage() {
         </header>
 
         <p className="oportunidade-page__vazio">
-          Este código não corresponde a nenhum problema da sua organização. Você
-          acompanha apenas os registros que cadastrou.
+          {erroCarga || 'Este código não corresponde a nenhum problema da sua organização.'}
         </p>
+
+        <button type="button" className="admin-btn admin-btn--outline" onClick={carregar}>
+          Tentar de novo
+        </button>
       </div>
     )
   }
 
-  const { eventos, internos } = historicoVisivel(problema.historico)
   const pedeComplementacao = precisaComplementacao(problema)
-
-  const enviarComplemento = (event) => {
-    event.preventDefault()
-
-    if (!complemento.trim()) return
-
-    setEnviado(true)
-    setComplemento('')
-    showToast('Complementação enviada ao Núcleo de P&D.')
-  }
 
   return (
     <div className="console problemas-page">
@@ -139,9 +188,17 @@ export default function ProblemaPage() {
                   />
                 </label>
 
-                <button type="submit" className="admin-btn" disabled={!complemento.trim()}>
-                  <FontAwesomeIcon icon={appIcons.done} />
-                  Enviar complementação
+                {erroEnvio ? (
+                  <p className="admin-field__error" role="alert">{erroEnvio}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="admin-btn"
+                  disabled={!complemento.trim() || enviando}
+                >
+                  <Icone icon={appIcons.done} />
+                  {enviando ? 'Enviando...' : 'Enviar complementação'}
                 </button>
               </form>
             )}
@@ -181,7 +238,7 @@ export default function ProblemaPage() {
                   className={`trilha__marca trilha__marca--${evento.categoria}`}
                   aria-hidden="true"
                 >
-                  <FontAwesomeIcon
+                  <Icone
                     icon={evento.categoria === 'decisao' ? appIcons.decision : appIcons.folder}
                   />
                 </span>
@@ -205,13 +262,10 @@ export default function ProblemaPage() {
           </p>
         )}
 
-        {internos > 0 ? (
-          <p className="oportunidade-bloco__nota">
-            {internos} {internos === 1 ? 'registro interno' : 'registros internos'} de
-            análise do Núcleo de P&amp;D não {internos === 1 ? 'aparece' : 'aparecem'}{' '}
-            aqui. A composição da equipe e o matching são internos à AC2.
-          </p>
-        ) : null}
+        <p className="oportunidade-bloco__nota">
+          A análise interna do Núcleo de P&amp;D — competências, matching e
+          pré-análise — não aparece nesta trilha.
+        </p>
       </Bloco>
 
       <p className="problemas-page__rodape">

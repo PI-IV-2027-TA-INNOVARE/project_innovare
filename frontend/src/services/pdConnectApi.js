@@ -31,6 +31,10 @@ export function resetPassword(payload) {
   })
 }
 
+export function alterarSenha(payload) {
+  return apiRequest('/auth/change-password/', { method: 'POST', body: payload })
+}
+
 export function listUsuarios(params = {}) {
   const query = new URLSearchParams({ page_size: '100', ...params })
 
@@ -63,6 +67,14 @@ export function encerrarSessao(refresh) {
   })
 }
 
+export function carregarTema() {
+  return apiRequest('/configuracoes/tema/', { skipAuth: true, skipAuthRefresh: true })
+}
+
+export function salvarTema(patch) {
+  return apiRequest('/configuracoes/tema/', { method: 'PATCH', body: patch })
+}
+
 export function listOportunidades(params = {}) {
   const query = new URLSearchParams({ page_size: '100' })
 
@@ -71,4 +83,69 @@ export function listOportunidades(params = {}) {
   })
 
   return apiRequest(`/oportunidades/?${query}`)
+}
+
+export function criarOportunidade(payload) {
+  return apiRequest('/oportunidades/', { method: 'POST', body: payload })
+}
+
+export function obterOportunidade(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/`)
+}
+
+export function atualizarOportunidade(codigo, payload) {
+  return apiRequest(`/oportunidades/${codigo}/`, { method: 'PATCH', body: payload })
+}
+
+export function registrarDecisao(codigo, payload) {
+  return apiRequest(`/oportunidades/${codigo}/decisao/`, { method: 'POST', body: payload })
+}
+
+export function complementarOportunidade(codigo, payload) {
+  return apiRequest(`/oportunidades/${codigo}/complementar/`, {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function listarHistorico(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/historico/`)
+}
+
+export function listarRede(params = {}) {
+  const query = new URLSearchParams({ page_size: '100' })
+
+  Object.entries(params).forEach(([chave, valor]) => {
+    if (valor) query.set(chave, valor)
+  })
+
+  return apiRequest(`/rede/?${query}`)
+}
+
+export function obterMembroRede(id) {
+  return apiRequest(`/rede/${id}/`)
+}
+
+export function criarMembroRede(payload) {
+  return apiRequest('/rede/', { method: 'POST', body: payload })
+}
+
+export function atualizarMembroRede(id, payload) {
+  return apiRequest(`/rede/${id}/`, { method: 'PATCH', body: payload })
+}
+
+export function liberarAcessoMembro(id) {
+  return apiRequest(`/rede/${id}/liberar-acesso/`, { method: 'POST' })
+}
+
+export function obterMeuPerfil() {
+  return apiRequest('/rede/meu-perfil/')
+}
+
+export function atualizarMeuPerfil(payload) {
+  return apiRequest('/rede/meu-perfil/', { method: 'PATCH', body: payload })
+}
+
+export function listarTitulacoes() {
+  return apiRequest('/rede/titulacoes/')
 }
