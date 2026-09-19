@@ -43,6 +43,7 @@ class LoginView(TokenObtainPairView):
 
     permission_classes = [permissions.AllowAny]
     serializer_class = LoginSerializer
+    throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -85,6 +86,7 @@ class EsqueciSenhaView(views.APIView):
     """
 
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'recuperacao'
 
     @extend_schema(request=EsqueciSenhaSerializer, responses={200: None})
     def post(self, request):
@@ -108,6 +110,7 @@ class RedefinirSenhaView(views.APIView):
     """`POST /api/auth/reset-password/` - vale para recuperacao e primeiro acesso."""
 
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'redefinicao'
 
     @extend_schema(request=RedefinirSenhaSerializer, responses={200: None})
     def post(self, request):

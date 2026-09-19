@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import AdminModal from '../../../components/console/AdminModal'
 import {
-  Avatar,
   RowActionsMenu,
   SkeletonRows,
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
+import { BotaoPessoa, FichaDePessoa } from '../../../components/console/Pessoa'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
 import { liberarAcessoMembro, listarRede } from '../../../services/pdConnectApi'
@@ -298,18 +297,11 @@ export default function RedePage() {
             {!carregando && ordenadas.map((pessoa) => (
               <tr key={pessoa.id}>
                 <td data-label="Pessoa">
-                  <button
-                    type="button"
-                    className="user-cell user-cell--botao"
+                  <BotaoPessoa
+                    nome={pessoa.nome}
+                    meta={pessoa.email}
                     onClick={() => setDetalhe(pessoa)}
-                    aria-label={`Abrir a ficha de ${pessoa.nome}`}
-                  >
-                    <Avatar nome={pessoa.nome} />
-                    <span className="user-cell__text">
-                      <span className="user-cell__name">{pessoa.nome}</span>
-                      <span className="user-cell__meta">{pessoa.email}</span>
-                    </span>
-                  </button>
+                  />
                 </td>
 
                 <td data-label="Papel">
@@ -407,59 +399,30 @@ export default function RedePage() {
       </div>
 
       {detalhe ? (
-        <AdminModal
-          title={detalhe.nome}
-          description={`${papelLabel(detalhe.papel)} · ${titulacaoLabel(detalhe.titulacao)}`}
-          onClose={() => setDetalhe(null)}
-          footer={
-            <>
-              <button type="button" className="admin-btn admin-btn--outline" onClick={() => setDetalhe(null)}>
-                Fechar
-              </button>
-              <Link className="admin-btn" to={`/rede/${detalhe.id}`}>Editar cadastro</Link>
-            </>
-          }
-        >
-          <dl className="detail-list">
-            <div className="detail-list__row">
-              <dt>E-mail</dt>
-              <dd>{detalhe.email}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Situação</dt>
-              <dd>
+        <FichaDePessoa
+          nome={detalhe.nome}
+          descricao={`${papelLabel(detalhe.papel)} · ${titulacaoLabel(detalhe.titulacao)}`}
+          onFechar={() => setDetalhe(null)}
+          acoes={<Link className="admin-btn" to={`/rede/${detalhe.id}`}>Editar cadastro</Link>}
+          linhas={[
+            { rotulo: 'E-mail', valor: detalhe.email },
+            {
+              rotulo: 'Situação',
+              valor: (
                 <span className={`status-badge status-badge--${detalhe.situacao}`}>
                   <span className="status-badge__dot" aria-hidden="true" />
                   {situacaoLabel(detalhe.situacao)}
                 </span>
-              </dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Instituição</dt>
-              <dd>{detalhe.instituicao}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Disponibilidade</dt>
-              <dd>{disponibilidadeLabel(detalhe.disponibilidade)}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Competências</dt>
-              <dd>{detalhe.competencias.join(' · ') || '—'}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Técnicas</dt>
-              <dd>{detalhe.tecnicas.join(' · ') || '—'}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Linhas</dt>
-              <dd>{detalhe.linhas.join(' · ') || '—'}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Experiência</dt>
-              <dd>{detalhe.experiencia || '—'}</dd>
-            </div>
-          </dl>
-        </AdminModal>
+              ),
+            },
+            { rotulo: 'Instituição', valor: detalhe.instituicao },
+            { rotulo: 'Disponibilidade', valor: disponibilidadeLabel(detalhe.disponibilidade) },
+            { rotulo: 'Competências', valor: detalhe.competencias.join(' · ') || '—' },
+            { rotulo: 'Técnicas', valor: detalhe.tecnicas.join(' · ') || '—' },
+            { rotulo: 'Linhas', valor: detalhe.linhas.join(' · ') || '—' },
+            { rotulo: 'Experiência', valor: detalhe.experiencia || '—' },
+          ]}
+        />
       ) : null}
 
       <AdminToast toast={toast} />

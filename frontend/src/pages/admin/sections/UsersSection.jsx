@@ -7,6 +7,7 @@ import {
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
+import { BotaoPessoa, FichaDePessoa } from '../../../components/console/Pessoa'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
 import UserFormModal from './users/UserFormModal'
@@ -458,13 +459,11 @@ export default function UsersSection() {
             {!carregando && visiveis.map((usuario) => (
               <tr key={usuario.id}>
                 <td data-label="Usuário">
-                  <div className="user-cell">
-                    <Avatar nome={usuario.nome} />
-                    <span className="user-cell__text">
-                      <span className="user-cell__name">{usuario.nome}</span>
-                      <span className="user-cell__meta">{usuario.instituicao}</span>
-                    </span>
-                  </div>
+                  <BotaoPessoa
+                    nome={usuario.nome}
+                    meta={usuario.instituicao}
+                    onClick={() => setModal({ tipo: 'ver', usuario })}
+                  />
                 </td>
 
                 <td data-label="E-mail">
@@ -656,40 +655,40 @@ export default function UsersSection() {
       ) : null}
 
       {modal?.tipo === 'ver' ? (
-        <AdminModal
-          title={modal.usuario.nome}
-          description={perfilLabel(modal.usuario.perfil)}
-          onClose={() => setModal(null)}
-          footer={
-            <button type="button" className="admin-btn admin-btn--outline" onClick={() => setModal(null)}>
-              Fechar
+        <FichaDePessoa
+          nome={modal.usuario.nome}
+          descricao={perfilLabel(modal.usuario.perfil)}
+          onFechar={() => setModal(null)}
+          acoes={(
+            <button
+              type="button"
+              className="admin-btn"
+              onClick={() => setModal({ tipo: 'editar', usuario: modal.usuario })}
+            >
+              <Icone icon={appIcons.edit} />
+              Editar usuário
             </button>
-          }
-        >
-          <dl className="detail-list">
-            <div className="detail-list__row">
-              <dt>E-mail</dt>
-              <dd>{modal.usuario.email}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Instituição</dt>
-              <dd>{modal.usuario.instituicao || '—'}</dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Situação</dt>
-              <dd>
+          )}
+          linhas={[
+            { rotulo: 'E-mail', valor: modal.usuario.email },
+            { rotulo: 'Instituição', valor: modal.usuario.instituicao || '—' },
+            {
+              rotulo: 'Situação',
+              valor: (
                 <span className={`status-badge status-badge--${modal.usuario.status}`}>
                   <span className="status-badge__dot" aria-hidden="true" />
                   {statusLabel(modal.usuario.status)}
                 </span>
-              </dd>
-            </div>
-            <div className="detail-list__row">
-              <dt>Último acesso</dt>
-              <dd>{formatarUltimoAcesso(modal.usuario.ultimoAcesso)}</dd>
-            </div>
-          </dl>
-        </AdminModal>
+              ),
+            },
+            {
+              rotulo: 'Último acesso',
+              valor: modal.usuario.aguardandoPrimeiroAcesso
+                ? 'Aguardando primeiro acesso'
+                : formatarUltimoAcesso(modal.usuario.ultimoAcesso),
+            },
+          ]}
+        />
       ) : null}
 
       {modal?.tipo === 'situacao' ? (

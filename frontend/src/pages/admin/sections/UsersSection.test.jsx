@@ -361,3 +361,57 @@ describe('usersData', () => {
     expect(csv.split('\r\n')).toHaveLength(2)
   })
 })
+
+describe('UsersSection — ficha da pessoa', () => {
+  it('abre a ficha clicando no nome, sem passar pelo menu', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent('maria.ferreira@ac2microbiologia.com.br')
+    expect(dialogo).toHaveTextContent('AC2 Microbiologia')
+    expect(within(dialogo).getByText('Ativo')).toBeInTheDocument()
+  })
+
+  it('o menu continua abrindo a mesma ficha', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    const linha = linhaDe('Maria Ferreira')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /visualizar perfil/i }))
+
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent('maria.ferreira@ac2microbiologia.com.br')
+    expect(dialogo).toHaveTextContent('AC2 Microbiologia')
+  })
+
+  it('a ficha leva para a edição e nao traz as acoes destrutivas', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    const ficha = screen.getByRole('dialog')
+    expect(within(ficha).queryByRole('button', { name: /suspender|inativar/i })).not.toBeInTheDocument()
+
+    await user.click(within(ficha).getByRole('button', { name: /editar usuário/i }))
+
+    const formulario = screen.getByRole('dialog')
+    expect(within(formulario).getByLabelText('Nome')).toHaveValue('Maria Ferreira')
+  })
+
+  it('mostra quem ainda nao acessou igual à tabela', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [{ ...comoApi(USUARIOS_EXEMPLO[1]), aguardando_primeiro_acesso: true }],
+    })
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Aguardando primeiro acesso')
+  })
+})

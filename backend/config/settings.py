@@ -11,13 +11,15 @@ from pathlib import Path
 
 from decouple import Config, RepositoryEnv, config as env_config
 
+from core.configuracao import chave_de_assinatura
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 _ENV_FILE = Path(os.environ.get('PDCONNECT_ENV_FILE', BASE_DIR / '.env'))
 config = Config(RepositoryEnv(str(_ENV_FILE))) if _ENV_FILE.exists() else env_config
 
-SECRET_KEY = config('SECRET_KEY', default='dev-only-nao-use-em-producao')
 DEBUG = config('DEBUG', default=False, cast=bool)
+SECRET_KEY = chave_de_assinatura(config('SECRET_KEY', default=''), DEBUG)
 ALLOWED_HOSTS = [
     h.strip()
     for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
@@ -146,7 +148,25 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.PaginacaoPadrao',
     'PAGE_SIZE': 20,
     'EXCEPTION_HANDLER': 'core.exceptions.tratador_de_erro',
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': config('THROTTLE_ANON', default='60/min'),
+        'user': config('THROTTLE_USER', default='240/min'),
+        'login': config('THROTTLE_LOGIN', default='10/min'),
+        'recuperacao': config('THROTTLE_RECUPERACAO', default='5/hour'),
+        'redefinicao': config('THROTTLE_REDEFINICAO', default='10/hour'),
+    },
+    'NUM_PROXIES': config('NUM_PROXIES', default=0, cast=int),
 }
+
+if RUNNING_TESTS:
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = dict.fromkeys(
+        REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
+    )
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(
