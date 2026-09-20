@@ -27,12 +27,12 @@ jobs:
 
     env:
       SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-      POSTGRES_DB: innovare_test
-      POSTGRES_USER: innovare
-      POSTGRES_PASSWORD: innovare_password
-      POSTGRES_HOST: 127.0.0.1
-      POSTGRES_PORT: 5432
-
+      DB_NAME: innovare_test
+      DB_USER: innovare
+      DB_PASSWORD: innovare_password
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_SSLMODE: disable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
