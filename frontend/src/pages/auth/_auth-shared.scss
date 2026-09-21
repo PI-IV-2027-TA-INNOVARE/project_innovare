@@ -1,24 +1,3 @@
-// Shell compartilhado das telas de autenticacao — identidade AC2.
-// Usado por login, esqueci-minha-senha e redefinir-senha.
-//
-// LAYOUT — split-screen sangrado (full-bleed).
-// O painel institucional e a coluna do formulario dividem a viewport inteira,
-// sem cartao flutuante. A coluna do formulario fica travada em
-// `--auth-form-width`: a tela cresce, o formulario nao. Campo de login largo
-// demais custa linha de leitura e alvo de clique (Fitts), entao o ganho de
-// espaco vai para respiro, nao para largura de input.
-//
-// TIPOGRAFIA — escala de 4 degraus: 28 / 16 / 14 / 12px. Nada abaixo de 12px.
-// Os inputs ficam em 16px de proposito: abaixo disso o iOS aplica zoom
-// automatico ao focar o campo.
-//
-// CONTRASTE — o laranja da marca so aparece como texto atraves de
-// `--accent-primary-text` / `--accent-cta-bg` (ver `base/_globals.scss`).
-// Usar `--accent-primary` cru em texto reprova o AA da WCAG (3,0:1).
-//
-// Todas as cores vem de CSS custom properties para que o painel de Aparencia
-// do admin consiga repintar as telas em tempo real.
-
 .login-page {
   --auth-form-width: 26rem;
   --auth-brand-width: 30rem;
@@ -43,26 +22,18 @@
   }
 }
 
-// --- Painel institucional ---------------------------------------------------
-
 .login-brand {
   position: relative;
   display: flex;
   flex-direction: column;
-  // Centralizado: com o kicker institucional junto da marca nao ha mais rodape
-  // para ancorar, e `space-between` deixaria dois vazios grandes em tela alta.
   justify-content: center;
   gap: 48px;
   padding: 56px var(--auth-gutter);
-  // Navy escuro nos DOIS temas — a primeira tela do produto precisa parecer o
-  // produto. `--brand-panel-text` existe porque `--text-inverse` e preto no
-  // tema escuro (serve a superficies de acento, que la sao claras).
   background: var(--bg-brand-panel);
   color: var(--brand-panel-text);
   isolation: isolate;
   overflow: hidden;
 
-  // Os filhos formam uma coluna propria, espelhando a largura do formulario.
   > * {
     width: 100%;
     max-width: var(--auth-brand-width);
@@ -79,8 +50,6 @@
       radial-gradient(circle at 8% 92%, var(--brand-panel-glow) 0%, transparent 48%);
   }
 
-  // Mobile: o painel vira uma faixa compacta no topo para que o formulario
-  // nasca acima da dobra — so a identidade e a promessa em uma linha ficam.
   @media (max-width: 900px) {
     gap: 16px;
     padding: 24px var(--auth-gutter);
@@ -125,8 +94,6 @@
   color: var(--brand-panel-text);
 }
 
-// O contexto institucional entra junto da marca, no topo. Antes era um rodape
-// orfao no fim da coluna, longe daquilo que ele qualifica.
 .login-brand__kicker {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -142,7 +109,7 @@
   letter-spacing: -0.025em;
 
   span {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
   }
 
   @media (max-width: 900px) {
@@ -194,18 +161,12 @@
   }
 }
 
-// --- Painel do formulario ---------------------------------------------------
-
 .login-panel {
   position: relative;
   display: flex;
   padding: 56px var(--auth-gutter);
   background: var(--bg-card);
 
-  // Centraliza por `margin: auto` no filho, nao por `align-items: center`:
-  // quando o conteudo e mais alto que a viewport (notebook curto + modo
-  // demonstracao), o align-items corta o topo e ele fica inalcancavel no
-  // scroll. Margem automatica nunca resolve para valor negativo.
   > * {
     margin: auto;
   }
@@ -213,7 +174,6 @@
   @media (max-width: 900px) {
     padding: 40px var(--auth-gutter);
 
-    // No mobile o formulario comeca logo abaixo da faixa da marca.
     > * {
       margin: 0 auto;
     }
@@ -236,8 +196,6 @@
   z-index: 1;
   margin: 0;
 
-  // O laranja cru sobre --bg-chip da 2,6:1 e reprova o minimo de 3:1 exigido
-  // para icone que carrega significado (WCAG 1.4.11).
   color: var(--accent-primary-text);
 
   &:hover {
@@ -325,7 +283,6 @@
   padding-right: 54px;
 }
 
-// Alvo de 40x40 — o botao de texto anterior tinha ~28px de altura.
 .login-field__toggle {
   position: absolute;
   right: 6px;
@@ -423,9 +380,6 @@
   }
 }
 
-// Acao terciaria: o laranja fica reservado ao botao Entrar. Quando link, botao
-// e atalho de demonstracao usam o mesmo laranja, a cor deixa de significar
-// "acao principal" e vira so a cor da tela.
 .login-link {
   justify-self: center;
   padding: 6px 8px;
@@ -456,8 +410,6 @@
   border-radius: var(--radius-sm);
 }
 
-// Canal unico de erro: o alerta de sessao encerrada e o erro de submit usam a
-// mesma caixa, no mesmo lugar, para nao competirem entre si.
 .login-alert {
   margin-bottom: var(--auth-block-gap);
   padding: 14px 16px;
@@ -491,16 +443,6 @@
   line-height: 1.6;
   color: var(--text-muted);
 }
-
-// --- Modo demonstracao (VITE_AUTH_MOCK=true) --------------------------------
-//
-// Acordeao fechado por padrao. O bloco e o elemento mais clicado da tela em
-// desenvolvimento, mas nao pode disputar atencao com o formulario real nem
-// empurra-lo para fora da dobra num notebook de 768px.
-//
-// Os chips usam BORDA TRACEJADA de proposito: e o sinal visual mais barato de
-// "isto e provisorio". Com a mesma borda solida dos demais controles, os quatro
-// papeis pareciam tipos de conta a escolher no login.
 
 .login-demo {
   margin-top: 24px;
@@ -600,7 +542,6 @@
   margin-top: 12px;
 }
 
-// Acao de apoio dentro de um bloco que ja e secundario — nao leva laranja.
 .login-demo__summary {
   display: inline-block;
   padding: 2px 4px;
@@ -641,13 +582,6 @@
   white-space: nowrap;
 }
 
-// ---------------------------------------------------------------------------
-// Compatibilidade: "esqueci minha senha" e "redefinir senha" ainda usam a
-// marcacao anterior do login. Os seletores abaixo reaproveitam o shell da AC2
-// para essas telas sem exigir reescrita do JSX delas.
-// Remover quando as duas paginas forem migradas (Fase 1 do plano).
-// ---------------------------------------------------------------------------
-
 .login-page__bg,
 .login-brand-panel__overlay {
   display: none;
@@ -656,8 +590,6 @@
 .login-brand-panel {
   @extend .login-brand;
 
-  // Essas telas tem um bloco unico no painel; sem isso o `space-between`
-  // herdado empurraria o conteudo para o topo de uma coluna de 100dvh.
   justify-content: center;
 
   &__content {
@@ -735,8 +667,6 @@
   }
 }
 
-// Conforto dos campos herdados por essas duas telas, sem repintar os
-// formularios do resto da aplicacao.
 .login-page {
   .form-input {
     padding: 14px 16px;
@@ -764,8 +694,6 @@
     }
   }
 }
-
-// ---------------------------------------------------------------------------
 
 @media (prefers-reduced-motion: reduce) {
   .login-submit:hover:not(:disabled),

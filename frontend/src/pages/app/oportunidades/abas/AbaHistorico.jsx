@@ -1,17 +1,7 @@
 import { useMemo, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../../lib/icons'
+import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { decisaoLabel } from '../oportunidadesData'
-
-/**
- * Histórico da oportunidade (RF12).
- *
- * A trilha é **append-only**: nada aqui se edita nem se apaga — é o que torna a
- * rastreabilidade utilizável (PLANO_IMPLEMENTACAO.md §5.1). O filtro por
- * categoria existe porque a pergunta de quem audita é sempre específica: "o que
- * a IA fez?" é uma pergunta, "quem decidiu?" é outra.
- */
 
 const CATEGORIAS = [
   { id: 'oportunidade', label: 'Oportunidade', icon: appIcons.folder },
@@ -30,8 +20,6 @@ export default function AbaHistorico({ historico, decisao }) {
   const eventos = useMemo(() => {
     const base = [...historico]
 
-    // A decisão registrada nesta sessão entra na trilha como qualquer outro
-    // evento — não existe estado "decidido" fora do histórico.
     if (decisao && !base.some((evento) => evento.categoria === 'decisao' && evento.em === decisao.em)) {
       base.push({
         id: `decisao-${decisao.em}`,
@@ -88,7 +76,7 @@ export default function AbaHistorico({ historico, decisao }) {
             {eventos.map((evento) => (
               <li className="trilha__item" key={evento.id}>
                 <span className={`trilha__marca trilha__marca--${evento.categoria}`} aria-hidden="true">
-                  <FontAwesomeIcon icon={categoria(evento.categoria)?.icon || appIcons.info} />
+                  <Icone icon={categoria(evento.categoria)?.icon || appIcons.info} />
                 </span>
 
                 <div className="trilha__corpo">

@@ -4,12 +4,6 @@ const ThemeContext = createContext(null)
 const THEME_STORAGE_KEY = 'pdconnect.theme'
 const THEME_VALUES = new Set(['light', 'dark'])
 
-/**
- * Preferencia salva > preferencia do sistema > claro.
- *
- * O fallback para `prefers-color-scheme` importa na tela de login: ela e a
- * primeira coisa que o usuario ve, antes de existir qualquer escolha salva.
- */
 function getStoredTheme() {
   if (typeof window === 'undefined') return 'light'
 

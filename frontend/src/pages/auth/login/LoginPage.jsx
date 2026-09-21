@@ -1,25 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import ThemeToggle from '../../../components/ThemeToggle'
 import { useAuth } from '../../../context/AuthContext'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
+import { destinoAposLogin } from '../../../lib/rotas'
 import { IS_MOCK_AUTH_ENABLED, MOCK_CREDENTIAL_HINTS } from '../../../services/mockAuth'
 import './LoginPage.scss'
-
-/**
- * Tela de acesso do P&D Connect.
- *
- * Não existe autocadastro: pesquisadores são cadastrados por um Supervisor e
- * as demais contas são provisionadas pelo Administrador (RN-A04 / D06 da
- * baseline de atores). Por isso a tela oferece apenas login e recuperação de
- * senha — não há validação de CNPJ nem de e-mail institucional.
- *
- * Acessibilidade: um único canal de erro (`.login-alert`, `role="alert"`) serve
- * tanto à sessão encerrada quanto à falha de submit; os campos culpados ganham
- * `aria-invalid` + `aria-describedby` apontando para ele, e o foco vai para o
- * campo a corrigir (WCAG 3.3.1 / 3.3.2).
- */
 
 const EMPTY_FORM = { email: '', password: '' }
 
@@ -29,11 +15,6 @@ const DESTAQUES = [
   'Pré-análise de maturidade orientada ao PIPE/FAPESP',
 ]
 
-function resolveReturnPath(pathname) {
-  return typeof pathname === 'string' && pathname.trim() ? pathname : '/painel'
-}
-
-/** Devolve `null` quando o formulário está válido, ou o campo a corrigir. */
 function validate({ email, password }) {
   if (!email.trim()) {
     return { field: 'email', message: 'Informe seu e-mail para continuar.' }
@@ -49,7 +30,7 @@ function validate({ email, password }) {
 export default function LoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { authError, isAuthenticated, signInWithCredentials } = useAuth()
+  const { authError, isAuthenticated, signInWithCredentials, user } = useAuth()
 
   const [form, setForm] = useState(EMPTY_FORM)
   const [message, setMessage] = useState('')
@@ -57,8 +38,6 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isCapsLockOn, setIsCapsLockOn] = useState(false)
-  // Fechado por padrao: o formulario real e o foco da tela, e os atalhos de
-  // demonstracao nao podem competir com ele por atencao.
   const [isDemoOpen, setIsDemoOpen] = useState(false)
 
   const emailRef = useRef(null)
@@ -67,9 +46,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(resolveReturnPath(location.state?.from), { replace: true })
+      navigate(destinoAposLogin(user?.role, location.state?.from), { replace: true })
     }
-  }, [isAuthenticated, location.state, navigate])
+  }, [isAuthenticated, location.state, navigate, user])
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -77,7 +56,6 @@ export default function LoginPage() {
     setInvalidField('')
   }
 
-  // `credentials` marca os dois campos: o backend não diz qual dos dois falhou.
   const isFieldInvalid = (field) => invalidField === field || invalidField === 'credentials'
 
   const handleCapsLock = (event) => {
@@ -109,8 +87,6 @@ export default function LoginPage() {
     if (!result.ok) {
       setMessage(result.message)
       setInvalidField('credentials')
-      // O alerta fica logo antes do formulário: dar foco a ele lê o erro e
-      // deixa o próximo Tab cair direto no campo de e-mail.
       window.requestAnimationFrame(() => alertRef.current?.focus())
     }
 
@@ -123,8 +99,6 @@ export default function LoginPage() {
     setInvalidField('')
   }
 
-  // Um alerta só, sempre no mesmo lugar. A falha de submit tem precedência
-  // sobre a sessão encerrada porque é a ação mais recente do usuário.
   const alertBanner = message
     ? { title: 'Não foi possível entrar', text: message }
     : authError
@@ -153,7 +127,6 @@ export default function LoginPage() {
           </div>
 
           <div className="login-brand__content">
-            {/* Identidade, não título de página: o <h1> da tela é "Entrar". */}
             <p className="login-brand__title">
               P&amp;D <span>Connect</span>
             </p>
@@ -252,7 +225,7 @@ export default function LoginPage() {
                     title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
                     disabled={isSubmitting}
                   >
-                    <FontAwesomeIcon
+                    <Icone
                       icon={showPassword ? appIcons.passwordHide : appIcons.passwordShow}
                     />
                   </button>
@@ -263,7 +236,7 @@ export default function LoginPage() {
                     id="login-password-hint"
                     className="login-field__hint login-field__hint--warning"
                   >
-                    <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                    <Icone icon={appIcons.warning} aria-hidden="true" />
                     Caps Lock está ativado.
                   </p>
                 ) : null}
@@ -294,7 +267,7 @@ export default function LoginPage() {
                   aria-controls="login-demo-panel"
                   onClick={() => setIsDemoOpen((open) => !open)}
                 >
-                  <FontAwesomeIcon
+                  <Icone
                     icon={appIcons.demo}
                     className="login-demo__icon"
                     aria-hidden="true"
@@ -302,7 +275,7 @@ export default function LoginPage() {
                   <span className="login-demo__title">
                     Modo demonstração — sem backend
                   </span>
-                  <FontAwesomeIcon
+                  <Icone
                     icon={appIcons.disclosure}
                     className={`login-demo__chevron${isDemoOpen ? ' is-open' : ''}`}
                     aria-hidden="true"

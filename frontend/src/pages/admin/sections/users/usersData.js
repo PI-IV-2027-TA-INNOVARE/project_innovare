@@ -1,15 +1,3 @@
-/**
- * Dados e formatadores da tela de Usuários.
- *
- * A lista é um placeholder LOCAL e está sinalizada na própria interface. O
- * backend ainda modela apenas `pesquisador` e `empresa`; os quatro atores da
- * baseline v1.0 e os endpoints de administração entram na Fase 2 do
- * PLANO_IMPLEMENTACAO.md. Inventar o contrato aqui violaria "contratos
- * blindados" (AGENTS.md §1) — por isso as operações da tela mexem em estado
- * local, e não em rede.
- */
-
-/** Os quatro atores da baseline, na ordem em que a UI os apresenta. */
 export const PERFIS = Object.freeze([
   { id: 'supervisor', label: 'Supervisor' },
   { id: 'administrador', label: 'Administrador' },
@@ -23,20 +11,12 @@ export const STATUS = Object.freeze([
   { id: 'suspenso', label: 'Suspenso' },
 ])
 
-// Iniciais, tom do avatar e leitura do último acesso são compartilhados com a
-// Rede interna e com o perfil — ver `lib/people.js`.
 export { formatarUltimoAcesso, iniciais, tomDoAvatar } from '../../../../lib/people'
 
 const MINUTO = 60 * 1000
 const HORA = 60 * MINUTO
 const DIA = 24 * HORA
 
-/**
- * Carimbos relativos ao momento em que o módulo carrega.
- *
- * Datas fixas envelheceriam: "Há 3 dias" viraria "Há 400 dias" alguns meses
- * depois da entrega, e a tela de exemplo passaria a mentir sobre si mesma.
- */
 const agora = Date.now()
 
 export const USUARIOS_EXEMPLO = Object.freeze([
@@ -150,6 +130,31 @@ export const USUARIOS_EXEMPLO = Object.freeze([
   },
 ])
 
+export const PERFIS_PROVISIONAVEIS = Object.freeze(
+  PERFIS.filter((perfil) => perfil.id !== 'pesquisador')
+)
+
+export function daApi(registro) {
+  return {
+    id: registro.id_usuario,
+    nome: registro.nome,
+    email: registro.email,
+    perfil: registro.papel,
+    status: registro.situacao,
+    instituicao: registro.instituicao || '',
+    ultimoAcesso: registro.ultimo_acesso ? Date.parse(registro.ultimo_acesso) : null,
+    aguardandoPrimeiroAcesso: Boolean(registro.aguardando_primeiro_acesso),
+  }
+}
+
+export function paraApi(valores) {
+  return {
+    nome: valores.nome,
+    email: valores.email,
+    papel: valores.perfil,
+  }
+}
+
 export function perfilLabel(id) {
   return PERFIS.find((perfil) => perfil.id === id)?.label || id
 }
@@ -158,7 +163,6 @@ export function statusLabel(id) {
   return STATUS.find((status) => status.id === id)?.label || id
 }
 
-/** Uma linha de CSV com as aspas escapadas conforme o RFC 4180. */
 function celulaCsv(valor) {
   return `"${String(valor ?? '').replace(/"/g, '""')}"`
 }

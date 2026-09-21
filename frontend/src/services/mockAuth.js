@@ -1,22 +1,7 @@
 import { ROLES, roleLabel } from '../lib/roles'
 
-/**
- * MODO DEMONSTRACAO — autenticacao ficticia, sem backend.
- *
- * Existe para permitir navegar pelo front (login e painel do admin) sem subir o
- * Django nem o PostgreSQL. Ativado por `VITE_AUTH_MOCK=true` no `.env`.
- *
- * ATENCAO
- * - Sao credenciais de vitrine, publicas e sem valor de seguranca. Nunca use
- *   este modo em ambiente exposto e nunca reaproveite estas senhas.
- * - Quando `VITE_AUTH_MOCK` nao for `true`, nada aqui roda: o login vai para a
- *   API real, como em producao.
- */
-
-/** true somente com o opt-in explicito no .env. */
 export const IS_MOCK_AUTH_ENABLED = import.meta.env.VITE_AUTH_MOCK === 'true'
 
-/** Latencia artificial para exercitar os estados de carregamento da UI. */
 const FAKE_LATENCY_MS = 420
 
 const MOCK_ACCOUNTS = [
@@ -46,7 +31,6 @@ const MOCK_ACCOUNTS = [
   },
 ]
 
-/** Contas exibidas na tela de login enquanto o modo demonstracao esta ligado. */
 export const MOCK_CREDENTIAL_HINTS = MOCK_ACCOUNTS.map(({ email, password, role }) => ({
   email,
   password,
@@ -71,7 +55,6 @@ function delay(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms) })
 }
 
-/** Valida as credenciais ficticias e devolve o usuario correspondente. */
 export async function mockSignIn({ email, password }) {
   await delay(FAKE_LATENCY_MS)
 
@@ -89,13 +72,11 @@ export async function mockSignIn({ email, password }) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ email: account.email }))
   } catch {
-    // Sessao continua valida em memoria mesmo sem storage.
   }
 
   return { ok: true, user }
 }
 
-/** Restaura a sessao ficticia salva, para sobreviver a um refresh da pagina. */
 export async function mockRestoreSession() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -115,6 +96,5 @@ export function mockSignOut() {
   try {
     window.localStorage.removeItem(STORAGE_KEY)
   } catch {
-    // Nada a fazer: a sessao em memoria ja foi descartada pelo AuthContext.
   }
 }

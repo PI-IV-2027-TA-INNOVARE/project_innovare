@@ -1,8 +1,3 @@
-// Telas de estado de rota: acesso restrito e endereço inexistente.
-//
-// Não usam o shell de console: são páginas de parada, e o que importa é uma
-// mensagem legível e um caminho de saída — não uma grade de trabalho.
-
 .system-page {
   display: grid;
   place-items: center;
@@ -43,9 +38,8 @@
   background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
   border-radius: 18px;
 
-  // O cadeado é laranja: é aviso de acesso, não navegação perdida.
   &--lock {
-    color: var(--accent-primary);
+    color: var(--accent-primary-text);
     background: var(--accent-primary-dim);
   }
 }
@@ -87,8 +81,6 @@
   margin-top: 24px;
 }
 
-// --- Contatos ---------------------------------------------------------------
-
 .system-contatos {
   display: grid;
   gap: 8px;
@@ -114,7 +106,7 @@
 
 .system-contatos__email {
   font-size: 0.875rem;
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   overflow-wrap: anywhere;
 
   &:hover {

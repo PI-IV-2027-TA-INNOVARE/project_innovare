@@ -57,8 +57,8 @@ export default function ResetPasswordPage() {
     try {
       await resetPassword({
         token,
-        new_password: form.newPassword,
-        confirm_password: form.confirmPassword,
+        nova_senha: form.newPassword,
+        confirmar_senha: form.confirmPassword,
       })
       setDone(true)
     } catch (error) {

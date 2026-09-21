@@ -1,21 +1,49 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import UsersSection from './UsersSection'
-import { formatarUltimoAcesso, iniciais, usuariosParaCsv } from './users/usersData'
+import {
+  USUARIOS_EXEMPLO,
+  formatarUltimoAcesso,
+  iniciais,
+  usuariosParaCsv,
+} from './users/usersData'
 
-/**
- * Testes da tela de Usuários.
- *
- * A lista é um placeholder local (ver `usersData.js`), então o que se verifica
- * aqui é o comportamento da interface: filtro, ordenação, paginação, ações da
- * linha e os diálogos. Quando a Fase 2 ligar o endpoint, estes testes seguem
- * válidos — muda a origem dos dados, não o contrato da tela.
- */
+vi.mock('../../../services/pdConnectApi', () => ({
+  listUsuarios: vi.fn(),
+  createUsuario: vi.fn(),
+  updateUsuario: vi.fn(),
+  setSituacaoUsuario: vi.fn(),
+  reenviarConvite: vi.fn(),
+}))
+
+const api = await import('../../../services/pdConnectApi')
+
+function comoApi(usuario) {
+  return {
+    id_usuario: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    papel: usuario.perfil,
+    situacao: usuario.status,
+    instituicao: usuario.instituicao,
+    ultimo_acesso: usuario.ultimoAcesso
+      ? new Date(usuario.ultimoAcesso).toISOString()
+      : null,
+    aguardando_primeiro_acesso: false,
+  }
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  api.listUsuarios.mockResolvedValue({
+    results: USUARIOS_EXEMPLO.map(comoApi),
+  })
+})
+
 async function renderUsuarios() {
   const resultado = render(<UsersSection />)
 
-  // A tabela nasce em estado de carregamento (esqueleto) por um instante.
   await screen.findByText('Maria Ferreira', {}, { timeout: 2000 })
 
   return resultado
@@ -26,6 +54,12 @@ function linhaDe(nome) {
 }
 
 describe('UsersSection', () => {
+  it('busca a lista na API ao montar', async () => {
+    await renderUsuarios()
+
+    expect(api.listUsuarios).toHaveBeenCalledTimes(1)
+  })
+
   it('mostra o esqueleto antes da lista', async () => {
     render(<UsersSection />)
 
@@ -34,6 +68,20 @@ describe('UsersSection', () => {
     await waitFor(() => {
       expect(document.querySelectorAll('.admin-table__skeleton-row')).toHaveLength(0)
     })
+  })
+
+  it('avisa e oferece nova tentativa quando a API falha', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockRejectedValueOnce(new Error('Servidor indisponível.'))
+
+    render(<UsersSection />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Servidor indisponível.')
+
+    api.listUsuarios.mockResolvedValueOnce({ results: USUARIOS_EXEMPLO.map(comoApi) })
+    await user.click(screen.getByRole('button', { name: /tentar de novo/i }))
+
+    expect(await screen.findByText('Maria Ferreira')).toBeInTheDocument()
   })
 
   it('resume a base nos quatro indicadores', async () => {
@@ -80,7 +128,7 @@ describe('UsersSection', () => {
 
     expect(primeiroNome()).toBe('Administração da plataforma')
 
-    await user.click(cabecalho) // já estava em 'nome' asc -> passa a desc
+    await user.click(cabecalho)
 
     expect(primeiroNome()).toBe('Rafael Antunes')
     expect(cabecalho.closest('th')).toHaveAttribute('aria-sort', 'descending')
@@ -102,24 +150,61 @@ describe('UsersSection', () => {
 
     expect(screen.getByText('Mostrando 1–12 de 12')).toBeInTheDocument()
   })
+})
 
-  it('cria um usuário pelo formulário e avisa o resultado', async () => {
+describe('UsersSection — provisionamento', () => {
+  it('cria a conta pela API e avisa que o convite saiu', async () => {
     const user = userEvent.setup()
+    api.createUsuario.mockResolvedValue({
+      id_usuario: 99,
+      nome: 'Ana Prado',
+      email: 'ana.prado@ac2microbiologia.com.br',
+      papel: 'supervisor',
+      situacao: 'ativo',
+      instituicao: 'AC2 Microbiologia',
+      ultimo_acesso: null,
+      aguardando_primeiro_acesso: true,
+    })
     await renderUsuarios()
 
     await user.click(screen.getByRole('button', { name: /novo usuário/i }))
 
     const dialogo = screen.getByRole('dialog')
     await user.type(within(dialogo).getByLabelText('Nome'), 'Ana Prado')
-    await user.type(within(dialogo).getByLabelText('E-mail'), 'ana.prado@ac2microbiologia.com.br')
-    await user.click(within(dialogo).getByRole('button', { name: /criar usuário/i }))
+    await user.type(
+      within(dialogo).getByLabelText('E-mail'),
+      'ana.prado@ac2microbiologia.com.br'
+    )
+    await user.click(within(dialogo).getByRole('button', { name: /criar conta e enviar convite/i }))
 
-    expect(await screen.findByText('Usuário criado com sucesso.')).toBeInTheDocument()
+    expect(api.createUsuario).toHaveBeenCalledWith({
+      nome: 'Ana Prado',
+      email: 'ana.prado@ac2microbiologia.com.br',
+      papel: 'supervisor',
+    })
+    expect(
+      await screen.findByText('Convite enviado para ana.prado@ac2microbiologia.com.br.')
+    ).toBeInTheDocument()
     expect(screen.getByText('Ana Prado')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('recusa e-mail inválido sem fechar o formulário', async () => {
+  it('nao oferece Pesquisador no formulario de criacao', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /novo usuário/i }))
+
+    const perfil = within(screen.getByRole('dialog')).getByLabelText('Perfil')
+    const opcoes = within(perfil).getAllByRole('option').map((o) => o.value)
+
+    expect(opcoes).not.toContain('pesquisador')
+    expect(opcoes).toEqual(
+      expect.arrayContaining(['supervisor', 'administrador', 'demandante'])
+    )
+  })
+
+  it('recusa e-mail invalido sem chamar a API', async () => {
     const user = userEvent.setup()
     await renderUsuarios()
 
@@ -128,54 +213,113 @@ describe('UsersSection', () => {
     const dialogo = screen.getByRole('dialog')
     await user.type(within(dialogo).getByLabelText('Nome'), 'Sem E-mail')
     await user.type(within(dialogo).getByLabelText('E-mail'), 'nao-e-um-email')
-    await user.click(within(dialogo).getByRole('button', { name: /criar usuário/i }))
+    await user.click(within(dialogo).getByRole('button', { name: /criar conta e enviar convite/i }))
 
     expect(within(dialogo).getByRole('alert')).toHaveTextContent('E-mail inválido.')
+    expect(api.createUsuario).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
-  it('exclui um usuário apenas depois da confirmação', async () => {
+  it('mostra o erro que a API devolveu e mantem o formulario aberto', async () => {
     const user = userEvent.setup()
+    api.createUsuario.mockRejectedValue(
+      new Error('usuario com este email já existe.')
+    )
     await renderUsuarios()
 
-    const linha = linhaDe('João Batista')
-    await user.click(within(linha).getByRole('button', { name: /ações para joão batista/i }))
-    await user.click(screen.getByRole('menuitem', { name: /excluir usuário/i }))
+    await user.click(screen.getByRole('button', { name: /novo usuário/i }))
 
     const dialogo = screen.getByRole('dialog')
-    expect(dialogo).toHaveTextContent(/não pode ser desfeita/i)
+    await user.type(within(dialogo).getByLabelText('Nome'), 'Repetida')
+    await user.type(within(dialogo).getByLabelText('E-mail'), 'maria.ferreira@ac2microbiologia.com.br')
+    await user.click(within(dialogo).getByRole('button', { name: /criar conta e enviar convite/i }))
 
-    await user.click(within(dialogo).getByRole('button', { name: /excluir usuário/i }))
-
-    expect(await screen.findByText('Usuário removido.')).toBeInTheDocument()
-    expect(screen.queryByText('João Batista')).not.toBeInTheDocument()
+    expect(await screen.findByText('usuario com este email já existe.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
+})
 
-  it('alterna a situação do acesso pelo menu da linha', async () => {
+describe('UsersSection — situação do acesso', () => {
+  it('inativa apenas depois da confirmacao, e nao oferece exclusao', async () => {
     const user = userEvent.setup()
+    api.setSituacaoUsuario.mockResolvedValue({
+      ...comoApi(USUARIOS_EXEMPLO.find((u) => u.nome === 'Maria Ferreira')),
+      situacao: 'inativo',
+    })
     await renderUsuarios()
 
     const linha = linhaDe('Maria Ferreira')
-    expect(within(linha).getByText('Ativo')).toBeInTheDocument()
-
     await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+
+    expect(screen.queryByRole('menuitem', { name: /excluir/i })).not.toBeInTheDocument()
+
     await user.click(screen.getByRole('menuitem', { name: /inativar acesso/i }))
 
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent(/perde o acesso na próxima requisição/i)
+    expect(api.setSituacaoUsuario).not.toHaveBeenCalled()
+
+    await user.click(within(dialogo).getByRole('button', { name: /^inativar$/i }))
+
+    expect(api.setSituacaoUsuario).toHaveBeenCalledWith(2, 'inativo')
     expect(within(linhaDe('Maria Ferreira')).getByText('Inativo')).toBeInTheDocument()
   })
 
-  it('mostra o estado vazio quando nenhum filtro casa', async () => {
+  it('oferece suspender para conta ativa e ativar para conta inativa', async () => {
     const user = userEvent.setup()
     await renderUsuarios()
 
-    await user.type(screen.getByLabelText(/buscar por nome ou e-mail/i), 'zzzz')
+    const ativa = linhaDe('Maria Ferreira')
+    await user.click(within(ativa).getByRole('button', { name: /ações para maria ferreira/i }))
+    expect(screen.getByRole('menuitem', { name: /suspender acesso/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /^ativar acesso$/i })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
 
-    const vazio = screen.getByText('Nenhum usuário encontrado.').closest('.table-empty')
-    expect(vazio).toBeInTheDocument()
+    const inativa = linhaDe('João Batista')
+    await user.click(within(inativa).getByRole('button', { name: /ações para joão batista/i }))
+    expect(screen.getByRole('menuitem', { name: /ativar acesso/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /inativar acesso/i })).not.toBeInTheDocument()
+  })
+})
 
-    await user.click(within(vazio).getByRole('button', { name: /limpar filtros/i }))
+describe('UsersSection — convite', () => {
+  it('so oferece reenviar convite a quem ainda nao definiu senha', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        { ...comoApi(USUARIOS_EXEMPLO[1]), aguardando_primeiro_acesso: true },
+        { ...comoApi(USUARIOS_EXEMPLO[7]), aguardando_primeiro_acesso: false },
+      ],
+    })
+    await renderUsuarios()
 
-    expect(screen.getByText('Maria Ferreira')).toBeInTheDocument()
+    const pendente = linhaDe('Maria Ferreira')
+    expect(within(pendente).getByText('Aguardando primeiro acesso')).toBeInTheDocument()
+    await user.click(within(pendente).getByRole('button', { name: /ações para maria ferreira/i }))
+    expect(screen.getByRole('menuitem', { name: /reenviar convite/i })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    const jaEntrou = linhaDe('Rafael Antunes')
+    await user.click(within(jaEntrou).getByRole('button', { name: /ações para rafael antunes/i }))
+    expect(screen.queryByRole('menuitem', { name: /reenviar convite/i })).not.toBeInTheDocument()
+  })
+
+  it('reenvia o convite pela API', async () => {
+    const user = userEvent.setup()
+    api.reenviarConvite.mockResolvedValue({ detail: 'Convite reenviado.' })
+    api.listUsuarios.mockResolvedValue({
+      results: [{ ...comoApi(USUARIOS_EXEMPLO[1]), aguardando_primeiro_acesso: true }],
+    })
+    await renderUsuarios()
+
+    const linha = linhaDe('Maria Ferreira')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /reenviar convite/i }))
+
+    expect(api.reenviarConvite).toHaveBeenCalledWith(2)
+    expect(
+      await screen.findByText(/novo convite enviado para maria\.ferreira@/i)
+    ).toBeInTheDocument()
   })
 })
 
@@ -215,5 +359,59 @@ describe('usersData', () => {
 
     expect(csv).toContain('"Empresa ""Alfa"""')
     expect(csv.split('\r\n')).toHaveLength(2)
+  })
+})
+
+describe('UsersSection — ficha da pessoa', () => {
+  it('abre a ficha clicando no nome, sem passar pelo menu', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent('maria.ferreira@ac2microbiologia.com.br')
+    expect(dialogo).toHaveTextContent('AC2 Microbiologia')
+    expect(within(dialogo).getByText('Ativo')).toBeInTheDocument()
+  })
+
+  it('o menu continua abrindo a mesma ficha', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    const linha = linhaDe('Maria Ferreira')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /visualizar perfil/i }))
+
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent('maria.ferreira@ac2microbiologia.com.br')
+    expect(dialogo).toHaveTextContent('AC2 Microbiologia')
+  })
+
+  it('a ficha leva para a edição e nao traz as acoes destrutivas', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    const ficha = screen.getByRole('dialog')
+    expect(within(ficha).queryByRole('button', { name: /suspender|inativar/i })).not.toBeInTheDocument()
+
+    await user.click(within(ficha).getByRole('button', { name: /editar usuário/i }))
+
+    const formulario = screen.getByRole('dialog')
+    expect(within(formulario).getByLabelText('Nome')).toHaveValue('Maria Ferreira')
+  })
+
+  it('mostra quem ainda nao acessou igual à tabela', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [{ ...comoApi(USUARIOS_EXEMPLO[1]), aguardando_primeiro_acesso: true }],
+    })
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Aguardando primeiro acesso')
   })
 })

@@ -12,7 +12,7 @@
 }
 
 .btn-ghost {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: var(--bg-chip);
   border: 1px solid var(--border-strong);
 }
@@ -22,9 +22,6 @@
   background: var(--bg-chip-strong);
 }
 
-// O laranja da marca cru reprova o AA da WCAG com texto por cima (3,0:1).
-// --accent-cta-bg / --accent-cta-text sao o par corrigido, definido por tema
-// em base/_globals.scss e derivado de --accent-primary em runtime.
 .btn-primary {
   color: var(--accent-cta-text);
   background: var(--accent-cta-bg);
@@ -41,7 +38,7 @@
 }
 
 .btn-outline {
-  color: var(--accent-primary);
+  color: var(--accent-primary-text);
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
 }

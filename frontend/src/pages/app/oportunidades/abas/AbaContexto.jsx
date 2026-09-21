@@ -1,9 +1,7 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../../lib/icons'
+import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { ORIGENS, origemLabel } from '../oportunidadesData'
 
-/** Contexto da oportunidade: o que entrou, de onde veio e o que já se sabe. */
 export default function AbaContexto({ oportunidade }) {
   const origem = ORIGENS.find((item) => item.id === oportunidade.origem)
 
@@ -67,18 +65,13 @@ export default function AbaContexto({ oportunidade }) {
             )}
           </div>
 
-          {/*
-            Lacuna é vocabulário da baseline (CONTEXT.md §4): competência
-            necessária sem correspondência suficiente na rede interna. Aparece
-            aqui porque é informação de decisão, não detalhe do matching.
-          */}
           {oportunidade.lacunas.length > 0 ? (
             <div className="oportunidade-bloco">
               <h3 className="oportunidade-bloco__titulo">Lacunas de competência</h3>
               <div className="competencia-lista">
                 {oportunidade.lacunas.map((lacuna) => (
                   <span className="lacuna-tag" key={lacuna}>
-                    <FontAwesomeIcon icon={appIcons.warning} aria-hidden="true" />
+                    <Icone icon={appIcons.warning} aria-hidden="true" />
                     {lacuna}
                   </span>
                 ))}
@@ -97,7 +90,7 @@ export default function AbaContexto({ oportunidade }) {
                 </ul>
                 <p className="oportunidade-bloco__nota">
                   Sugestão do matching, validada pelo Supervisor. Não há convite,
-                  aceite ou recusa pelo pesquisador (RN-A06).
+                  aceite ou recusa pelo pesquisador.
                 </p>
               </>
             ) : (

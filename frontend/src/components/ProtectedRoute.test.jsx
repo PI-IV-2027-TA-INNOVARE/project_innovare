@@ -4,14 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProtectedRoute from './ProtectedRoute'
 import { ROLES } from '../lib/roles'
 
-/**
- * Guarda de rota.
- *
- * O caso que motivou estes testes: `/oportunidades` estava sob o guard genérico,
- * então qualquer autenticado chegava lá — e o Administrador via a tela do
- * Pesquisador, com o aviso de que "seria indicado para uma equipe potencial".
- * A baseline não prevê isso para ele (CONTEXT.md §3).
- */
 const auth = { user: null, isAuthenticated: true, isBootstrapping: false }
 
 vi.mock('../context/AuthContext', () => ({

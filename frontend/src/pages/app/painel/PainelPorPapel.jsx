@@ -1,31 +1,26 @@
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../../lib/icons'
+import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
-  OPORTUNIDADES_EXEMPLO,
-  disponibilizadasPara,
+  listOportunidades,
+  listarRede,
+  obterMeuPerfil,
+} from '../../../services/pdConnectApi'
+import {
+  agruparPorSituacao,
+  daApi,
   resumoPorSituacao,
   situacaoLabel,
 } from '../oportunidades/oportunidadesData'
-import { REDE_EXEMPLO, completudeDoPerfil } from '../rede/redeData'
-
-/**
- * Conteúdo do painel por papel.
- *
- * O painel é a porta de entrada de cada ator, e "porta de entrada" quer dizer
- * responder a uma pergunta só: **o que espera por mim agora?** Por isso cada
- * papel vê números diferentes — e o Pesquisador não vê fila de decisão nenhuma,
- * porque decidir não é dele (RN-A07).
- *
- * Dados de exemplo locais, como no resto da Fase 2/3.1.
- */
+import { resumoDoDemandante } from '../problemas/problemasData'
+import { completudeDoPerfil, membroDaApi, perfilDaApi } from '../rede/redeData'
 
 function Tile({ icon, label, value, tone, to }) {
   const conteudo = (
     <>
-      <FontAwesomeIcon icon={icon} className="stat-card__icon" />
+      <Icone icon={icon} className="stat-card__icon" />
       <div>
         <p className="stat-card__label">{label}</p>
         <p className="stat-card__value">{value}</p>
@@ -35,29 +30,28 @@ function Tile({ icon, label, value, tone, to }) {
 
   const className = `stat-card${tone ? ` stat-card--${tone}` : ''}`
 
-  return to ? (
-    <Link className={className} to={to}>{conteudo}</Link>
-  ) : (
-    <article className={className}>{conteudo}</article>
+  if (!to) {
+    return <article className={className}>{conteudo}</article>
+  }
+
+  return (
+    <Link className={`${className} stat-card--link`} to={to}>
+      {conteudo}
+      <Icone icon={appIcons.next} className="stat-card__seta" />
+    </Link>
   )
 }
 
-/**
- * `linkavel` existe porque o destino não serve a todo mundo: o Demandante
- * acompanha os PRÓPRIOS problemas em `/problemas/:id`, e `/oportunidades/:id` é
- * rota de Supervisor e Pesquisador. Link que leva a "acesso restrito" é pior que
- * item sem link — parece defeito, e o usuário culpa a plataforma.
- */
-function ListaDeOportunidades({ itens, vazio, linkavel = true }) {
+function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
   if (itens.length === 0) {
     return <p className="painel-lista__vazio">{vazio}</p>
   }
 
   return (
     <ul className="painel-lista">
-      {itens.map((item) => {
-        const conteudo = (
-          <>
+      {itens.map((item) => (
+        <li key={item.id}>
+          <Link className="painel-lista__item" to={`${base}/${item.id}`}>
             <span className="painel-lista__texto">
               <span className="painel-lista__titulo">{item.titulo}</span>
               <span className="painel-lista__meta">
@@ -67,47 +61,87 @@ function ListaDeOportunidades({ itens, vazio, linkavel = true }) {
             <span className={`fluxo-badge fluxo-badge--${item.situacao}`}>
               {situacaoLabel(item.situacao)}
             </span>
-          </>
-        )
-
-        return (
-          <li key={item.id}>
-            {linkavel ? (
-              <Link className="painel-lista__item" to={`/oportunidades/${item.id}`}>
-                {conteudo}
-              </Link>
-            ) : (
-              <div className="painel-lista__item is-static">{conteudo}</div>
-            )}
-          </li>
-        )
-      })}
+          </Link>
+        </li>
+      ))}
     </ul>
   )
 }
 
-function BlocoSupervisor() {
-  const indicadores = resumoPorSituacao(OPORTUNIDADES_EXEMPLO)
+function BlocoSupervisor({ oportunidades, rede }) {
+  const indicadores = resumoPorSituacao(oportunidades)
 
-  const aguardando = OPORTUNIDADES_EXEMPLO
+  const aguardando = oportunidades
     .filter((item) => item.situacao === 'aguardando_decisao')
     .slice(0, 3)
 
-  const semCompetencia = REDE_EXEMPLO.filter((pessoa) => pessoa.competencias.length === 0).length
+  const semCompetencia = rede.filter((pessoa) => pessoa.competencias.length === 0).length
 
   return (
     <>
       <div className="stat-grid">
-        <Tile icon={appIcons.folder} label="Oportunidades" value={indicadores.total} to="/oportunidades" />
-        <Tile icon={appIcons.flow} label="Em andamento" value={indicadores.emAndamento} tone="ok" to="/oportunidades" />
-        <Tile icon={appIcons.decision} label="Aguardando sua decisão" value={indicadores.aguardandoDecisao} to="/oportunidades" />
-        <Tile icon={appIcons.warning} label="Perfis invisíveis ao matching" value={semCompetencia} tone="alert" to="/rede" />
+        <Tile
+          icon={appIcons.folder}
+          label="Oportunidades"
+          value={indicadores.total}
+          to="/oportunidades"
+        />
+        <Tile
+          icon={appIcons.flow}
+          label="Em andamento"
+          value={indicadores.emAndamento}
+          tone="ok"
+          to="/oportunidades"
+        />
+        <Tile
+          icon={appIcons.decision}
+          label="Aguardando sua decisão"
+          value={indicadores.aguardandoDecisao}
+          to="/oportunidades?situacao=aguardando_decisao"
+        />
+        <Tile
+          icon={appIcons.warning}
+          label="Perfis invisíveis ao matching"
+          value={semCompetencia}
+          tone={semCompetencia > 0 ? 'alert' : undefined}
+          to="/rede"
+        />
       </div>
 
       <section className="painel-secao">
         <div className="painel-secao__header">
-          <h2 className="painel-secao__titulo">Esperando sua decisão</h2>
+          <h2 className="painel-secao__titulo">Oportunidades por etapa</h2>
           <Link className="link-button" to="/oportunidades">Ver a fila</Link>
+        </div>
+
+        {oportunidades.length > 0 ? (
+          <ul className="painel-etapas">
+            {agruparPorSituacao(oportunidades).map((situacao) => (
+              <li key={situacao.id}>
+                <Link className="painel-etapa" to={`/oportunidades?situacao=${situacao.id}`}>
+                  <span className={`fluxo-badge fluxo-badge--${situacao.id}`}>
+                    {situacao.label}
+                  </span>
+                  <span className="painel-etapa__total">{situacao.total}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="painel-lista__vazio">Nenhuma oportunidade na fila ainda.</p>
+        )}
+
+        <p className="painel-secao__nota">
+          Cada etapa abre a fila já filtrada por ela.
+        </p>
+      </section>
+
+      <section className="painel-secao">
+        <div className="painel-secao__header">
+          <h2 className="painel-secao__titulo">Esperando sua decisão</h2>
+          <Link className="link-button" to="/oportunidades?situacao=aguardando_decisao">
+            Ver a fila
+          </Link>
         </div>
 
         <ListaDeOportunidades
@@ -119,24 +153,18 @@ function BlocoSupervisor() {
   )
 }
 
-function BlocoPesquisador({ nome }) {
-  const minhas = disponibilizadasPara(nome)
-
-  // O perfil do exemplo local nasce sem experiência preenchida — é o que a
-  // barra do /perfil mostra, e o painel repete o número para dar o empurrão.
-  const completude = completudeDoPerfil({
-    titulacao: 'mestrado',
-    competencias: ['Microbiologia de alimentos', 'Fermentação'],
-    tecnicas: ['PCR em tempo real'],
-    linhas: ['Bioinsumos agrícolas'],
-    experiencia: '',
-    disponibilidade: 'parcial',
-  })
+function BlocoPesquisador({ oportunidades, perfil }) {
+  const completude = completudeDoPerfil(perfil || {})
 
   return (
     <>
       <div className="stat-grid">
-        <Tile icon={appIcons.folder} label="Oportunidades comigo" value={minhas.length} to="/oportunidades" />
+        <Tile
+          icon={appIcons.folder}
+          label="Oportunidades comigo"
+          value={oportunidades.length}
+          to="/oportunidades"
+        />
         <Tile
           icon={appIcons.profile}
           label="Perfil completo"
@@ -153,14 +181,10 @@ function BlocoPesquisador({ nome }) {
         </div>
 
         <ListaDeOportunidades
-          itens={minhas.slice(0, 3)}
+          itens={oportunidades.slice(0, 3)}
           vazio="Você ainda não integra nenhuma equipe potencial."
         />
 
-        {/*
-          Dito na tela, não só na documentação: o matching sugere, o Supervisor
-          valida. Sem isso o pesquisador procura o botão de aceitar (RN-A06).
-        */}
         <p className="painel-secao__nota">
           A composição da equipe é sugerida pelo matching e validada pelo
           Supervisor — não há convite para aceitar ou recusar.
@@ -170,31 +194,43 @@ function BlocoPesquisador({ nome }) {
   )
 }
 
-function BlocoDemandante({ nome }) {
-  // Pelo usuário, nunca por nome fixo: com a organização escrita no código,
-  // qualquer Demandante que entrasse veria os problemas de outra empresa.
-  const meus = OPORTUNIDADES_EXEMPLO.filter((item) => item.demandante === nome)
+function BlocoDemandante({ oportunidades }) {
+  const indicadores = resumoDoDemandante(oportunidades)
 
   return (
     <>
       <div className="stat-grid">
-        <Tile icon={appIcons.folder} label="Problemas cadastrados" value={meus.length} />
+        <Tile
+          icon={appIcons.folder}
+          label="Problemas cadastrados"
+          value={indicadores.total}
+          to="/problemas"
+        />
         <Tile
           icon={appIcons.flow}
           label="Em análise pela AC2"
-          value={meus.filter((item) => item.situacao !== 'arquivada').length}
+          value={indicadores.emAnalise}
           tone="ok"
+          to="/problemas"
+        />
+        <Tile
+          icon={appIcons.warning}
+          label="Aguardando você"
+          value={indicadores.aguardandoVoce}
+          tone={indicadores.aguardandoVoce > 0 ? 'alert' : undefined}
+          to="/problemas?situacao=revisar"
         />
       </div>
 
       <section className="painel-secao">
         <div className="painel-secao__header">
           <h2 className="painel-secao__titulo">Seus problemas</h2>
+          <Link className="link-button" to="/problemas">Ver todos</Link>
         </div>
 
         <ListaDeOportunidades
-          itens={meus}
-          linkavel={false}
+          itens={oportunidades.slice(0, 3)}
+          base="/problemas"
           vazio="Você ainda não cadastrou nenhum problema."
         />
 
@@ -208,9 +244,75 @@ function BlocoDemandante({ nome }) {
 }
 
 export default function PainelPorPapel({ user }) {
-  if (user?.role === ROLES.SUPERVISOR) return <BlocoSupervisor />
-  if (user?.role === ROLES.PESQUISADOR) return <BlocoPesquisador nome={user?.displayName || ''} />
-  if (user?.role === ROLES.DEMANDANTE) return <BlocoDemandante nome={user?.displayName || ''} />
+  const papel = user?.role
 
-  return null
+  const [oportunidades, setOportunidades] = useState([])
+  const [rede, setRede] = useState([])
+  const [perfil, setPerfil] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+
+  const carregar = useCallback(async () => {
+    if (!papel || papel === ROLES.ADMINISTRADOR) {
+      setCarregando(false)
+      return
+    }
+
+    setCarregando(true)
+    setErro('')
+
+    try {
+      const fila = await listOportunidades()
+      setOportunidades((fila.results || fila).map(daApi))
+
+      if (papel === ROLES.SUPERVISOR) {
+        const membros = await listarRede()
+        setRede((membros.results || membros).map(membroDaApi))
+      }
+
+      if (papel === ROLES.PESQUISADOR) {
+        const meu = await obterMeuPerfil().catch(() => null)
+        setPerfil(meu ? perfilDaApi(meu) : null)
+      }
+    } catch (falha) {
+      setOportunidades([])
+      setErro(falha?.message || 'Não foi possível carregar o painel.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [papel])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
+
+  if (!papel || papel === ROLES.ADMINISTRADOR) return null
+
+  if (carregando) {
+    return (
+      <p className="painel-lista__vazio" role="status">Carregando o seu painel...</p>
+    )
+  }
+
+  if (erro) {
+    return (
+      <div className="admin-callout" role="alert">
+        <Icone icon={appIcons.warning} className="admin-callout__icon" />
+        <p className="admin-callout__text">{erro}</p>
+        <button type="button" className="link-button" onClick={carregar}>
+          Tentar de novo
+        </button>
+      </div>
+    )
+  }
+
+  if (papel === ROLES.SUPERVISOR) {
+    return <BlocoSupervisor oportunidades={oportunidades} rede={rede} />
+  }
+
+  if (papel === ROLES.PESQUISADOR) {
+    return <BlocoPesquisador oportunidades={oportunidades} perfil={perfil} />
+  }
+
+  return <BlocoDemandante oportunidades={oportunidades} />
 }

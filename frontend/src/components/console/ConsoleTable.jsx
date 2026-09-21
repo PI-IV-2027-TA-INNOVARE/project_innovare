@@ -1,16 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../../lib/icons'
+import { Icone, appIcons } from '../../lib/icons'
 import { iniciais, tomDoAvatar } from '../../lib/people'
-
-/**
- * Peças de tabela do console, compartilhadas pelas telas de gestão.
- *
- * Uma pessoa aparece em Usuários (Administrador), na Rede interna (Supervisor) e
- * no próprio perfil. Avatar, esqueleto de carregamento e menu de linha vivem
- * aqui para que as três leiam igual — e para que corrigir um deles corrija os
- * três.
- */
 
 export function Avatar({ nome, size }) {
   return (
@@ -40,14 +30,6 @@ export function SkeletonRows({ colunas, linhas = 6 }) {
   ))
 }
 
-/**
- * Menu de ações da linha.
- *
- * `items` é a lista de ações — cada uma com `label`, `icon`, `onSelect` e um
- * `tone` opcional (`danger`). O gatilho tem 44px de área clicável (WCAG 2.5.8) e
- * nome acessível com o nome do registro: "Ações" repetido doze vezes não diz a
- * um leitor de tela de qual linha ele é.
- */
 export function RowActionsMenu({ label, items }) {
   const [aberto, setAberto] = useState(false)
   const containerRef = useRef(null)
@@ -90,7 +72,7 @@ export function RowActionsMenu({ label, items }) {
         aria-label={`Ações para ${label}`}
         onClick={() => setAberto((atual) => !atual)}
       >
-        <FontAwesomeIcon icon={appIcons.more} />
+        <Icone icon={appIcons.more} />
       </button>
 
       {aberto ? (
@@ -106,7 +88,7 @@ export function RowActionsMenu({ label, items }) {
                 item.onSelect()
               }}
             >
-              <FontAwesomeIcon icon={item.icon} />
+              <Icone icon={item.icon} />
               {item.label}
             </button>
           ))}
@@ -116,7 +98,6 @@ export function RowActionsMenu({ label, items }) {
   )
 }
 
-/** Cabeçalho de coluna ordenável, com a seta aparecendo no hover. */
 export function SortableHeader({ coluna, ordem, onSort }) {
   const icone =
     ordem.campo !== coluna.id
@@ -134,16 +115,15 @@ export function SortableHeader({ coluna, ordem, onSort }) {
       aria-label={`Ordenar por ${coluna.label}`}
     >
       {coluna.label}
-      <FontAwesomeIcon icon={icone} className="sort-button__icon" />
+      <Icone icon={icone} className="sort-button__icon" />
     </button>
   )
 }
 
-/** Estado vazio de tabela, com a ação que faz sentido no contexto. */
 export function TableEmpty({ icon, title, text, action }) {
   return (
     <div className="table-empty">
-      <FontAwesomeIcon icon={icon || appIcons.users} className="table-empty__icon" />
+      <Icone icon={icon || appIcons.users} className="table-empty__icon" />
       <p className="table-empty__title">{title}</p>
       {text ? <p className="table-empty__text">{text}</p> : null}
       {action}

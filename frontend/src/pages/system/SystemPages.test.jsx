@@ -4,14 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AcessoRestritoPage from './AcessoRestritoPage'
 import NaoEncontradaPage from './NaoEncontradaPage'
 
-/**
- * Telas de estado de rota.
- *
- * O que estes testes fixam é a distinção que o app não fazia: "você não tem
- * acesso" e "esse endereço não existe" são situações diferentes, e mandar as
- * duas para o Painel em silêncio fazia o usuário abrir chamado sobre a coisa
- * errada.
- */
 const auth = { user: null, isAuthenticated: true }
 
 vi.mock('../../context/AuthContext', () => ({
@@ -64,9 +56,20 @@ describe('NaoEncontradaPage', () => {
     renderRota(NaoEncontradaPage, '/qualquer')
 
     expect(screen.getByRole('link', { name: 'Meu perfil' })).toBeInTheDocument()
-    // O Pesquisador não administra nada — oferecer /admin seria mandá-lo para
-    // outra parede.
     expect(screen.queryByRole('link', { name: 'Administração' })).not.toBeInTheDocument()
+  })
+
+  it('dá ao Demandante a porta de entrada dele, e não a do Administrador', () => {
+    auth.user = { role: 'demandante', displayName: 'Agroindústria Vale Verde' }
+
+    renderRota(NaoEncontradaPage, '/qualquer')
+
+    expect(screen.getByRole('link', { name: 'Meus problemas' })).toHaveAttribute(
+      'href',
+      '/problemas'
+    )
+    expect(screen.queryByRole('link', { name: 'Administração' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Oportunidades' })).not.toBeInTheDocument()
   })
 
   it('manda quem não está autenticado para o login', () => {

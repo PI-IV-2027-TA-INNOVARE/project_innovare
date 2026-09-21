@@ -1,5 +1,4 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { appIcons } from '../lib/icons'
+import { Icone, appIcons } from '../lib/icons'
 import { useTheme } from '../context/ThemeContext'
 
 export default function ThemeToggle({ className = '' }) {
@@ -14,7 +13,7 @@ export default function ThemeToggle({ className = '' }) {
       title={label}
       onClick={toggleTheme}
     >
-      <FontAwesomeIcon icon={isDark ? appIcons.themeLight : appIcons.themeDark} />
+      <Icone icon={isDark ? appIcons.themeLight : appIcons.themeDark} />
     </button>
   )
 }

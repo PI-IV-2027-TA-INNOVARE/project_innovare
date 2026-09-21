@@ -1,24 +1,8 @@
-/**
- * Oportunidades de P&D — dados e vocabulário.
- *
- * Placeholder LOCAL, sinalizado na interface; os endpoints são da Fase 3.1
- * (EP03). O que já é definitivo aqui é a LINGUAGEM: Oportunidade, Problema
- * Externo, Ideia Interna, Equipe Potencial, Lacuna, Decisão — tudo vem do
- * glossário em `CONTEXT.md` §4, não de mim.
- *
- * ATENÇÃO — as situações abaixo são um espelho do fluxo de valor (`CONTEXT.md`
- * §5), não uma máquina de estados aprovada. Quais transições são válidas, quem
- * pode dispará-las e o que acontece com uma oportunidade "Revisar" é decisão do
- * PO (P13 no plano). A tela desenha o fluxo; não o legisla.
- */
-
-/** Origem da oportunidade — as duas portas de entrada do produto (D05). */
 export const ORIGENS = Object.freeze([
   { id: 'externo', label: 'Problema externo', descricao: 'Trazido por um Demandante Externo.' },
-  { id: 'interna', label: 'Ideia interna', descricao: 'Cadastrada por um Supervisor (RN-A03).' },
+  { id: 'interna', label: 'Ideia interna', descricao: 'Cadastrada por um Supervisor.' },
 ])
 
-/** Etapas do fluxo, na ordem de `CONTEXT.md` §5. */
 export const SITUACOES = Object.freeze([
   { id: 'entrada', label: 'Entrada', etapa: 1 },
   { id: 'estruturacao', label: 'Em estruturação', etapa: 2 },
@@ -31,12 +15,6 @@ export const SITUACOES = Object.freeze([
   { id: 'arquivada', label: 'Arquivada', etapa: 7, desfecho: true },
 ])
 
-/**
- * As três decisões do Supervisor (RF11 / RN-A07).
- *
- * A decisão é sempre humana e sempre registrada — a IA não aprova, não reprova
- * e não arquiva nada (AGENTS.md §0.2).
- */
 export const DECISOES = Object.freeze([
   {
     id: 'continuar',
@@ -112,6 +90,34 @@ export const OPORTUNIDADES_EXEMPLO = Object.freeze([
     ],
   },
   {
+    id: 'OP-2026-012',
+    titulo: 'Vida de prateleira de suco integral',
+    origem: 'externo',
+    demandante: 'Agroindústria Vale Verde',
+    responsavel: 'Rafael Antunes',
+    situacao: 'revisar',
+    resumo: 'Perda de qualidade sensorial antes do prazo declarado no rótulo.',
+    contexto: 'Ocorre no lote de verão, sem alteração de processo conhecida.',
+    competencias: [],
+    lacunas: [],
+    equipe: [],
+    criadaEm: agora - 30 * DIA,
+    atualizadaEm: agora - 3 * DIA,
+    decisao: {
+      tipo: 'revisar',
+      justificativa:
+        'Faltam os laudos microbiológicos dos lotes afetados e a curva de temperatura do transporte. Sem isso não dá para separar falha de processo de falha de cadeia fria.',
+      autor: 'Rafael Antunes',
+      em: agora - 3 * DIA,
+    },
+    equipePara: [],
+    historico: [
+      { id: 1, em: agora - 30 * DIA, categoria: 'oportunidade', ator: 'Agroindústria Vale Verde', texto: 'Problema externo cadastrado.' },
+      { id: 2, em: agora - 25 * DIA, categoria: 'copiloto', ator: 'Copiloto IA', texto: 'Perguntas orientadoras geradas a partir do relato.' },
+      { id: 3, em: agora - 3 * DIA, categoria: 'decisao', ator: 'Rafael Antunes', texto: 'Decisão registrada: Revisar.' },
+    ],
+  },
+  {
     id: 'OP-2026-011',
     titulo: 'Cultura starter para queijo artesanal',
     origem: 'interna',
@@ -184,27 +190,75 @@ export const OPORTUNIDADES_EXEMPLO = Object.freeze([
   },
 ])
 
+export const NUCLEO_INTERNO = 'Núcleo de P&D — AC2'
+
+const TEXTO_DO_EVENTO = Object.freeze({
+  oportunidade_cadastrada: 'Oportunidade cadastrada.',
+  contexto_atualizado: 'Contexto atualizado pelo Núcleo de P&D.',
+  complementacao_enviada: 'Complementação enviada pelo demandante.',
+  anexo_enviado: 'Documento anexado ao registro.',
+  decisao_continuar: 'Decisão registrada: Continuar.',
+  decisao_revisar: 'Decisão registrada: Revisar.',
+  decisao_arquivar: 'Decisão registrada: Arquivar.',
+})
+
+export function decisaoDaApi(ultima) {
+  if (!ultima) return null
+
+  return {
+    tipo: ultima.tipo,
+    justificativa: ultima.justificativa || '',
+    autor: ultima.autor_nome || '',
+    em: Date.parse(ultima.registrada_em),
+  }
+}
+
+export function eventoDaApi(evento, indice) {
+  return {
+    id: `${evento.ocorrido_em}-${indice}`,
+    em: Date.parse(evento.ocorrido_em),
+    categoria: evento.categoria,
+    ator: evento.ator || 'Sistema',
+    texto:
+      TEXTO_DO_EVENTO[evento.tipo] ||
+      String(evento.tipo || '').replace(/[._]/g, ' '),
+  }
+}
+
+export function daApi(registro) {
+  return {
+    id: registro.codigo,
+    titulo: registro.titulo,
+    origem: registro.origem,
+    demandante: registro.demandante_nome || NUCLEO_INTERNO,
+    responsavel: registro.responsavel_nome || '',
+    situacao: registro.situacao,
+    resumo: registro.resumo || '',
+    contexto: registro.contexto || '',
+    totalAnexos: registro.total_anexos || 0,
+    criadaEm: Date.parse(registro.criada_em),
+    atualizadaEm: Date.parse(registro.atualizada_em),
+    decisao: decisaoDaApi(registro.ultima_decisao),
+    competencias: [],
+    equipe: [],
+    lacunas: [],
+  }
+}
+
 const rotulo = (lista, id) => lista.find((item) => item.id === id)?.label || id
 
 export const origemLabel = (id) => rotulo(ORIGENS, id)
 export const situacaoLabel = (id) => rotulo(SITUACOES, id)
 export const decisaoLabel = (id) => rotulo(DECISOES, id)
 
-/** Situações que ainda estão em curso — o oposto de um desfecho registrado. */
 export function emAndamento(oportunidade) {
   return !SITUACOES.find((situacao) => situacao.id === oportunidade.situacao)?.desfecho
 }
 
-/**
- * O que o Pesquisador enxerga: apenas as oportunidades em que ele integra a
- * equipe potencial (D02). Não há catálogo para navegar, e não há aceite nem
- * recusa (RN-A06 / D07) — a lista é de acompanhamento, não de escolha.
- */
 export function disponibilizadasPara(nome, oportunidades = OPORTUNIDADES_EXEMPLO) {
   return oportunidades.filter((oportunidade) => oportunidade.equipePara.includes(nome))
 }
 
-/** Contagem por etapa, para os indicadores do painel e da fila. */
 export function resumoPorSituacao(oportunidades) {
   return {
     total: oportunidades.length,
@@ -212,4 +266,11 @@ export function resumoPorSituacao(oportunidades) {
     aguardandoDecisao: oportunidades.filter((item) => item.situacao === 'aguardando_decisao').length,
     comLacuna: oportunidades.filter((item) => item.lacunas.length > 0).length,
   }
+}
+
+export function agruparPorSituacao(oportunidades) {
+  return SITUACOES.map((situacao) => ({
+    ...situacao,
+    total: oportunidades.filter((item) => item.situacao === situacao.id).length,
+  })).filter((situacao) => situacao.total > 0)
 }
