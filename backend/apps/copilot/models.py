@@ -23,10 +23,12 @@ class AutorMensagem(models.TextChoices):
 
 
 class TipoLacuna(models.TextChoices):
-    """O glossario define tres usos para "lacuna" (`CONTEXT.md` secao 4)."""
+    """Dois dos tres usos do glossario (`CONTEXT.md` secao 4). O terceiro, a
+    lacuna de competencia, tem tabela propria no diagrama do Arquiteto:
+    `matching.LacunaCompetenciaEquipe`. Ela e da equipe gerada, nao da
+    oportunidade - a mesma proposta produz equipes com lacunas diferentes."""
 
     PROPOSTA = 'proposta', 'Lacuna da proposta'
-    COMPETENCIA = 'competencia', 'Lacuna de competencia'
     PRE_ANALISE = 'pre_analise', 'Lacuna da pre-analise'
 
 
@@ -197,18 +199,16 @@ class Lacuna(models.Model):
     tipo = models.CharField(
         max_length=12, choices=TipoLacuna.choices, db_column='tipo'
     )
+    campo_afetado = models.CharField(
+        max_length=120, blank=True, default='', db_column='campo_afetado'
+    )
     descricao = models.TextField(db_column='descricao')
+    recomendacao = models.TextField(
+        blank=True, default='', db_column='recomendacao'
+    )
     severidade = models.CharField(
         max_length=6, choices=Severidade.choices, null=True, blank=True,
         db_column='severidade',
-    )
-    competencia_necessaria = models.ForeignKey(
-        'competencies.CompetenciaNecessaria',
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name='lacunas',
-        db_column='id_competencia_necessaria',
     )
     pre_analise = models.ForeignKey(
         'maturity.PreAnalise',
@@ -233,7 +233,7 @@ class Lacuna(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'lacuna'
+        db_table = 'lacuna_proposta'
         verbose_name_plural = 'lacunas'
         indexes = [
             models.Index(

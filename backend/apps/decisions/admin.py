@@ -13,7 +13,7 @@ from core.admin import AdminSomenteLeitura
 
 @admin.register(Decisao)
 class DecisaoAdmin(AdminSomenteLeitura):
-    list_display = ['oportunidade', 'tipo', 'autor', 'registrada_em']
-    list_filter = ['tipo']
-    search_fields = ['oportunidade__codigo', 'justificativa']
+    list_display = ['oportunidade', 'tipo_decisao', 'responsavel', 'registrada_em']
+    list_filter = ['tipo_decisao']
+    search_fields = ['oportunidade__codigo', 'observacoes']
     date_hierarchy = 'registrada_em'

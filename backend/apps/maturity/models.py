@@ -59,7 +59,7 @@ class CriterioPreAnalise(models.Model):
     vigente_ate = models.DateField(null=True, blank=True, db_column='vigente_ate')
 
     class Meta:
-        db_table = 'criterio_pre_analise'
+        db_table = 'criterio_referencia_pipe'
         verbose_name = 'criterio de pre-analise'
         verbose_name_plural = 'criterios de pre-analise'
         ordering = ['versao', 'dimensao', 'codigo']
@@ -81,11 +81,11 @@ class PreAnalise(models.Model):
     id_pre_analise = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, db_column='id_pre_analise'
     )
-    oportunidade = models.ForeignKey(
-        'opportunities.Oportunidade',
+    proposta = models.ForeignKey(
+        'copilot.PropostaEstruturada',
         on_delete=models.CASCADE,
         related_name='pre_analises',
-        db_column='id_oportunidade',
+        db_column='id_proposta',
     )
     versao_criterios = models.CharField(max_length=12, db_column='versao_criterios')
     versao_proposta = models.PositiveIntegerField(db_column='versao_proposta')
@@ -111,7 +111,7 @@ class PreAnalise(models.Model):
     erro = models.TextField(blank=True, default='', db_column='erro')
 
     class Meta:
-        db_table = 'pre_analise'
+        db_table = 'pre_analise_maturidade'
         verbose_name = 'pre-analise'
         verbose_name_plural = 'pre-analises'
         ordering = ['-executada_em']
@@ -138,7 +138,7 @@ class PreAnaliseDimensao(models.Model):
     ordem = models.PositiveSmallIntegerField(default=0, db_column='ordem')
 
     class Meta:
-        db_table = 'pre_analise_dimensao'
+        db_table = 'dimensao_analise'
         verbose_name = 'dimensao da pre-analise'
         verbose_name_plural = 'dimensoes da pre-analise'
         ordering = ['pre_analise', 'ordem']
@@ -195,6 +195,6 @@ class Recomendacao(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'recomendacao'
+        db_table = 'recomendacao_adequacao'
         verbose_name_plural = 'recomendacoes'
         ordering = ['-criado_em']

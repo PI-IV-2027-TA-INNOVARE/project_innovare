@@ -224,8 +224,25 @@ export function AuthProvider({ children }) {
     return hydrateSession(session)
   }
 
-  const logout = () => {
+  const revogarSessaoNoServidor = async () => {
+    const refreshToken = getApiAuthSession()?.refreshToken || ''
+
+    if (!refreshToken) return
+
+    try {
+      await encerrarSessao(refreshToken)
+    } catch {
+      const refreshRotacionado = getApiAuthSession()?.refreshToken || ''
+
+      if (refreshRotacionado && refreshRotacionado !== refreshToken) {
+        await encerrarSessao(refreshRotacionado).catch(() => {})
+      }
+    }
+  }
+
+  const logout = async () => {
     if (IS_MOCK_AUTH_ENABLED) mockSignOut()
+    else await revogarSessaoNoServidor()
 
     clearAuthState('')
     setIsBootstrapping(false)

@@ -57,11 +57,19 @@ class EventoAuditoria(models.Model):
         related_name='eventos',
         db_column='id_execucao_ia',
     )
+    oportunidade = models.ForeignKey(
+        'opportunities.Oportunidade',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='eventos',
+        db_column='id_oportunidade',
+    )
     detalhe = models.JSONField(default=dict, db_column='detalhe')
     registrado_em = models.DateTimeField(auto_now_add=True, db_column='registrado_em')
 
     class Meta:
-        db_table = 'evento_auditoria'
+        db_table = 'historico_evento'
         verbose_name = 'evento de auditoria'
         verbose_name_plural = 'eventos de auditoria'
         ordering = ['-ocorrido_em']

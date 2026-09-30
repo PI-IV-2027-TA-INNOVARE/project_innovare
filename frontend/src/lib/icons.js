@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowUpDown,
+  Bell,
   Building2,
   Check,
   ChevronDown,
@@ -51,6 +52,7 @@ export const appIcons = {
   passwordShow: Eye,
   passwordHide: EyeOff,
   warning: TriangleAlert,
+  notifications: Bell,
 
   appearance: Palette,
   users: Users,

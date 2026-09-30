@@ -33,14 +33,14 @@ class CriterioPreAnaliseAdmin(admin.ModelAdmin):
 class PreAnaliseAdmin(AdminSomenteLeitura):
     list_display = [
         'id_pre_analise',
-        'oportunidade',
+        'proposta',
         'versao_criterios',
         'versao_proposta',
         'status',
         'executada_em',
     ]
     list_filter = ['status', 'versao_criterios']
-    search_fields = ['oportunidade__codigo']
+    search_fields = ['proposta__oportunidade__codigo']
     date_hierarchy = 'executada_em'
     inlines = [DimensaoInline]
 

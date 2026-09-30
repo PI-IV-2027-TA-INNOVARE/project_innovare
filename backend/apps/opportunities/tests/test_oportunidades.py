@@ -18,7 +18,7 @@ from apps.accounts.models import Papel, Usuario
 from apps.audit.models import EventoAuditoria
 from apps.audit.services import registrar_evento
 from apps.decisions.models import Decisao, TipoDecisao
-from apps.matching.models import EquipePotencial
+from apps.matching.models import EquipePotencial, MembroEquipe
 from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
 from apps.notifications.models import Notificacao
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
@@ -191,14 +191,71 @@ class EscopoDeLeituraTests(OportunidadeBaseTests):
             self.client.get(reverse('oportunidade-list')).data['count'], 0
         )
 
-        EquipePotencial.objects.create(
-            oportunidade=Oportunidade.objects.get(codigo=self.codigo_vale),
+        MembroEquipe.objects.create(
+            equipe=EquipePotencial.objects.create(
+                oportunidade=Oportunidade.objects.get(codigo=self.codigo_vale)
+            ),
             membro=self.membro_pesquisador,
+            papel=PapelNaRede.PESQUISADOR,
         )
 
         resposta = self.client.get(reverse('oportunidade-list'))
         self.assertEqual(resposta.data['count'], 1)
         self.assertEqual(resposta.data['results'][0]['codigo'], self.codigo_vale)
+
+    def test_pesquisador_retirado_da_equipe_perde_o_acompanhamento(self):
+        """
+        RN-A06: quem o Supervisor tira da composicao deixa de acompanhar.
+
+        `incluido` existe para essa retirada. Enquanto o escopo de leitura nao
+        olhar para ele, a coluna registra uma decisao que o sistema ignora.
+        """
+        indicacao = MembroEquipe.objects.create(
+            equipe=EquipePotencial.objects.create(
+                oportunidade=Oportunidade.objects.get(codigo=self.codigo_vale)
+            ),
+            membro=self.membro_pesquisador,
+            papel=PapelNaRede.PESQUISADOR,
+        )
+
+        self.como(self.pesquisador)
+        self.assertEqual(
+            self.client.get(reverse('oportunidade-list')).data['count'], 1
+        )
+
+        indicacao.incluido = False
+        indicacao.save(update_fields=['incluido'])
+
+        self.assertEqual(
+            self.client.get(reverse('oportunidade-list')).data['count'], 0
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse('oportunidade-detail', args=[self.codigo_vale])
+            ).status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_uma_geracao_sem_o_pesquisador_nao_apaga_a_que_o_tem(self):
+        """
+        Cada execucao de matching cria uma `EquipePotencial` nova.
+
+        Estar de fora da geracao mais recente nao e o mesmo que ter sido
+        retirado: quem retira e o Supervisor, por `incluido`.
+        """
+        oportunidade = Oportunidade.objects.get(codigo=self.codigo_vale)
+
+        MembroEquipe.objects.create(
+            equipe=EquipePotencial.objects.create(oportunidade=oportunidade),
+            membro=self.membro_pesquisador,
+            papel=PapelNaRede.PESQUISADOR,
+        )
+        EquipePotencial.objects.create(oportunidade=oportunidade)
+
+        self.como(self.pesquisador)
+        self.assertEqual(
+            self.client.get(reverse('oportunidade-list')).data['count'], 1
+        )
 
     def test_administrador_nao_acompanha_oportunidade(self):
         self.como(self.administrador)

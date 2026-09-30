@@ -11,6 +11,7 @@ import {
   obterOportunidade,
   registrarDecisao as registrarDecisaoNaApi,
 } from '../../../services/pdConnectApi'
+import AbaAnexos from './abas/AbaAnexos'
 import AbaContexto from './abas/AbaContexto'
 import AbaDecisao from './abas/AbaDecisao'
 import AbaHistorico from './abas/AbaHistorico'
@@ -25,6 +26,7 @@ const ABAS = [
   { id: 'equipe', label: 'Equipe potencial', icon: appIcons.users, planejada: true },
   { id: 'pre-analise', label: 'Pré-análise', icon: appIcons.researcher, planejada: true },
   { id: 'decisao', label: 'Decisão', icon: appIcons.decision },
+  { id: 'anexos', label: 'Anexos', icon: appIcons.folder },
   { id: 'historico', label: 'Histórico', icon: appIcons.history },
 ]
 
@@ -172,6 +174,10 @@ export default function OportunidadePage() {
             podeDecidir={ehSupervisor}
             onRegistrar={registrarDecisao}
           />
+        ) : null}
+
+        {abaAtiva === 'anexos' ? (
+          <AbaAnexos codigo={id} podeEnviar={ehSupervisor} />
         ) : null}
 
         {abaAtiva === 'historico' ? <AbaHistorico historico={eventos} /> : null}

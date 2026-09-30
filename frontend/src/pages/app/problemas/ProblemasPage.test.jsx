@@ -101,7 +101,7 @@ describe('ProblemasPage', () => {
   })
 
   it('avisa e oferece nova tentativa quando a API falha', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     api.listOportunidades = vi.fn().mockRejectedValue(new Error('Servidor fora do ar.'))
 
     renderApp()
@@ -126,7 +126,7 @@ describe('ProblemasPage', () => {
   })
 
   it('filtra por título e por código', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp()
     await esperarLista()
 
@@ -151,7 +151,7 @@ describe('ProblemasPage', () => {
 
 describe('ProblemaFormPage', () => {
   it('recusa o cadastro sem título e sem resumo, sem chamar a API', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
     await user.click(screen.getByRole('button', { name: /cadastrar problema/i }))
@@ -171,7 +171,7 @@ describe('ProblemaFormPage', () => {
   })
 
   it('manda o cadastro para a API e confirma com o código devolvido', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque de fermentação')
@@ -196,7 +196,7 @@ describe('ProblemaFormPage', () => {
   })
 
   it('mostra a recusa do servidor sem perder o que foi digitado', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     api.criarOportunidade = vi.fn().mockRejectedValue(new Error('titulo: já existe um registro igual.'))
 
     renderApp('/problemas/novo')
@@ -218,7 +218,7 @@ describe('ProblemaFormPage', () => {
 
 describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   it('sai direto quando não há nada digitado', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
     await user.click(screen.getByRole('link', { name: /cancelar/i }))
@@ -228,7 +228,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('segura a saída quando há conteúdo digitado', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
@@ -239,7 +239,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('volta ao formulário sem perder o texto em "Continuar editando"', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
@@ -250,7 +250,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('guarda o rascunho ao sair e o devolve na volta', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
@@ -265,7 +265,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('descarta o rascunho quando a pessoa pede para descartar', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
@@ -280,7 +280,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('limpa o rascunho depois de cadastrar', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
@@ -295,7 +295,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('não entrega o rascunho de uma organização a outra no mesmo navegador', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
     await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
@@ -340,7 +340,7 @@ describe('ProblemaPage', () => {
   })
 
   it('abre a complementação com o pedido do Supervisor e envia pela API', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     api.obterOportunidade = vi.fn().mockResolvedValue(SUCO)
 
     renderApp('/problemas/OP-2026-012')
