@@ -5,6 +5,9 @@ Nenhum destes testes toca banco remoto, SMTP real ou provedor de IA
 (AGENTS.md 0.1) - o `settings` forca locmem/SQLite quando detecta execucao de
 teste.
 """
+from smtplib import SMTPException
+from unittest import mock
+
 from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
@@ -424,3 +427,51 @@ class EncerramentoDeSessaoTests(TestCase):
             reverse('auth-logout'), {'refresh': refresh}, format='json'
         )
         self.assertEqual(resposta.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class RecuperacaoComTransporteQuebradoTests(TestCase):
+    """
+    A resposta do formulario publico de recuperacao nao pode depender de o SMTP
+    estar de pe.
+
+    `send_mail` roda com `fail_silently=False`: uma queda do transporte subia
+    como excecao e a rota respondia 500 - mas **so** para e-mail com conta,
+    porque sem conta nao ha envio. O par 500/200 responde justamente o que esta
+    rota existe para nao responder: se aquele e-mail esta cadastrado.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.usuario = Usuario.objects.create_user(
+            email='bruna.lima@ac2microbiologia.com.br',
+            nome='Bruna Lima',
+            papel=Papel.PESQUISADOR,
+            password=SENHA,
+        )
+
+    def solicitar(self, email):
+        with mock.patch(
+            'apps.accounts.services.email.send_mail',
+            side_effect=SMTPException('servidor recusou a conexao'),
+        ):
+            return self.client.post(
+                reverse('auth-forgot-password'), {'email': email}, format='json'
+            )
+
+    def test_smtp_fora_do_ar_responde_igual_para_conta_e_para_desconhecido(self):
+        com_conta = self.solicitar(self.usuario.email)
+        sem_conta = self.solicitar('ninguem@exemplo.com')
+
+        self.assertEqual(com_conta.status_code, status.HTTP_200_OK)
+        self.assertEqual(com_conta.status_code, sem_conta.status_code)
+        self.assertEqual(com_conta.data, sem_conta.data)
+
+    def test_token_continua_emitido_para_quem_tem_conta(self):
+        self.solicitar(self.usuario.email)
+
+        self.assertEqual(
+            TokenAcesso.objects.filter(
+                usuario=self.usuario, finalidade=FinalidadeToken.RECUPERACAO
+            ).count(),
+            1,
+        )

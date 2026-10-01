@@ -24,6 +24,19 @@ class SolicitarRecuperacaoSenhaService:
 
     Responde igual exista ou nao a conta: o formulario publico nao pode virar
     um verificador de quais e-mails estao cadastrados.
+
+    Uma queda do transporte nao altera essa resposta, e por isso o `except`
+    aqui e deliberado - a excecao a "nao silenciar erros" do AGENTS.md 2.2.
+    Com SMTP real, `send_mail` roda com `fail_silently=False` e a queda sobe
+    como excecao; subindo, ela viraria 500 na rota - mas **so** para e-mail com
+    conta, porque sem conta nao ha envio. O par 500/200 entregaria exatamente o
+    que a uniformidade acima existe para esconder: se aquele e-mail esta
+    cadastrado. O erro, entao, nao desaparece: vai para a trilha de auditoria
+    com status `erro`, onde o administrador o ve na aba Historico.
+
+    `OSError` e a familia certa para o transporte: `smtplib.SMTPException`
+    herda dela, e com ela vem recusa de conexao, falha de DNS e timeout de
+    socket. Erro de programacao continua subindo.
     """
 
     def __init__(self, enviador: EnviadorDeEmail | None = None) -> None:
@@ -46,7 +59,23 @@ class SolicitarRecuperacaoSenhaService:
             return None
 
         token = TokenAcesso.emitir(usuario, FinalidadeToken.RECUPERACAO)
-        self._email.recuperacao_senha(usuario, token)
+
+        try:
+            self._email.recuperacao_senha(usuario, token)
+        except OSError as erro:
+            registrar_evento(
+                categoria=CategoriaEvento.CONTA,
+                tipo='recuperacao_solicitada',
+                entidade='usuario',
+                entidade_id=usuario.id_usuario,
+                ator=usuario.email,
+                status=StatusEvento.ERRO,
+                motivo=(
+                    'O link foi gerado, mas o e-mail nao saiu: '
+                    f'{type(erro).__name__}. Verifique a configuracao de SMTP.'
+                ),
+            )
+            return token
 
         registrar_evento(
             categoria=CategoriaEvento.CONTA,

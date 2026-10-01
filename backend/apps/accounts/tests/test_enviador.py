@@ -6,6 +6,8 @@ O que estes casos protegem e a costura: o caso de uso fala com
 transporte - por um duble no teste, por outro provedor amanha - nao toca regra
 de negocio nenhuma (AGENTS.md 0.1).
 """
+from smtplib import SMTPException
+
 from django.core import mail
 from django.test import TestCase
 
@@ -17,6 +19,7 @@ from apps.accounts.services.email import (
     EnviadorDjango,
     EnviadorEmMemoria,
 )
+from apps.audit.models import EventoAuditoria, StatusEvento
 from apps.network.services import LiberarAcessoMembroService
 from core.tests.builders import MembroRedeBuilder, UsuarioBuilder
 
@@ -103,3 +106,69 @@ class TransportePadraoTests(TestCase):
         self.assertIn(
             TokenAcesso.objects.latest('criado_em').token, mail.outbox[0].body
         )
+
+
+class EnviadorQueFalha:
+    """
+    Transporte que cai, sem abrir socket nenhum.
+
+    E o SMTP indisponivel - recusa de conexao, timeout, autenticacao negada -
+    reproduzido no lugar onde o caso de uso o encontraria.
+    """
+
+    def __init__(self, erro: Exception | None = None) -> None:
+        self._erro = erro or SMTPException('conexao recusada pelo servidor')
+
+    def recuperacao_senha(self, usuario, token) -> None:
+        raise self._erro
+
+    def convite_acesso(self, usuario, token) -> None:
+        raise self._erro
+
+
+class FalhaDeTransporteNaRecuperacaoTests(TestCase):
+    """
+    Com SMTP de verdade o transporte cai, e a queda nao pode diferenciar conta
+    existente de inexistente.
+
+    `SolicitarRecuperacaoSenhaService` responde igual exista ou nao a conta,
+    para o formulario publico nao virar verificador de quais e-mails estao
+    cadastrados. Se a falha de envio subisse como excecao, a resposta mudaria
+    **so para quem tem conta** - e a diferenca entregaria exatamente o que o
+    desenho recusa entregar.
+    """
+
+    def setUp(self):
+        self.pessoa = UsuarioBuilder().pesquisador().build()
+
+    def test_falha_no_envio_nao_interrompe_a_solicitacao(self):
+        token = SolicitarRecuperacaoSenhaService(EnviadorQueFalha()).execute(
+            self.pessoa.email
+        )
+
+        self.assertIsNotNone(token)
+
+    def test_timeout_do_transporte_tambem_e_absorvido(self):
+        servico = SolicitarRecuperacaoSenhaService(
+            EnviadorQueFalha(TimeoutError('estourou o tempo'))
+        )
+
+        self.assertIsNotNone(servico.execute(self.pessoa.email))
+
+    def test_falha_no_envio_fica_na_trilha_como_erro(self):
+        SolicitarRecuperacaoSenhaService(EnviadorQueFalha()).execute(self.pessoa.email)
+
+        evento = EventoAuditoria.objects.get(tipo='recuperacao_solicitada')
+
+        self.assertEqual(evento.status, StatusEvento.ERRO)
+        self.assertEqual(evento.ator, self.pessoa.email)
+        self.assertIn('SMTPException', evento.motivo)
+
+    def test_envio_bem_sucedido_segue_registrando_sucesso(self):
+        SolicitarRecuperacaoSenhaService(EnviadorEmMemoria()).execute(
+            self.pessoa.email
+        )
+
+        evento = EventoAuditoria.objects.get(tipo='recuperacao_solicitada')
+
+        self.assertEqual(evento.status, StatusEvento.OK)
