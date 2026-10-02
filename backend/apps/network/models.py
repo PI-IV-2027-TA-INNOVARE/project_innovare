@@ -218,7 +218,7 @@ class MembroCompetencia(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'membro_competencia'
+        db_table = 'competencia_perfil'
         constraints = [
             models.UniqueConstraint(
                 fields=['membro', 'competencia'],

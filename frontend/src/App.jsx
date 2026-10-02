@@ -18,6 +18,7 @@ const IdeiaFormPage = lazy(() => import('./pages/app/oportunidades/nova'))
 const ProblemasPage = lazy(() => import('./pages/app/problemas'))
 const ProblemaFormPage = lazy(() => import('./pages/app/problemas/novo'))
 const ProblemaPage = lazy(() => import('./pages/app/problemas/detalhe'))
+const IndicadoresPage = lazy(() => import('./pages/app/indicadores'))
 const AcessoRestritoPage = lazy(() => import('./pages/system'))
 const NaoEncontradaPage = lazy(() => import('./pages/system/naoEncontrada'))
 const RedePage = lazy(() => import('./pages/app/rede'))
@@ -26,6 +27,7 @@ const AdminPage = lazy(() => import('./pages/admin'))
 const AppearanceSection = lazy(() => import('./pages/admin/sections/AppearanceSection'))
 const UsersSection = lazy(() => import('./pages/admin/sections/UsersSection'))
 const ParametrosSection = lazy(() => import('./pages/admin/sections/ParametrosSection'))
+const AuditoriaSection = lazy(() => import('./pages/admin/sections/AuditoriaSection'))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
 const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
 
@@ -60,12 +62,22 @@ function App() {
           <Route path="/definir-senha" element={<ResetPasswordPage />} />
           <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route
+            path="/primeiro-acesso"
+            element={<ResetPasswordPage variante="primeiro-acesso" />}
+          />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AuthenticatedLayout />}>
               <Route path="/painel" element={<PainelPage />} />
               <Route path="/perfil" element={<PerfilPage />} />
               <Route path="/sem-acesso" element={<AcessoRestritoPage />} />
+            </Route>
+          </Route>
+
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.INDICADORES} />}>
+            <Route element={<AuthenticatedLayout />}>
+              <Route path="/indicadores" element={<IndicadoresPage />} />
             </Route>
           </Route>
 
@@ -116,6 +128,14 @@ function App() {
                   element={
                     <SecaoProtegida permissao={PERMISSOES.CONTAS}>
                       <UsersSection />
+                    </SecaoProtegida>
+                  }
+                />
+                <Route
+                  path="auditoria"
+                  element={
+                    <SecaoProtegida permissao={PERMISSOES.AUDITORIA}>
+                      <AuditoriaSection />
                     </SecaoProtegida>
                   }
                 />

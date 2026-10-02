@@ -9,11 +9,13 @@ const DESTINOS_POR_PAPEL = {
     { to: '/painel', label: 'Painel' },
     { to: '/oportunidades', label: 'Oportunidades' },
     { to: '/rede', label: 'Rede interna' },
+    { to: '/indicadores', label: 'Indicadores' },
   ],
   [ROLES.PESQUISADOR]: [
     { to: '/painel', label: 'Painel' },
     { to: '/oportunidades', label: 'Minhas oportunidades' },
     { to: '/perfil', label: 'Meu perfil' },
+    { to: '/indicadores', label: 'Indicadores' },
   ],
   [ROLES.ADMINISTRADOR]: [
     { to: '/admin', label: 'Administração' },
@@ -22,6 +24,7 @@ const DESTINOS_POR_PAPEL = {
   [ROLES.DEMANDANTE]: [
     { to: '/painel', label: 'Painel' },
     { to: '/problemas', label: 'Meus problemas' },
+    { to: '/indicadores', label: 'Indicadores' },
   ],
 }
 

@@ -26,15 +26,15 @@ class Decisao(models.Model):
         related_name='decisoes',
         db_column='id_oportunidade',
     )
-    tipo = models.CharField(
-        max_length=10, choices=TipoDecisao.choices, db_column='tipo'
+    tipo_decisao = models.CharField(
+        max_length=10, choices=TipoDecisao.choices, db_column='tipo_decisao'
     )
-    justificativa = models.TextField(db_column='justificativa')
-    autor = models.ForeignKey(
+    observacoes = models.TextField(db_column='observacoes')
+    responsavel = models.ForeignKey(
         'accounts.Usuario',
         on_delete=models.PROTECT,
         related_name='decisoes',
-        db_column='id_autor',
+        db_column='id_responsavel',
     )
     pre_analise = models.ForeignKey(
         'maturity.PreAnalise',
@@ -47,7 +47,7 @@ class Decisao(models.Model):
     registrada_em = models.DateTimeField(auto_now_add=True, db_column='registrada_em')
 
     class Meta:
-        db_table = 'decisao'
+        db_table = 'decisao_oportunidade'
         verbose_name_plural = 'decisoes'
         ordering = ['-registrada_em']
         indexes = [

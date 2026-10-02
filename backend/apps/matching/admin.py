@@ -7,7 +7,12 @@ por onde ela voltaria.
 """
 from django.contrib import admin
 
-from apps.matching.models import EquipePotencial, ExecucaoMatching
+from apps.matching.models import (
+    EquipePotencial,
+    ExecucaoMatching,
+    LacunaCompetenciaEquipe,
+    MembroEquipe,
+)
 from core.admin import AdminSomenteLeitura
 
 
@@ -28,13 +33,27 @@ class ExecucaoMatchingAdmin(AdminSomenteLeitura):
 
 @admin.register(EquipePotencial)
 class EquipePotencialAdmin(AdminSomenteLeitura):
+    list_display = ['id_equipe', 'oportunidade', 'execucao', 'data_geracao']
+    search_fields = ['oportunidade__codigo']
+    date_hierarchy = 'data_geracao'
+
+
+@admin.register(MembroEquipe)
+class MembroEquipeAdmin(AdminSomenteLeitura):
     list_display = [
-        'oportunidade',
+        'equipe',
         'membro',
-        'papel_sugerido',
-        'score_match',
+        'papel',
+        'score_compatibilidade',
+        'incluido',
         'origem',
         'validada',
     ]
-    list_filter = ['papel_sugerido', 'origem', 'validada']
-    search_fields = ['oportunidade__codigo', 'membro__nome']
+    list_filter = ['papel', 'origem', 'incluido', 'validada']
+    search_fields = ['equipe__oportunidade__codigo', 'membro__nome']
+
+
+@admin.register(LacunaCompetenciaEquipe)
+class LacunaCompetenciaEquipeAdmin(AdminSomenteLeitura):
+    list_display = ['equipe', 'competencia_necessaria', 'criado_em']
+    search_fields = ['descricao', 'equipe__oportunidade__codigo']

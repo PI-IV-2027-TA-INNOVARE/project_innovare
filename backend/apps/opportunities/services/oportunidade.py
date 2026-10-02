@@ -43,6 +43,12 @@ def escopo_de(usuario: Usuario) -> QuerySet[Oportunidade]:
 
     Portao real da leitura. A rota e ergonomia; e este queryset que impede o
     Demandante de ler o problema de outra organizacao.
+
+    O Pesquisador alcanca a oportunidade por uma indicacao `incluido`. Estar
+    fora da geracao mais recente nao retira o acompanhamento - cada execucao
+    de matching cria uma `EquipePotencial` nova, e as anteriores continuam
+    sendo composicoes validas. Quem retira alguem e o Supervisor, desmarcando
+    `incluido` (RN-A06).
     """
     base = Oportunidade.objects.select_related(
         'demandante', 'responsavel', 'criado_por'
@@ -60,7 +66,10 @@ def escopo_de(usuario: Usuario) -> QuerySet[Oportunidade]:
         )
 
     if usuario.papel == Papel.PESQUISADOR:
-        return base.filter(equipe_potencial__membro__usuario=usuario).distinct()
+        return base.filter(
+            equipes_potenciais__membros__membro__usuario=usuario,
+            equipes_potenciais__membros__incluido=True,
+        ).distinct()
 
     return base.none()
 
@@ -108,6 +117,7 @@ class CadastrarOportunidadeService:
             tipo='oportunidade_cadastrada',
             entidade='oportunidade',
             entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
             ator=ator.email,
             detalhe={'origem': origem, 'titulo': oportunidade.titulo},
         )
@@ -142,6 +152,7 @@ class AtualizarContextoService:
             tipo='contexto_atualizado',
             entidade='oportunidade',
             entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
             ator=ator.email,
             detalhe={'campos': sorted(mudou)},
         )
@@ -174,9 +185,9 @@ class RegistrarDecisaoService:
 
         decisao = Decisao.objects.create(
             oportunidade=oportunidade,
-            tipo=tipo,
-            justificativa=justificativa,
-            autor=ator,
+            tipo_decisao=tipo,
+            observacoes=justificativa,
+            responsavel=ator,
         )
 
         oportunidade.situacao = SITUACAO_POR_DECISAO[tipo]
@@ -187,6 +198,7 @@ class RegistrarDecisaoService:
             tipo=f'decisao_{tipo}',
             entidade='oportunidade',
             entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
             ator=ator.email,
             detalhe={'tipo': tipo, 'id_decisao': decisao.id_decisao},
         )
@@ -226,6 +238,11 @@ class ComplementarOportunidadeService:
 
     Nao muda a situacao sozinha: quem reconduz o fluxo e o Supervisor. A
     maquina de estados completa e P13.
+
+    Nao notifica o Supervisor: a caixa de avisos e do Demandante Externo (PB26).
+    A PB27 promete que a resposta "fica visivel ao Supervisor" - e o lugar disso
+    e a propria oportunidade e a aba Historico, nao um sino que o backlog nao
+    descreveu para nenhum ator alem do Demandante.
     """
 
     @transaction.atomic
@@ -248,19 +265,10 @@ class ComplementarOportunidadeService:
             tipo='complementacao_enviada',
             entidade='oportunidade',
             entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
             ator=ator.email,
             detalhe={'caracteres': len(texto)},
         )
-
-        if oportunidade.responsavel and oportunidade.responsavel.usuario:
-            notificar(
-                usuario=oportunidade.responsavel.usuario,
-                tipo='oportunidade.complementacao_recebida',
-                titulo=f'{oportunidade.codigo} recebeu complementacao',
-                mensagem=f'{ator.nome} respondeu ao pedido de revisao.',
-                entidade='oportunidade',
-                entidade_id=oportunidade.codigo,
-            )
 
         return oportunidade
 
@@ -308,6 +316,7 @@ class AnexarDocumentoService:
             tipo='anexo_enviado',
             entidade='oportunidade',
             entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
             ator=ator.email,
             detalhe={'nome': anexo.nome_original, 'bytes': anexo.tamanho_bytes},
         )

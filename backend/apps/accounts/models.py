@@ -108,6 +108,36 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
         self.save(update_fields=['ultimo_acesso', 'atualizado_em'])
 
 
+class DemandanteExterno(models.Model):
+    """
+    Os atributos que so o Demandante Externo tem (classe do diagrama).
+
+    `razao_social` e `cnpj`, que o diagrama poe aqui, ficam em `organizacao`
+    (lacuna L-01): repetidos na pessoa, dois funcionarios da mesma empresa
+    duplicam o CNPJ sem nada que os ligue - e o UNIQUE no campo impediria o
+    segundo de se cadastrar.
+    """
+
+    usuario = models.OneToOneField(
+        Usuario,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name='perfil_demandante',
+        db_column='id_usuario',
+    )
+    telefone = models.CharField(
+        max_length=20, blank=True, default='', db_column='telefone'
+    )
+
+    class Meta:
+        db_table = 'demandante_externo'
+        verbose_name = 'demandante externo'
+        verbose_name_plural = 'demandantes externos'
+
+    def __str__(self):
+        return f'{self.usuario.nome} <{self.usuario.email}>'
+
+
 class FinalidadeToken(models.TextChoices):
     """
     Por que o token existe.
