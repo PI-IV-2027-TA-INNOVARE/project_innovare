@@ -1,13 +1,17 @@
 """
 Caixa de notificacoes (PB26 / P17).
 
-A tabela ja era escrita antes desta camada existir: decisao *Revisar* avisa a
-organizacao demandante e a complementacao avisa o Supervisor responsavel. O
-que faltava era alguem ler. Estes testes cobrem a leitura e a baixa.
+A tabela ja era escrita antes desta camada existir: a decisao *Revisar* avisa a
+organizacao demandante. O que faltava era alguem ler. Estes testes cobrem a
+leitura e a baixa.
 
 A caixa e pessoal, e o filtro por `usuario` nao e conveniencia de consulta - e
 o portao. A notificacao nomeia a oportunidade no titulo, e a de um demandante
 cita registro que o outro nao alcanca por `/api/oportunidades/`.
+
+A caixa e do Demandante Externo, e nao de qualquer ator: PB26 e PB27 sao as duas
+historias do backlog que citam notificacao, e as duas falam do Demandante. Por
+isso o portao e por papel, e nao so `IsAuthenticated`.
 
 Nada aqui toca banco remoto, SMTP real ou provedor de IA (AGENTS.md 0.1).
 """
@@ -45,6 +49,7 @@ class CaixaBaseTests(TestCase):
             UsuarioBuilder().demandante().na_organizacao(self.terra_boa).build()
         )
         self.supervisor = UsuarioBuilder().supervisor().build()
+        self.demandante_sem_avisos = UsuarioBuilder().demandante().build()
 
         self.antiga = self.avisar(self.demandante, 'Primeiro aviso')
         self.recente = self.avisar(self.demandante, 'Segundo aviso')
@@ -90,20 +95,55 @@ class EscopoDaCaixaTests(CaixaBaseTests):
     def test_anonimo_nao_le_notificacao(self):
         self.assertEqual(self.caixa().status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_todo_ator_autenticado_tem_caixa(self):
+    def test_a_caixa_so_existe_para_o_demandante(self):
         """
-        Inclusive o Administrador: hoje nada o notifica, e a caixa dele nasce
-        vazia. Vazia e 200 - negar seria dizer que a rota nao e dele no dia em
-        que o primeiro aviso administrativo nascer.
+        PB26 avisa o Demandante Externo da pendencia; PB27 deixa a resposta dele
+        visivel ao Supervisor na propria oportunidade. Nenhuma das duas promete
+        aviso ao Supervisor, ao Pesquisador ou ao Administrador - e um sino que
+        o backlog nao descreveu e uma tela vazia que finge ser funcionalidade.
+        Dai o 403, e nao o 200 com nada dentro.
         """
         for usuario in (
             self.supervisor,
-            self.outro_demandante,
             UsuarioBuilder().pesquisador().build(),
             UsuarioBuilder().administrador().build(),
         ):
             self.como(usuario)
-            self.assertEqual(self.caixa().status_code, status.HTTP_200_OK)
+            self.assertEqual(self.caixa().status_code, status.HTTP_403_FORBIDDEN)
+
+        self.como(self.demandante)
+        self.assertEqual(self.caixa().status_code, status.HTTP_200_OK)
+
+    def test_nenhuma_rota_da_caixa_abre_para_outro_papel(self):
+        """
+        Esconder o sino na tela nao fecha a porta: as quatro rotas respondem ao
+        mesmo papel. Se uma delas aceitasse o outro ator, sobraria uma caixa que
+        so a API alcanca - e a tela que esconde o sino nao e o portao.
+        """
+        self.avisar(self.supervisor, 'Aviso de supervisor')
+
+        for usuario in (
+            self.supervisor,
+            UsuarioBuilder().pesquisador().build(),
+            UsuarioBuilder().administrador().build(),
+        ):
+            self.como(usuario)
+
+            self.assertEqual(
+                self.client.get(self.contador).status_code,
+                status.HTTP_403_FORBIDDEN,
+            )
+            self.assertEqual(
+                self.marcar_lida(self.antiga).status_code,
+                status.HTTP_403_FORBIDDEN,
+            )
+            self.assertEqual(
+                self.client.post(self.todas_lidas).status_code,
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        self.antiga.refresh_from_db()
+        self.assertIsNone(self.antiga.lida_em)
 
     def test_a_mais_recente_vem_primeiro(self):
         """Caixa se le de cima; a ordem e parte do contrato com a tela."""
@@ -213,7 +253,7 @@ class MarcacaoDeLeituraTests(CaixaBaseTests):
         self.assertIsNone(self.alheia.lida_em)
 
     def test_marcar_todas_com_a_caixa_limpa_nao_e_erro(self):
-        self.como(self.supervisor)
+        self.como(self.demandante_sem_avisos)
         resposta = self.client.post(self.todas_lidas)
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)

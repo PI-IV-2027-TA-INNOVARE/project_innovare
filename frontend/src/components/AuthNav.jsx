@@ -161,7 +161,7 @@ export default function AuthNav() {
         </nav>
 
         <div className="auth-nav__profile">
-          <NotificacoesMenu />
+          {ehDemandante ? <NotificacoesMenu /> : null}
 
           <ThemeToggle />
 

@@ -2,8 +2,9 @@
 Escrita de notificacao in-app.
 
 P17 perguntava se notificacoes ficam no MVP. PB26 respondeu: o Demandante
-precisa ser avisado quando o Supervisor pede complementacao. O que segue aberto
-e o canal - tela propria, e-mail ou os dois.
+precisa ser avisado quando o Supervisor pede complementacao. E o Demandante e o
+unico ator com caixa - as quatro rotas sao `EhDemandante`. O que segue aberto
+e o canal: tela propria, e-mail ou os dois.
 """
 from __future__ import annotations
 

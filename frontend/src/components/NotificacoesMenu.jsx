@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Icone, appIcons } from '../lib/icons'
 import { formatarUltimoAcesso } from '../lib/people'
+import { ROLES } from '../lib/roles'
 import { rotaDaEntidade } from '../lib/rotas'
 import {
   contarNotificacoesNaoLidas,
@@ -46,6 +47,14 @@ function Aviso({ notificacao, destino, onAbrir }) {
 export default function NotificacoesMenu() {
   const { user } = useAuth()
 
+  /**
+   * A caixa e do Demandante Externo, e o portao do servidor diz o mesmo.
+   * Esconder o desenho sem cortar a chamada deixaria uma navegacao pedindo um
+   * numero que so vem com 403; por isso o papel desliga o componente inteiro,
+   * efeitos incluidos, e nao so o JSX.
+   */
+  const temCaixa = user?.role === ROLES.DEMANDANTE
+
   const [aberto, setAberto] = useState(false)
   const [naoLidas, setNaoLidas] = useState(0)
   const [avisos, setAvisos] = useState([])
@@ -56,6 +65,8 @@ export default function NotificacoesMenu() {
   const gatilhoRef = useRef(null)
 
   useEffect(() => {
+    if (!temCaixa) return undefined
+
     let ativo = true
 
     contarNotificacoesNaoLidas()
@@ -69,10 +80,10 @@ export default function NotificacoesMenu() {
     return () => {
       ativo = false
     }
-  }, [])
+  }, [temCaixa])
 
   useEffect(() => {
-    if (!aberto) return undefined
+    if (!temCaixa || !aberto) return undefined
 
     let ativo = true
     setCarregando(true)
@@ -93,10 +104,10 @@ export default function NotificacoesMenu() {
     return () => {
       ativo = false
     }
-  }, [aberto])
+  }, [aberto, temCaixa])
 
   useEffect(() => {
-    if (!aberto) return undefined
+    if (!temCaixa || !aberto) return undefined
 
     const onPointerDown = (evento) => {
       const foraDoPainel =
@@ -164,6 +175,8 @@ export default function NotificacoesMenu() {
     naoLidas > 0
       ? `Notificações, ${naoLidas} não lida${naoLidas > 1 ? 's' : ''}`
       : 'Notificações'
+
+  if (!temCaixa) return null
 
   const conteudoDoPainel = () => {
     if (carregando) {

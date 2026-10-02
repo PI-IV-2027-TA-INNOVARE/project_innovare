@@ -238,6 +238,11 @@ class ComplementarOportunidadeService:
 
     Nao muda a situacao sozinha: quem reconduz o fluxo e o Supervisor. A
     maquina de estados completa e P13.
+
+    Nao notifica o Supervisor: a caixa de avisos e do Demandante Externo (PB26).
+    A PB27 promete que a resposta "fica visivel ao Supervisor" - e o lugar disso
+    e a propria oportunidade e a aba Historico, nao um sino que o backlog nao
+    descreveu para nenhum ator alem do Demandante.
     """
 
     @transaction.atomic
@@ -264,16 +269,6 @@ class ComplementarOportunidadeService:
             ator=ator.email,
             detalhe={'caracteres': len(texto)},
         )
-
-        if oportunidade.responsavel and oportunidade.responsavel.usuario:
-            notificar(
-                usuario=oportunidade.responsavel.usuario,
-                tipo='oportunidade.complementacao_recebida',
-                titulo=f'{oportunidade.codigo} recebeu complementacao',
-                mensagem=f'{ator.nome} respondeu ao pedido de revisao.',
-                entidade='oportunidade',
-                entidade_id=oportunidade.codigo,
-            )
 
         return oportunidade
 

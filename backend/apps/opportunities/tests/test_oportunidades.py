@@ -376,15 +376,24 @@ class ComplementacaoTests(OportunidadeBaseTests):
         self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(resposta.data['codigo'], 'sem_pedido_aberto')
 
-    def test_complementacao_avisa_o_supervisor_responsavel(self):
+    def test_complementacao_nao_cria_caixa_para_o_supervisor(self):
+        """
+        A caixa de notificacoes e do Demandante Externo (PB26). O Supervisor
+        acompanha a resposta na propria oportunidade e na aba Historico - a PB27
+        promete visibilidade na tela da oportunidade, nao um aviso. O que fica
+        registrado de "quem respondeu o que" e a trilha de auditoria, que e
+        append-only e nao depende de ninguem abrir um sino.
+        """
         self.pedir_revisao()
         self.como(self.demandante)
         self.client.post(self.url(), {'texto': 'Segue o que foi pedido.'}, format='json')
 
+        self.assertEqual(Notificacao.objects.filter(usuario=self.supervisor).count(), 0)
         self.assertTrue(
-            Notificacao.objects.filter(
-                usuario=self.supervisor,
-                tipo='oportunidade.complementacao_recebida',
+            EventoAuditoria.objects.filter(
+                entidade='oportunidade',
+                entidade_id=self.codigo,
+                tipo='complementacao_enviada',
             ).exists()
         )
 

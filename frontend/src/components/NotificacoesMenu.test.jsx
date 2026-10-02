@@ -26,6 +26,7 @@ vi.mock('../services/pdConnectApi', () => ({
 
 const DEMANDANTE = { displayName: 'Joana Alves', role: 'demandante' }
 const SUPERVISOR = { displayName: 'Rafael Antunes', role: 'supervisor' }
+const PESQUISADOR = { displayName: 'Bruno Dias', role: 'pesquisador' }
 const ADMINISTRADOR = { displayName: 'Ana Souza', role: 'administrador' }
 
 const COMPLEMENTACAO = {
@@ -42,8 +43,8 @@ const COMPLEMENTACAO = {
 const JA_LIDA = {
   ...COMPLEMENTACAO,
   id_notificacao: 3,
-  tipo: 'oportunidade.complementacao_recebida',
-  titulo: 'OP-2026-011 recebeu complementação',
+  tipo: 'oportunidade.complementacao_solicitada',
+  titulo: 'OP-2026-011 precisa de complementação',
   mensagem: 'Joana Alves respondeu ao pedido de revisão.',
   entidade_id: 'OP-2026-011',
   lida_em: '2026-09-18T12:00:00.000Z',
@@ -153,7 +154,7 @@ describe('Caixa de notificações', () => {
       name: /OP-2026-014 precisa de complementação/,
     })
     const lida = screen.getByRole('listitem', {
-      name: /OP-2026-011 recebeu complementação/,
+      name: /OP-2026-011 precisa de complementação/,
     })
 
     expect(naoLida).toHaveAttribute('data-nao-lida', 'true')
@@ -182,6 +183,43 @@ describe('Caixa de notificações', () => {
   })
 })
 
+describe('Quem tem caixa', () => {
+  it('some para quem não é o Demandante Externo', async () => {
+    /**
+     * O backlog descreve aviso para um ator só: PB26 notifica o Demandante da
+     * pendência, PB27 devolve a resposta ao Supervisor pela própria
+     * oportunidade. Sino para os demais é uma tela que o backlog nunca pediu e
+     * que, sem aviso, só carrega vazio.
+     */
+    for (const usuario of [SUPERVISOR, PESQUISADOR, ADMINISTRADOR]) {
+      estado.user = usuario
+
+      const { unmount } = renderizar()
+
+      expect(
+        screen.queryByRole('button', { name: /notifica/i })
+      ).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('nem chega a perguntar o número ao servidor para quem não tem caixa', async () => {
+    /**
+     * Um 403 por navegação seria o sintoma de um portão que responde a tela em
+     * vez de silenciar. Se não há sino, não há por que bater na rota.
+     */
+    estado.user = SUPERVISOR
+
+    renderizar()
+
+    await Promise.resolve()
+
+    expect(estado.contarNotificacoesNaoLidas).not.toHaveBeenCalled()
+    expect(estado.listarNotificacoes).not.toHaveBeenCalled()
+  })
+})
+
 describe('Destino do clique', () => {
   it('leva o Demandante ao próprio problema', async () => {
     renderizar()
@@ -192,36 +230,6 @@ describe('Destino do clique', () => {
     })
 
     expect(link).toHaveAttribute('href', '/problemas/OP-2026-014')
-  })
-
-  it('leva o Supervisor à condução da oportunidade', async () => {
-    estado.user = SUPERVISOR
-
-    renderizar()
-    await abrir()
-
-    const link = await screen.findByRole('link', {
-      name: /OP-2026-014 precisa de complementação/,
-    })
-
-    expect(link).toHaveAttribute('href', '/oportunidades/OP-2026-014')
-  })
-
-  it('não vira link para quem não tem a tela do registro', async () => {
-    /**
-     * O Administrador não acompanha oportunidade. Um link levaria ao
-     * /sem-acesso — pior que texto sem link, porque promete e nega.
-     */
-    estado.user = ADMINISTRADOR
-
-    renderizar()
-    await abrir()
-
-    await screen.findByText(/OP-2026-014 precisa de complementação/)
-
-    expect(
-      screen.queryByRole('link', { name: /OP-2026-014/ })
-    ).not.toBeInTheDocument()
   })
 
   it('dá baixa no aviso ao abri-lo', async () => {
@@ -241,7 +249,7 @@ describe('Destino do clique', () => {
     const usuario = await abrir()
 
     const link = await screen.findByRole('link', {
-      name: /OP-2026-011 recebeu complementação/,
+      name: /OP-2026-011 precisa de complementação/,
     })
     await usuario.click(link)
 
