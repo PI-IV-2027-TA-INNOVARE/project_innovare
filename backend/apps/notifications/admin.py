@@ -1,9 +1,10 @@
 """
 Admin das notificacoes - somente leitura.
 
-Quem escreve aqui sao os services da Oportunidade: decisao *Revisar* avisa a
-organizacao demandante, complementacao avisa o Supervisor responsavel. O canal
-segue em aberto (P17); ate la esta tabela e so consulta.
+Quem escreve aqui sao os services da Oportunidade: a decisao *Revisar* avisa a
+organizacao demandante. A caixa e do Demandante Externo (PB26); o canal - tela
+propria, e-mail ou os dois - segue em aberto (P17). ate la esta tabela e so
+consulta.
 """
 from django.contrib import admin
 

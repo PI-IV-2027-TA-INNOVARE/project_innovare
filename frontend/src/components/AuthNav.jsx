@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { Icone, appIcons } from '../lib/icons'
 import { ROLES, isAdministrador, roleLabel } from '../lib/roles'
 import { rotaInicialDe } from '../lib/rotas'
+import NotificacoesMenu from './NotificacoesMenu'
 import ThemeToggle from './ThemeToggle'
 
 export default function AuthNav() {
@@ -30,6 +31,7 @@ export default function AuthNav() {
       : []),
     ...(ehDemandante ? [{ to: '/problemas', label: 'Meus problemas' }] : []),
     ...(ehSupervisor ? [{ to: '/rede', label: 'Rede interna' }] : []),
+    ...(isAdministrador(user) ? [] : [{ to: '/indicadores', label: 'Indicadores' }]),
     ...(isAdministrador(user) ? [{ to: '/admin', label: 'Administração' }] : []),
   ]
 
@@ -159,6 +161,8 @@ export default function AuthNav() {
         </nav>
 
         <div className="auth-nav__profile">
+          {ehDemandante ? <NotificacoesMenu /> : null}
+
           <ThemeToggle />
 
           <button

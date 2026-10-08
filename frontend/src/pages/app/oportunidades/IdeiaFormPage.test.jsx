@@ -104,7 +104,7 @@ describe('IdeiaFormPage', () => {
   })
 
   it('recusa o cadastro sem título e sem resumo, sem chamar a API', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp()
 
     await user.click(screen.getByRole('button', { name: /cadastrar ideia interna/i }))
@@ -115,7 +115,7 @@ describe('IdeiaFormPage', () => {
   })
 
   it('manda o cadastro para a API com o responsável escolhido', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp()
 
     await screen.findByRole('option', { name: 'Rafael Antunes' })
@@ -136,7 +136,7 @@ describe('IdeiaFormPage', () => {
   })
 
   it('mostra a recusa do servidor sem perder o formulário', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     api.criarOportunidade = vi.fn().mockRejectedValue(new Error('titulo: campo obrigatório.'))
 
     renderApp()
@@ -161,7 +161,7 @@ describe('IdeiaFormPage', () => {
 
 describe('IdeiaFormPage — rascunho e guarda de saída', () => {
   it('não segura a saída com o formulário intocado, mesmo com responsável preenchido', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp()
 
     await screen.findByRole('option', { name: 'Rafael Antunes' })
@@ -171,7 +171,7 @@ describe('IdeiaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('segura a saída depois de digitar', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderApp()
 
     await user.type(screen.getByLabelText(/^título$/i), 'Cultura starter regional')
@@ -181,7 +181,7 @@ describe('IdeiaFormPage — rascunho e guarda de saída', () => {
   })
 
   it('guarda o rascunho em espaço próprio, sem misturar com o do problema externo', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const primeira = renderApp()
 
     await user.type(screen.getByLabelText(/^título$/i), 'Cultura starter regional')

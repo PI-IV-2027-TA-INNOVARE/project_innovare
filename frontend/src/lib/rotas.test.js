@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { ROLES } from './roles'
-import { ROTAS_PROTEGIDAS, destinoAposLogin, podeAcessar } from './rotas'
+import {
+  ROTAS_PROTEGIDAS,
+  destinoAposLogin,
+  podeAcessar,
+  rotaDaEntidade,
+} from './rotas'
 
 describe('podeAcessar', () => {
   it('libera o painel para os quatro atores', () => {
@@ -16,12 +21,21 @@ describe('podeAcessar', () => {
       '/admin/aparencia',
       '/admin/usuarios',
       '/admin/parametros',
+      '/admin/auditoria',
     ]) {
       expect(podeAcessar(ROLES.ADMINISTRADOR, caminho)).toBe(true)
       expect(podeAcessar(ROLES.SUPERVISOR, caminho)).toBe(false)
       expect(podeAcessar(ROLES.PESQUISADOR, caminho)).toBe(false)
       expect(podeAcessar(ROLES.DEMANDANTE, caminho)).toBe(false)
     }
+  })
+
+  it('abre os indicadores a quem acompanha o fluxo, e nao ao Administrador', () => {
+    for (const papel of [ROLES.SUPERVISOR, ROLES.PESQUISADOR, ROLES.DEMANDANTE]) {
+      expect(podeAcessar(papel, '/indicadores')).toBe(true)
+    }
+
+    expect(podeAcessar(ROLES.ADMINISTRADOR, '/indicadores')).toBe(false)
   })
 
   it('restringe a rede interna ao Supervisor (RF02 / RN-A04)', () => {
@@ -101,6 +115,41 @@ describe('destinoAposLogin', () => {
   })
 })
 
+describe('rotaDaEntidade', () => {
+  it('leva cada ator à tela que ele tem para a oportunidade', () => {
+    expect(rotaDaEntidade(ROLES.SUPERVISOR, 'oportunidade', 'OP-2026-014'))
+      .toBe('/oportunidades/OP-2026-014')
+    expect(rotaDaEntidade(ROLES.PESQUISADOR, 'oportunidade', 'OP-2026-014'))
+      .toBe('/oportunidades/OP-2026-014')
+    expect(rotaDaEntidade(ROLES.DEMANDANTE, 'oportunidade', 'OP-2026-014'))
+      .toBe('/problemas/OP-2026-014')
+  })
+
+  it('não inventa destino para quem não tem a tela do registro', () => {
+    expect(rotaDaEntidade(ROLES.ADMINISTRADOR, 'oportunidade', 'OP-2026-014'))
+      .toBeNull()
+  })
+
+  it('não inventa destino para entidade ou identificador que não conhece', () => {
+    expect(rotaDaEntidade(ROLES.SUPERVISOR, 'proposta', 'OP-2026-014')).toBeNull()
+    expect(rotaDaEntidade(ROLES.SUPERVISOR, 'oportunidade', '')).toBeNull()
+    expect(rotaDaEntidade(ROLES.SUPERVISOR, '', 'OP-2026-014')).toBeNull()
+    expect(rotaDaEntidade(null, 'oportunidade', 'OP-2026-014')).toBeNull()
+  })
+
+  it('só devolve destino que o próprio papel pode abrir', () => {
+    /**
+     * A invariante que importa: o aviso do sino nunca manda ninguém para o
+     * /sem-acesso. Vale para toda entidade que a tabela vier a carregar.
+     */
+    for (const papel of Object.values(ROLES)) {
+      const destino = rotaDaEntidade(papel, 'oportunidade', 'OP-2026-014')
+
+      if (destino) expect(podeAcessar(papel, destino)).toBe(true)
+    }
+  })
+})
+
 describe('ROTAS_PROTEGIDAS', () => {
   it('cobre toda rota autenticada de App.jsx', () => {
     const declaradas = ROTAS_PROTEGIDAS.map((rota) => rota.padrao)
@@ -115,6 +164,7 @@ describe('ROTAS_PROTEGIDAS', () => {
       '/problemas/novo',
       '/problemas/:id',
       '/perfil',
+      '/indicadores',
       '/rede',
       '/rede/novo',
       '/rede/:id',
@@ -122,6 +172,7 @@ describe('ROTAS_PROTEGIDAS', () => {
       '/admin/aparencia',
       '/admin/usuarios',
       '/admin/parametros',
+      '/admin/auditoria',
     ])
   })
 

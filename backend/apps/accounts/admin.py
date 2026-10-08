@@ -7,7 +7,7 @@ no front e fala com a API.
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from apps.accounts.models import TokenAcesso, Usuario
+from apps.accounts.models import DemandanteExterno, TokenAcesso, Usuario
 
 
 @admin.register(Usuario)
@@ -41,3 +41,9 @@ class TokenAcessoAdmin(admin.ModelAdmin):
     list_filter = ['finalidade']
     search_fields = ['usuario__email']
     readonly_fields = ['token', 'criado_em']
+
+
+@admin.register(DemandanteExterno)
+class DemandanteExternoAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'telefone']
+    search_fields = ['usuario__nome', 'usuario__email', 'telefone']

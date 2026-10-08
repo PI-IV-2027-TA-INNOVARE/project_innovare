@@ -8,6 +8,48 @@ const defaultForm = {
   confirmPassword: '',
 }
 
+/**
+ * As duas portas para a mesma mecânica.
+ *
+ * Recuperação e primeiro acesso gravam pelo mesmo endpoint, com um token que
+ * só difere na finalidade. O que muda é o que a pessoa precisa ler: quem
+ * esqueceu a senha se resolve sozinha pelo formulário público; quem foi
+ * cadastrado por um supervisor não tem autoatendimento (RN-A04), e oferecer
+ * "solicitar novo link" a mandaria para uma porta que não abre.
+ */
+const VARIANTES = {
+  redefinicao: {
+    titulo: 'Redefinir senha',
+    subtitulo: 'Escolha uma nova senha para a sua conta P&D Connect.',
+    rotuloSenha: 'Nova senha',
+    acao: 'Redefinir senha',
+    regiao: 'Redefinição de senha',
+    sucesso: 'Senha redefinida com sucesso!',
+    detalheSucesso:
+      'Sua senha foi atualizada. Você já pode entrar com as novas credenciais.',
+    tituloSemToken: 'Link inválido',
+    detalheSemToken:
+      'Este link de redefinição é inválido ou está incompleto. Solicite um novo link pelo formulário de recuperação.',
+    saidaSemToken: { to: '/esqueci-minha-senha', texto: 'Solicitar novo link' },
+    oferecerLogin: true,
+  },
+  'primeiro-acesso': {
+    titulo: 'Definir senha de acesso',
+    subtitulo:
+      'Sua conta foi cadastrada por um supervisor da AC2. Escolha a senha que você vai usar para entrar.',
+    rotuloSenha: 'Senha de acesso',
+    acao: 'Definir senha',
+    regiao: 'Primeiro acesso',
+    sucesso: 'Senha definida com sucesso!',
+    detalheSucesso: 'Sua conta está pronta. Entre com o seu e-mail e a senha que você acabou de escolher.',
+    tituloSemToken: 'Convite inválido',
+    detalheSemToken:
+      'Este convite é inválido ou está incompleto. Peça ao supervisor que cadastrou você para enviar um novo.',
+    saidaSemToken: null,
+    oferecerLogin: false,
+  },
+}
+
 function stripFieldPrefix(message) {
   return String(message || '').replace(/^[\w_]+:\s*/i, '')
 }
@@ -28,7 +70,9 @@ function validateForm(form) {
   return ''
 }
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordPage({ variante = 'redefinicao' }) {
+  const copy = VARIANTES[variante] || VARIANTES.redefinicao
+
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') || ''
 
@@ -88,39 +132,34 @@ export default function ResetPasswordPage() {
           </div>
         </aside>
 
-        <main className="login-shell__form" aria-label="Redefinição de senha">
+        <main className="login-shell__form" aria-label={copy.regiao}>
           <div className="login-box login-box--wide">
             <div className="login-box__header">
-              <h1 className="login-box__title">Redefinir senha</h1>
-              <p className="login-box__subtitle">
-                Escolha uma nova senha para a sua conta P&amp;D Connect.
-              </p>
+              <h1 className="login-box__title">{copy.titulo}</h1>
+              <p className="login-box__subtitle">{copy.subtitulo}</p>
             </div>
 
             {!token ? (
               <>
                 <div className="login-feedback login-feedback--error">
-                  <strong>Link inválido</strong>
-                  <p>
-                    Este link de redefinição é inválido ou está incompleto.
-                    Solicite um novo link pelo formulário de recuperação.
-                  </p>
+                  <strong>{copy.tituloSemToken}</strong>
+                  <p>{copy.detalheSemToken}</p>
                 </div>
-                <div className="form-footer">
-                  <Link to="/esqueci-minha-senha">Solicitar novo link</Link>
-                </div>
+                {copy.saidaSemToken ? (
+                  <div className="form-footer">
+                    <Link to={copy.saidaSemToken.to}>{copy.saidaSemToken.texto}</Link>
+                  </div>
+                ) : null}
               </>
             ) : done ? (
               <>
                 <div className="login-feedback">
-                  <strong>Senha redefinida com sucesso!</strong>
-                  <p>
-                    Sua senha foi atualizada. Você já pode entrar com as novas credenciais.
-                  </p>
+                  <strong>{copy.sucesso}</strong>
+                  <p>{copy.detalheSucesso}</p>
                 </div>
                 <div className="form-actions" style={{ marginTop: '8px' }}>
                   <Link to="/login" className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                    Ir para o login
+                    Entrar
                   </Link>
                 </div>
               </>
@@ -129,7 +168,7 @@ export default function ResetPasswordPage() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label" htmlFor="reset-new-password">
-                      Nova senha
+                      {copy.rotuloSenha}
                     </label>
                     <input
                       id="reset-new-password"
@@ -164,13 +203,13 @@ export default function ResetPasswordPage() {
 
                 <div className="form-actions">
                   <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? 'Salvando...' : 'Redefinir senha'}
+                    {loading ? 'Salvando...' : copy.acao}
                   </button>
                 </div>
               </form>
             )}
 
-            {token && !done ? (
+            {token && !done && copy.oferecerLogin ? (
               <>
                 <div className="form-divider">ou</div>
                 <div className="form-footer">

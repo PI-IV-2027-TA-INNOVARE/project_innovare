@@ -73,21 +73,58 @@ class ExecucaoMatching(models.Model):
 
 class EquipePotencial(models.Model):
     """
-    A composicao sugerida.
+    O cabecalho da composicao sugerida: uma geracao de equipe.
 
-    Ausencia deliberada: nao ha `status` de aceite/recusa e nao ha coluna que o
-    pesquisador escreva. RN-A06 / D07 dizem que nao existe convite - e a forma
-    mais confiavel de garantir isso e nao haver onde gravar.
+    Ausencia deliberada, aqui e em `MembroEquipe`: nao ha `status` de aceite ou
+    recusa, nem coluna que o pesquisador escreva. RN-A06 / D07 dizem que nao
+    existe convite - a forma mais confiavel de garantir isso e nao haver onde
+    gravar.
     """
 
-    id_equipe_potencial = models.BigAutoField(
-        primary_key=True, db_column='id_equipe_potencial'
-    )
+    id_equipe = models.BigAutoField(primary_key=True, db_column='id_equipe')
     oportunidade = models.ForeignKey(
         'opportunities.Oportunidade',
         on_delete=models.CASCADE,
-        related_name='equipe_potencial',
+        related_name='equipes_potenciais',
         db_column='id_oportunidade',
+    )
+    execucao = models.ForeignKey(
+        ExecucaoMatching,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='equipes',
+        db_column='id_execucao',
+    )
+    data_geracao = models.DateTimeField(auto_now_add=True, db_column='data_geracao')
+
+    class Meta:
+        db_table = 'equipe_potencial'
+        verbose_name = 'equipe potencial'
+        verbose_name_plural = 'equipes potenciais'
+        ordering = ['-data_geracao']
+
+    def __str__(self):
+        return f'Equipe da oportunidade {self.oportunidade_id}'
+
+
+class MembroEquipe(models.Model):
+    """
+    A pessoa indicada para a equipe.
+
+    Aponta para `MembroRede`, e nao para `Usuario` como o diagrama desenha: a
+    RN-A04 permite indicar quem ainda nao tem conta, e exigir usuario aqui
+    excluiria do matching justamente quem o Supervisor acabou de cadastrar.
+    """
+
+    id_membro_equipe = models.BigAutoField(
+        primary_key=True, db_column='id_membro_equipe'
+    )
+    equipe = models.ForeignKey(
+        EquipePotencial,
+        on_delete=models.CASCADE,
+        related_name='membros',
+        db_column='id_equipe',
     )
     membro = models.ForeignKey(
         'network.MembroRede',
@@ -95,22 +132,20 @@ class EquipePotencial(models.Model):
         related_name='indicacoes',
         db_column='id_membro',
     )
-    execucao = models.ForeignKey(
-        ExecucaoMatching,
+    papel = models.CharField(
+        max_length=16, choices=PapelNaRede.choices, db_column='papel'
+    )
+    score_compatibilidade = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name='indicacoes',
-        db_column='id_execucao',
+        db_column='score_compatibilidade',
     )
-    papel_sugerido = models.CharField(
-        max_length=16, choices=PapelNaRede.choices, db_column='papel_sugerido'
-    )
-    score_match = models.DecimalField(
-        max_digits=5, decimal_places=4, null=True, blank=True, db_column='score_match'
-    )
+    justificativa = models.TextField(blank=True, default='', db_column='justificativa')
     match_reasons = models.JSONField(default=list, db_column='match_reasons')
     score_features = models.JSONField(default=dict, db_column='score_features')
+    incluido = models.BooleanField(default=True, db_column='incluido')
     origem = models.CharField(
         max_length=8,
         choices=OrigemIndicacao.choices,
@@ -130,18 +165,58 @@ class EquipePotencial(models.Model):
     atualizado_em = models.DateTimeField(auto_now=True, db_column='atualizado_em')
 
     class Meta:
-        db_table = 'equipe_potencial'
-        verbose_name = 'indicacao de equipe potencial'
-        verbose_name_plural = 'equipe potencial'
-        ordering = ['-score_match']
+        db_table = 'membro_equipe'
+        verbose_name = 'membro da equipe potencial'
+        verbose_name_plural = 'membros da equipe potencial'
+        ordering = ['-score_compatibilidade']
         constraints = [
             models.UniqueConstraint(
-                fields=['oportunidade', 'membro'],
-                name='uq_equipe_oportunidade_membro',
+                fields=['equipe', 'membro'], name='uq_membro_equipe'
             ),
         ]
         indexes = [
             models.Index(
-                fields=['membro', 'validada'], name='idx_equipe_membro_validada'
+                fields=['membro', 'validada'], name='idx_membro_equipe_validada'
             ),
         ]
+
+    def __str__(self):
+        return f'{self.membro_id} na equipe {self.equipe_id}'
+
+
+class LacunaCompetenciaEquipe(models.Model):
+    """
+    O que a equipe sugerida nao cobre (classe do diagrama).
+
+    Vive ao lado de `MembroEquipe`, e nao junto da proposta, porque a lacuna e
+    da composicao: a mesma proposta gera equipes diferentes, com lacunas
+    diferentes.
+    """
+
+    id_lacuna_equipe = models.BigAutoField(
+        primary_key=True, db_column='id_lacuna_equipe'
+    )
+    equipe = models.ForeignKey(
+        EquipePotencial,
+        on_delete=models.CASCADE,
+        related_name='lacunas',
+        db_column='id_equipe',
+    )
+    descricao = models.TextField(db_column='descricao')
+    competencia_necessaria = models.ForeignKey(
+        'competencies.CompetenciaNecessaria',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='lacunas_equipe',
+        db_column='id_competencia_necessaria',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
+
+    class Meta:
+        db_table = 'lacuna_competencia_equipe'
+        verbose_name = 'lacuna de competencia da equipe'
+        verbose_name_plural = 'lacunas de competencia da equipe'
+
+    def __str__(self):
+        return f'Lacuna da equipe {self.equipe_id}'

@@ -8,6 +8,13 @@ compara competencias derivadas da proposta e revisaveis pelo Supervisor.
 from django.db import models
 
 
+class NivelImportancia(models.TextChoices):
+    """O `nivel_importancia` do diagrama, no lugar do booleano `essencial`."""
+
+    ESSENCIAL = 'essencial', 'Essencial'
+    DESEJAVEL = 'desejavel', 'Desejavel'
+
+
 class DerivadaDe(models.TextChoices):
     COPILOTO = 'copiloto', 'Derivada pelo Copiloto'
     MANUAL = 'manual', 'Informada manualmente'
@@ -17,11 +24,11 @@ class CompetenciaNecessaria(models.Model):
     id_competencia_necessaria = models.BigAutoField(
         primary_key=True, db_column='id_competencia_necessaria'
     )
-    oportunidade = models.ForeignKey(
-        'opportunities.Oportunidade',
+    proposta = models.ForeignKey(
+        'copilot.PropostaEstruturada',
         on_delete=models.CASCADE,
         related_name='competencias_necessarias',
-        db_column='id_oportunidade',
+        db_column='id_proposta',
     )
     competencia = models.ForeignKey(
         'network.Competencia',
@@ -32,7 +39,12 @@ class CompetenciaNecessaria(models.Model):
         db_column='id_competencia',
     )
     descricao = models.CharField(max_length=200, db_column='descricao')
-    essencial = models.BooleanField(default=True, db_column='essencial')
+    nivel_importancia = models.CharField(
+        max_length=10,
+        choices=NivelImportancia.choices,
+        default=NivelImportancia.ESSENCIAL,
+        db_column='nivel_importancia',
+    )
     derivada_de = models.CharField(
         max_length=10,
         choices=DerivadaDe.choices,
@@ -56,8 +68,8 @@ class CompetenciaNecessaria(models.Model):
         verbose_name_plural = 'competencias necessarias'
         constraints = [
             models.UniqueConstraint(
-                fields=['oportunidade', 'descricao'],
-                name='uq_competencia_necessaria_oport_desc',
+                fields=['proposta', 'descricao'],
+                name='uq_competencia_necessaria_prop_desc',
             ),
         ]
 

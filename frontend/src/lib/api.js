@@ -174,6 +174,19 @@ export function configureApiAuth({ onUnauthorized = null, onSessionRefresh = nul
   sessionRefreshHandler = onSessionRefresh
 }
 
+/**
+ * `FormData` viaja intacto e sem `Content-Type` nosso.
+ *
+ * O boundary do multipart é gerado pelo navegador junto com o corpo; definir
+ * o cabeçalho à mão manda um `multipart/form-data` sem boundary, e o servidor
+ * não consegue separar as partes.
+ */
+function corpoDaRequisicao(body, enviaArquivo) {
+  if (body === undefined) return undefined
+
+  return enviaArquivo ? body : JSON.stringify(body)
+}
+
 export async function apiRequest(path, options = {}) {
   const {
     body,
@@ -190,14 +203,16 @@ export async function apiRequest(path, options = {}) {
     requestHeaders.set('Authorization', `Bearer ${authSession.accessToken}`)
   }
 
-  if (body !== undefined && !requestHeaders.has('Content-Type')) {
+  const enviaArquivo = typeof FormData !== 'undefined' && body instanceof FormData
+
+  if (body !== undefined && !enviaArquivo && !requestHeaders.has('Content-Type')) {
     requestHeaders.set('Content-Type', 'application/json')
   }
 
   const response = await fetch(buildUrl(path), {
     ...rest,
     headers: requestHeaders,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: corpoDaRequisicao(body, enviaArquivo),
   })
 
   const data = await parseResponse(response)

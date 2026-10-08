@@ -149,3 +149,57 @@ export function atualizarMeuPerfil(payload) {
 export function listarTitulacoes() {
   return apiRequest('/rede/titulacoes/')
 }
+
+export function listarAnexos(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/anexos/`)
+}
+
+export function enviarAnexo(codigo, arquivo) {
+  const corpo = new FormData()
+  corpo.append('arquivo', arquivo)
+
+  return apiRequest(`/oportunidades/${codigo}/anexos/`, {
+    method: 'POST',
+    body: corpo,
+  })
+}
+
+export function listarTrilha(params = {}) {
+  const query = new URLSearchParams({ page_size: '50' })
+
+  Object.entries(params).forEach(([chave, valor]) => {
+    if (valor) query.set(chave, valor)
+  })
+
+  return apiRequest(`/trilha/?${query}`)
+}
+
+export function obterFiltrosTrilha() {
+  return apiRequest('/trilha/filtros/')
+}
+
+export function obterIndicadores() {
+  return apiRequest('/indicadores/')
+}
+
+export function listarNotificacoes(params = {}) {
+  const query = new URLSearchParams({ page_size: '10' })
+
+  Object.entries(params).forEach(([chave, valor]) => {
+    if (valor) query.set(chave, valor)
+  })
+
+  return apiRequest(`/notificacoes/?${query}`)
+}
+
+export function contarNotificacoesNaoLidas() {
+  return apiRequest('/notificacoes/nao-lidas/')
+}
+
+export function marcarNotificacaoLida(id) {
+  return apiRequest(`/notificacoes/${id}/lida/`, { method: 'POST' })
+}
+
+export function marcarTodasNotificacoesLidas() {
+  return apiRequest('/notificacoes/marcar-todas-lidas/', { method: 'POST' })
+}

@@ -18,10 +18,12 @@ from apps.opportunities.models import (
 class DecisaoResumoSerializer(serializers.Serializer):
     """A ultima decisao, como a tela de acompanhamento precisa dela."""
 
-    tipo = serializers.CharField(read_only=True)
-    tipo_rotulo = serializers.CharField(source='get_tipo_display', read_only=True)
-    justificativa = serializers.CharField(read_only=True)
-    autor_nome = serializers.CharField(source='autor.nome', read_only=True)
+    tipo = serializers.CharField(source='tipo_decisao', read_only=True)
+    tipo_rotulo = serializers.CharField(
+        source='get_tipo_decisao_display', read_only=True
+    )
+    justificativa = serializers.CharField(source='observacoes', read_only=True)
+    autor_nome = serializers.CharField(source='responsavel.nome', read_only=True)
     registrada_em = serializers.DateTimeField(read_only=True)
 
 
@@ -88,7 +90,7 @@ class OportunidadeSerializer(serializers.ModelSerializer):
 
         se_demandante = getattr(usuario, 'papel', None) == Papel.DEMANDANTE
 
-        if se_demandante and decisao.tipo != TipoDecisao.REVISAR:
+        if se_demandante and decisao.tipo_decisao != TipoDecisao.REVISAR:
             dados['justificativa'] = ''
 
         return dados

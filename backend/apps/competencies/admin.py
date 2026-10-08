@@ -15,11 +15,11 @@ from core.admin import AdminSomenteLeitura
 class CompetenciaNecessariaAdmin(AdminSomenteLeitura):
     list_display = [
         'descricao',
-        'oportunidade',
+        'proposta',
         'competencia',
-        'essencial',
+        'nivel_importancia',
         'derivada_de',
         'atualizado_em',
     ]
-    list_filter = ['essencial', 'derivada_de']
-    search_fields = ['descricao', 'oportunidade__codigo']
+    list_filter = ['nivel_importancia', 'derivada_de']
+    search_fields = ['descricao', 'proposta__oportunidade__codigo']

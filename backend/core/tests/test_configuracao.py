@@ -1,4 +1,10 @@
-"""Trava que impede producao de subir com a chave de assinatura de dev."""
+"""
+Travas de configuracao: a chave de assinatura e o isolamento da suite.
+
+As duas tem o mesmo desenho - regra de seguranca sem teste e regra que ninguem
+percebe quando quebra (ver `core/configuracao.py`).
+"""
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
@@ -37,3 +43,39 @@ class ChaveDeAssinaturaTests(SimpleTestCase):
     def test_espaco_em_branco_conta_como_ausencia(self):
         with self.assertRaises(ImproperlyConfigured):
             chave_de_assinatura('   ', debug=False)
+
+
+class IsolamentoDuranteOsTestesTests(SimpleTestCase):
+    """
+    O `.env` de uma maquina de trabalho carrega credencial real: SMTP
+    autenticado, banco remoto, chave de IA.
+
+    O mandato 0.1 do AGENTS.md diz que a suite nao toca nenhum deles, e o
+    `settings.py` impoe isso em vez de confiar na configuracao. Estes casos
+    afirmam o resultado sobre as settings **desta** execucao: se a trava saisse
+    do lugar, a conta chega aqui - nao numa cota de API consumida, num banco de
+    cliente dropado ou num e-mail entregue a um endereco de verdade.
+    """
+
+    def test_o_transporte_de_email_e_locmem(self):
+        self.assertEqual(
+            settings.EMAIL_BACKEND,
+            'django.core.mail.backends.locmem.EmailBackend',
+        )
+
+    def test_nenhuma_notificacao_por_email_sai(self):
+        self.assertFalse(settings.SEND_NOTIFICATION_EMAILS)
+
+    def test_a_ia_externa_fica_sem_chave_e_desligada(self):
+        self.assertEqual(settings.GEMINI_API_KEY, '')
+        self.assertFalse(settings.AI_MATCH_RERANK_ENABLED)
+
+    def test_o_banco_em_uso_nao_e_remoto(self):
+        host = settings.DATABASES['default'].get('HOST', '')
+
+        self.assertIn(host.strip().lower(), settings.LOCAL_DB_HOSTS)
+
+    def test_o_throttling_nao_estrangula_a_suite(self):
+        taxas = settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
+
+        self.assertTrue(all(taxa is None for taxa in taxas.values()))
