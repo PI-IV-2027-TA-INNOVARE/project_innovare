@@ -78,14 +78,14 @@ class GuardaDeTabelaVaziaTests(TestCase):
     def test_filtro_barra_quando_o_recorte_tem_linha(self):
         Lacuna.objects.create(
             oportunidade=self.oportunidade,
-            tipo='competencia',
+            tipo=TipoLacuna.PRE_ANALISE,
             descricao='Nenhum membro cobre microbiologia de alimentos.',
         )
         guarda = exigir_tabela_vazia(
-            'copilot', 'Lacuna', 'converte', filtro={'tipo': 'competencia'}
+            'copilot', 'Lacuna', 'converte', filtro={'tipo': 'pre_analise'}
         )
 
         with self.assertRaises(MigrationExigeTabelaVazia) as erro:
             rodar(guarda)
 
-        self.assertIn("{'tipo': 'competencia'}", str(erro.exception))
+        self.assertIn("{'tipo': 'pre_analise'}", str(erro.exception))

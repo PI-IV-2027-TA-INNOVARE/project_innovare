@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import {
   RowActionsMenu,
   SkeletonRows,
@@ -81,6 +82,8 @@ export default function RedePage() {
     carregar()
   }, [carregar])
 
+  useAtualizarAoFocar(carregar)
+
   const estatisticas = useMemo(() => ({
     total: pessoas.length,
     ativos: pessoas.filter((pessoa) => pessoa.situacao === 'ativo').length,
@@ -146,8 +149,8 @@ export default function RedePage() {
           </p>
           <h1 className="rede-page__title">Rede interna</h1>
           <p className="rede-page__description">
-            Pesquisadores, colaboradores e supervisores da AC2. O matching opera
-            somente sobre esta rede.
+            Pesquisadores e supervisores da AC2. O matching opera somente
+            sobre esta rede.
           </p>
         </div>
 

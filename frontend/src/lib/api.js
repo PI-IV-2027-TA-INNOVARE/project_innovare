@@ -104,6 +104,7 @@ function buildApiError(data, fallback, status = null) {
 async function requestTokenRefresh(refreshToken) {
   const response = await fetch(buildUrl(AUTH_REFRESH_PATH), {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -210,6 +211,7 @@ export async function apiRequest(path, options = {}) {
   }
 
   const response = await fetch(buildUrl(path), {
+    cache: 'no-store',
     ...rest,
     headers: requestHeaders,
     body: corpoDaRequisicao(body, enviaArquivo),

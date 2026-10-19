@@ -9,6 +9,8 @@ import uuid
 
 from django.db import models
 
+from core.models import CoerenteComAPreAnalise, lista_fixa
+
 from apps.ai.models import StatusExecucao
 
 
@@ -64,6 +66,7 @@ class CriterioPreAnalise(models.Model):
         verbose_name_plural = 'criterios de pre-analise'
         ordering = ['versao', 'dimensao', 'codigo']
         constraints = [
+            lista_fixa('criterio_referencia_pipe', 'dimensao', DimensaoMaturidade),
             models.UniqueConstraint(
                 fields=['versao', 'codigo'], name='uq_criterio_versao_codigo'
             ),
@@ -112,6 +115,9 @@ class PreAnalise(models.Model):
 
     class Meta:
         db_table = 'pre_analise_maturidade'
+        constraints = [
+            lista_fixa('pre_analise_maturidade', 'status', StatusExecucao),
+        ]
         verbose_name = 'pre-analise'
         verbose_name_plural = 'pre-analises'
         ordering = ['-executada_em']
@@ -143,6 +149,8 @@ class PreAnaliseDimensao(models.Model):
         verbose_name_plural = 'dimensoes da pre-analise'
         ordering = ['pre_analise', 'ordem']
         constraints = [
+            lista_fixa('dimensao_analise', 'dimensao', DimensaoMaturidade),
+            lista_fixa('dimensao_analise', 'nivel', NivelDimensao),
             models.UniqueConstraint(
                 fields=['pre_analise', 'dimensao'],
                 name='uq_pre_analise_dimensao',
@@ -150,7 +158,7 @@ class PreAnaliseDimensao(models.Model):
         ]
 
 
-class Recomendacao(models.Model):
+class Recomendacao(CoerenteComAPreAnalise, models.Model):
     """O par positivo da lacuna: o que fazer a respeito."""
 
     id_recomendacao = models.BigAutoField(
@@ -196,5 +204,8 @@ class Recomendacao(models.Model):
 
     class Meta:
         db_table = 'recomendacao_adequacao'
+        constraints = [
+            lista_fixa('recomendacao_adequacao', 'origem', OrigemRecomendacao),
+        ]
         verbose_name_plural = 'recomendacoes'
         ordering = ['-criado_em']

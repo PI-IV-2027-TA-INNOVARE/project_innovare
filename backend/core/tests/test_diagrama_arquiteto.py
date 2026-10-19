@@ -16,6 +16,15 @@ D-01b `Pesquisador` do diagrama e a tabela `membro_rede`, nao uma satelite de
       `usuario`. A RN-A04 exige que o Supervisor cadastre o pesquisador antes
       de liberar o acesso: em `membro_rede` o `id_usuario` e anulavel, e uma
       satelite com PK = FK tornaria esse cadastro impossivel.
+
+A leitura do schema sai da **introspeccao do Django**, e nao de
+`information_schema`: o tripwire do `settings.py` desvia `DB_HOST` remoto para
+SQLite em memoria (AGENTS.md 0.1), e `information_schema` nao existe lah - os
+cinco testes que liam o schema erravam em toda execucao local. Suite vermelha
+por motivo conhecido ensina a equipe a ignorar vermelho, que e o oposto do que
+o DoD 4.1 quer. `connection.introspection` responde a mesma pergunta nos dois
+bancos, entao o teste roda - em vez de ser pulado - onde quer que a suite
+rode.
 """
 from django.db import connection
 from django.test import TestCase
@@ -76,22 +85,17 @@ COLUNAS_APOSENTADAS = {
 
 def colunas_do_banco(tabela):
     with connection.cursor() as cursor:
-        cursor.execute(
-            'SELECT column_name FROM information_schema.columns '
-            'WHERE table_schema = %s AND table_name = %s',
-            ['public', tabela],
-        )
-        return {linha[0] for linha in cursor.fetchall()}
+        return {
+            coluna.name
+            for coluna in connection.introspection.get_table_description(
+                cursor, tabela
+            )
+        }
 
 
 def tabelas_do_banco():
     with connection.cursor() as cursor:
-        cursor.execute(
-            'SELECT table_name FROM information_schema.tables '
-            'WHERE table_schema = %s',
-            ['public'],
-        )
-        return {linha[0] for linha in cursor.fetchall()}
+        return set(connection.introspection.table_names(cursor))
 
 
 class DiagramaDoArquitetoTests(TestCase):

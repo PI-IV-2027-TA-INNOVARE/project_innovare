@@ -223,9 +223,12 @@ export default function RedeFormPage() {
                 </select>
               </label>
 
-              <label className="admin-field">
-                <span className="admin-field__label">Instituição</span>
+              <div className="admin-field">
+                <label className="admin-field__label" htmlFor="campo-rede-instituicao">
+                  Instituição
+                </label>
                 <input
+                  id="campo-rede-instituicao"
                   type="text"
                   className="admin-input"
                   value={valores.instituicao}
@@ -233,10 +236,10 @@ export default function RedeFormPage() {
                   aria-readonly="true"
                   aria-describedby="dica-instituicao"
                 />
-              </label>
-              <span id="dica-instituicao" className="admin-field__hint">
-                O vínculo institucional vem do cadastro de organizações.
-              </span>
+                <span id="dica-instituicao" className="admin-field__hint">
+                  O vínculo institucional vem do cadastro de organizações.
+                </span>
+              </div>
             </div>
           </div>
         </section>

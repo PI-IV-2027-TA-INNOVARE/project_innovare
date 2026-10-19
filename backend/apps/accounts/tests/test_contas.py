@@ -19,6 +19,8 @@ from apps.accounts.models import (
     Usuario,
 )
 from apps.audit.models import EventoAuditoria
+from apps.network.models import Disponibilidade, MembroRede, SituacaoMembro
+from core.tests.builders import MembroRedeBuilder
 
 SENHA = 'Bioinsumo!2026'
 
@@ -77,6 +79,26 @@ class PermissaoDeContasTests(BaseContas):
 
 
 class ProvisionamentoTests(BaseContas):
+    def test_supervisor_provisionado_entra_na_rede_com_disponibilidade_valida(self):
+        """
+        O membro nascia com `disponibilidade = 'ativo'` - o valor de
+        `situacao` no campo errado -, que o matching e a tela nao entendem.
+        Sem informacao do Administrador, vale o padrao do cadastro.
+        """
+        self.client.post(
+            reverse('usuario-list'),
+            {
+                'nome': 'Rafael Antunes',
+                'email': 'rafael.antunes@ac2microbiologia.com.br',
+                'papel': Papel.SUPERVISOR,
+            },
+            format='json',
+        )
+
+        membro = MembroRede.objects.get(email='rafael.antunes@ac2microbiologia.com.br')
+        self.assertEqual(membro.disponibilidade, Disponibilidade.PARCIAL)
+        self.assertEqual(membro.situacao, SituacaoMembro.ATIVO)
+
     def test_cria_supervisor_sem_senha_utilizavel(self):
         resposta = self.client.post(
             reverse('usuario-list'),
@@ -422,3 +444,57 @@ class ListagemTests(BaseContas):
         for campo in ('nome', 'email', 'papel', 'papel_rotulo', 'situacao',
                       'situacao_rotulo', 'instituicao', 'ultimo_acesso'):
             self.assertIn(campo, linha)
+
+
+class EdicaoDeContaComMembroTests(BaseContas):
+    """
+    O Administrador edita a conta; se ela tem membro na rede, o membro
+    acompanha. O PATCH passa por service para isso e para a trilha.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.membro = (
+            MembroRedeBuilder()
+            .pesquisador()
+            .chamado('Maria Ferreira')
+            .com_email('maria.ferreira@ac2microbiologia.com.br')
+            .com_acesso()
+            .build()
+        )
+        self.conta = self.membro.usuario
+
+    def editar(self, **campos):
+        return self.client.patch(
+            reverse('usuario-detail', args=[self.conta.pk]), campos, format='json'
+        )
+
+    def test_novo_nome_chega_ao_membro(self):
+        self.editar(nome='Maria Ferreira Lopes')
+
+        self.membro.refresh_from_db()
+        self.assertEqual(self.membro.nome, 'Maria Ferreira Lopes')
+
+    def test_novo_email_chega_ao_membro(self):
+        resposta = self.editar(email='Maria.Lopes@ac2microbiologia.com.br')
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.membro.refresh_from_db()
+        self.assertEqual(self.membro.email, 'maria.lopes@ac2microbiologia.com.br')
+
+    def test_email_de_outro_membro_e_conflito_e_nada_muda(self):
+        MembroRedeBuilder().com_email('ocupado@ac2microbiologia.com.br').build()
+
+        resposta = self.editar(email='ocupado@ac2microbiologia.com.br')
+
+        self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(resposta.data['codigo'], 'email_em_uso')
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.email, 'maria.ferreira@ac2microbiologia.com.br')
+
+    def test_edicao_da_conta_entra_na_trilha(self):
+        self.editar(nome='Maria Ferreira Lopes')
+
+        evento = EventoAuditoria.objects.get(categoria='conta', tipo='conta_atualizada')
+        self.assertEqual(evento.ator, self.admin.email)
+        self.assertEqual(evento.detalhe['campos'], ['nome'])

@@ -11,7 +11,7 @@ const estado = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
-  useAuth: () => ({ user: estado.user, isMockAuth: false }),
+  useAuth: () => ({ user: estado.user }),
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
@@ -43,7 +43,11 @@ const MEU_PERFIL = {
 }
 
 function cartao(titulo) {
-  return screen.getByRole('heading', { name: titulo, level: 2 }).closest('.perfil-card')
+  return screen.getByRole('heading', { name: titulo }).closest('.perfil-card')
+}
+
+function grupoProfissional() {
+  return screen.getByRole('region', { name: 'Perfil profissional' })
 }
 
 async function esperarPerfil() {
@@ -67,7 +71,69 @@ describe('PerfilPage', () => {
     expect(within(identificacao).getByLabelText('Nome')).toHaveAttribute('readonly')
     expect(within(identificacao).getByText(/somente leitura/i)).toBeInTheDocument()
 
-    expect(within(cartao('Vínculo')).getByLabelText('Organização')).toBeDisabled()
+    expect(within(cartao('Vínculo')).getByLabelText('Organização'))
+      .toHaveAttribute('readonly')
+  })
+
+  it('o campo que o dono da conta não edita continua alcançável', () => {
+    /**
+     * `readonly` e `disabled` parecem a mesma coisa na tela e nao sao: o
+     * `disabled` tira o campo da ordem de tabulacao. Quem usa teclado ou
+     * leitor de tela deixa de alcancar - e portanto de ler e de copiar - o
+     * proprio nome, e-mail, papel e organizacao.
+     *
+     * A tela mostra esses campos de proposito, em vez de esconder (ver o caso
+     * acima). Desligar o acesso a eles desfaz essa decisao sem que nada na
+     * tela mude de aparencia.
+     */
+    render(<PerfilPage />)
+
+    for (const [secao, campos] of [
+      ['Identificação', ['Nome', 'E-mail']],
+      ['Vínculo', ['Papel', 'Organização']],
+    ]) {
+      for (const campo of campos) {
+        const alvo = within(cartao(secao)).getByLabelText(campo)
+
+        expect(alvo, `${secao} / ${campo}`).not.toBeDisabled()
+        expect(alvo, `${secao} / ${campo}`).toHaveAttribute('readonly')
+      }
+    }
+  })
+
+  it('o que o dono da conta edita não vira campo bloqueado', () => {
+    /**
+     * A contraparte do caso acima. Titulacao e disponibilidade sao `<select>`,
+     * e `<select>` casa com a pseudo-classe CSS `:read-only` - ele nao tem
+     * atributo `readonly` para ter. Estilizar campo bloqueado por `:read-only`
+     * daria a eles aparencia de travados sendo os dois editaveis; o estilo
+     * mira `[readonly]`, que e atributo, e este caso guarda a consequencia.
+     */
+    render(<PerfilPage />)
+
+    return esperarPerfil().then(() => {
+      for (const secao of ['Titulação', 'Disponibilidade']) {
+        const campo = within(cartao(secao)).getByRole('combobox')
+
+        expect(campo, secao).not.toHaveAttribute('readonly')
+        expect(campo, secao).toBeEnabled()
+      }
+    })
+  })
+
+  it('o dono da conta chega aos próprios dados pelo teclado', async () => {
+    const usuario = userEvent.setup()
+    render(<PerfilPage />)
+
+    const nome = within(cartao('Identificação')).getByLabelText('Nome')
+
+    nome.focus()
+
+    expect(nome).toHaveFocus()
+
+    await usuario.tab()
+
+    expect(within(cartao('Identificação')).getByLabelText('E-mail')).toHaveFocus()
   })
 
   it('carrega o perfil profissional da API', async () => {
@@ -222,5 +288,169 @@ describe('PerfilPage', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/não corresponde/i)
     expect(estado.alterarSenha).not.toHaveBeenCalled()
+  })
+})
+
+describe('PerfilPage — alcance do botão Salvar perfil', () => {
+  /**
+   * O botao precisa estar dentro do que ele salva.
+   *
+   * Ele enviava titulacao, disponibilidade, competencias, tecnicas, linhas e
+   * experiencia - seis cartoes que ficavam **ao lado** dele na grade, como
+   * irmaos. Lido na tela, o botao parecia salvar so o cartao onde estava; lido
+   * por leitor de tela, nao havia relacao nenhuma entre ele e os campos.
+   *
+   * A hierarquia de titulo faz parte do conserto, e nao e enfeite: para quem
+   * navega por cabecalho, ela e o unico jeito de perceber que os seis campos
+   * pertencem ao grupo que o botao governa.
+   */
+  it('os campos que o botão salva ficam dentro do grupo que o contém', async () => {
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    const grupo = grupoProfissional()
+
+    expect(within(grupo).getByRole('button', { name: /salvar perfil/i })).toBeInTheDocument()
+
+    for (const titulo of [
+      'Titulação',
+      'Disponibilidade',
+      'Competências',
+      'Técnicas',
+      'Linhas de pesquisa',
+      'Experiência',
+    ]) {
+      expect(
+        within(grupo).getByRole('heading', { name: titulo, level: 3 }),
+        titulo
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('o que o botão não salva fica fora do grupo', async () => {
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    const grupo = grupoProfissional()
+
+    for (const titulo of ['Identificação', 'Vínculo', 'Senha']) {
+      expect(
+        within(grupo).queryByRole('heading', { name: titulo }),
+        titulo
+      ).not.toBeInTheDocument()
+    }
+  })
+
+  it('a senha continua com ação própria, fora do alcance do Salvar perfil', async () => {
+    /**
+     * Uma acao global de "salvar alteracoes" seria enganosa aqui: a troca de
+     * senha e outra transacao - exige a senha atual e vai para outro endpoint.
+     * Uma acao por grupo transacional, e nao uma para a tela toda.
+     */
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    expect(
+      within(cartao('Senha')).getByRole('button', { name: /alterar senha/i })
+    ).toBeInTheDocument()
+
+    expect(
+      within(grupoProfissional()).queryByRole('button', { name: /alterar senha/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('avisa que há alteração pendente e para de avisar depois de salvar', async () => {
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    const grupo = grupoProfissional()
+
+    expect(within(grupo).queryByText(/alterações não salvas/i)).not.toBeInTheDocument()
+
+    await user.selectOptions(
+      within(cartao('Titulação')).getByLabelText('Titulação'),
+      'doutorado'
+    )
+
+    expect(within(grupo).getByText(/alterações não salvas/i)).toBeInTheDocument()
+
+    await user.click(within(grupo).getByRole('button', { name: /salvar perfil/i }))
+
+    expect(await screen.findByText(/perfil salvo/i)).toBeInTheDocument()
+    expect(within(grupo).queryByText(/alterações não salvas/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('PerfilPage — grade dos cartões', () => {
+  /**
+   * A grade se montava com `auto-fit`, entao o numero de colunas vinha da
+   * largura da janela: em tela larga os seis cartoes caiam 4 em cima e 2
+   * embaixo, com dois orfaos na segunda faixa.
+   *
+   * Duas faixas de tres exigem que os seis cartoes sejam irmaos diretos da
+   * mesma grade - um cartao aninhado, ou um paragrafo solto entre eles,
+   * desalinha a faixa inteira.
+   *
+   * A ordem tambem e layout, e nao enfeite: as tres listas de vocabulario
+   * (competencias, tecnicas e linhas) tem a mesma estrutura, e juntas na
+   * mesma faixa nascem com altura parecida. Misturar uma delas com os campos
+   * curtos devolve a faixa torta que o usuario viu.
+   *
+   * O resto do conserto e so CSS, que esta suite nao enxerga (`css: false`):
+   * os cartoes perderam o `align-items: start`, entao esticam para a altura
+   * da faixa, e viraram `subgrid` de duas linhas para que cabecalho e corpo
+   * se alinhem entre vizinhos - sem isso, descricoes de tamanhos diferentes
+   * empurravam os campos de cada cartao para alturas diferentes.
+   *
+   * Duas consequencias de esticar cartao, consertadas no mesmo lugar:
+   *
+   * 1. `.admin-field` e grid, e o `align-content: stretch` padrao repartia a
+   *    sobra de altura entre label e campo. Num `.admin-form__row`, o campo
+   *    sem dica ficava mais alto que o vizinho com dica - era o que separava
+   *    "Nova senha" de "Confirmar nova senha". Agora ancora no topo, e a
+   *    regra vale para todo formulario do console, nao so para este cartao.
+   *
+   * 2. Em duas colunas, uma grade de tres cartoes deixa o ultimo sozinho. Ele
+   *    passa a ocupar a faixa inteira - `:nth-child(odd of .perfil-card)`
+   *    junto de `:nth-last-child(1 of .perfil-card)` pega o ultimo cartao so
+   *    quando a contagem e impar, entao a regra continua certa se um cartao
+   *    entrar ou sair da grade.
+   */
+  it('mantém os seis cartões como irmãos diretos da grade, em duas faixas de três', async () => {
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    const grade = grupoProfissional().querySelector('.perfil-grupo__grid')
+    const filhos = [...grade.children]
+
+    for (const filho of filhos) {
+      expect(filho.className, filho.outerHTML.slice(0, 120)).toContain('perfil-card')
+    }
+
+    expect(filhos.map((filho) => filho.querySelector('.perfil-card__title').textContent))
+      .toEqual([
+        'Titulação',
+        'Disponibilidade',
+        'Experiência',
+        'Competências',
+        'Técnicas',
+        'Linhas de pesquisa',
+      ])
+  })
+
+  it('mantém os cartões de conta como irmãos diretos da grade da página', () => {
+    estado.user = {
+      displayName: 'Agroindústria Vale Verde',
+      email: 'contato@valeverde.com.br',
+      role: 'demandante',
+    }
+
+    render(<PerfilPage />)
+
+    const grade = document.querySelector('.perfil-grid')
+
+    expect([...grade.children].map((filho) => filho.querySelector('.perfil-card__title').textContent))
+      .toEqual(['Identificação', 'Vínculo', 'Senha'])
   })
 })

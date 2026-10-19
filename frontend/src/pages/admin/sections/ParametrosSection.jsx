@@ -1,7 +1,113 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
+import {
+  importarCriteriosPreAnalise,
+  listarCriteriosPreAnalise,
+} from '../../../services/pdConnectApi'
 import { gravarContatos, lerContatos, restaurarContatos } from '../../system/contatosSuporte'
+
+function CriteriosDaPreAnalise({ showToast }) {
+  const [criterios, setCriterios] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+  const [importando, setImportando] = useState(false)
+
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    setErro('')
+
+    try {
+      setCriterios(await listarCriteriosPreAnalise())
+    } catch (falha) {
+      setErro(falha?.message || 'Não foi possível ler os critérios.')
+    } finally {
+      setCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    carregar()
+  }, [carregar])
+
+  const importar = async () => {
+    setImportando(true)
+
+    try {
+      const resultado = await importarCriteriosPreAnalise()
+      await carregar()
+      showToast(
+        `Baseline ${resultado.baseline_id} aplicada: ${resultado.criados} critério(s) novo(s) e ${resultado.atualizados} atualizado(s).`,
+      )
+    } catch (falha) {
+      showToast(falha?.data?.detail || falha?.message || 'A importação não foi concluída.')
+    } finally {
+      setImportando(false)
+    }
+  }
+
+  const versao = criterios[0]?.versao || null
+
+  return (
+    <section className="perfil-card">
+      <header className="perfil-card__header">
+        <div>
+          <h3 className="perfil-card__title">Critérios da pré-análise PIPE/FAPESP</h3>
+          <p className="perfil-card__description">
+            Desafio tecnológico, inovação, plano de pesquisa, equipe e
+            supervisão, infraestrutura e viabilidade — versionados, para que uma
+            reavaliação diga contra qual versão foi feita.
+          </p>
+          <p className="perfil-card__description">
+            {versao
+              ? `Versão vigente: ${versao} · ${criterios.length} critério(s).`
+              : 'Nenhuma versão vigente: a pré-análise recusa executar até a baseline ser importada.'}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="admin-btn"
+          onClick={importar}
+          disabled={importando}
+        >
+          <Icone icon={appIcons.export} />
+          {importando ? 'Importando...' : 'Importar da baseline'}
+        </button>
+      </header>
+
+      <div className="perfil-card__body">
+        <p className="etapa-planejada__nota">
+          Os critérios não são digitados aqui: eles vêm da Base de Conhecimento
+          PIPE versionada, e a importação registra na trilha qual baseline
+          entrou. O conteúdo permanece decisão do Product Owner com a AC2.
+        </p>
+
+        {carregando ? (
+          <p className="oportunidade-page__vazio" role="status">
+            Lendo os critérios...
+          </p>
+        ) : null}
+
+        {erro ? <p className="oportunidade-page__vazio">{erro}</p> : null}
+
+        {criterios.length > 0 ? (
+          <ul className="criterios__lista">
+            {criterios.map((criterio) => (
+              <li key={criterio.id_criterio} className="criterios__item">
+                <span className="criterios__codigo">{criterio.codigo}</span>
+                <div>
+                  <p className="criterios__descricao">{criterio.descricao}</p>
+                  <p className="criterios__dimensao">{criterio.dimensao_rotulo}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </section>
+  )
+}
 
 const CONTATO_VAZIO = { nome: '', email: '', papel: '' }
 
@@ -174,33 +280,7 @@ export default function ParametrosSection() {
         </div>
       </form>
 
-      <section className="perfil-card">
-        <header className="perfil-card__header">
-          <div>
-            <h3 className="perfil-card__title">Critérios da pré-análise PIPE/FAPESP</h3>
-            <p className="perfil-card__description">
-              Desafio tecnológico, inovação, plano de pesquisa, equipe e
-              supervisão, infraestrutura e viabilidade — versionados, para que uma
-              reavaliação diga contra qual versão foi feita.
-            </p>
-          </div>
-
-          <span className="etapa-planejada__selo">
-            <Icone icon={appIcons.info} aria-hidden="true" />
-            Planejado
-          </span>
-        </header>
-
-        <div className="perfil-card__body">
-          <p className="etapa-planejada__nota">
-            Os critérios ainda não estão definidos: são decisão do Product Owner
-            com o cliente AC2. Editor nenhum é desenhado antes
-            disso — um conjunto de critérios inventado aqui viraria a referência
-            que a pré-análise usa de verdade, e é exatamente o que a baseline
-            reserva para o cliente.
-          </p>
-        </div>
-      </section>
+      <CriteriosDaPreAnalise showToast={showToast} />
 
       <AdminToast toast={toast} />
     </div>

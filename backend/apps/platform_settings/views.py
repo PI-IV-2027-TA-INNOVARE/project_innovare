@@ -4,10 +4,14 @@ Views da configuracao administravel.
 A view recebe, delega e responde. O merge patch mora no service.
 """
 from drf_spectacular.utils import extend_schema
-from rest_framework import permissions, serializers, views
+from rest_framework import permissions, views
 from rest_framework.response import Response
 
-from apps.platform_settings.serializers import ConfiguracaoSerializer, secao_vazia
+from apps.platform_settings.serializers import (
+    ConfiguracaoSerializer,
+    TemaPatchSerializer,
+    secao_vazia,
+)
 from apps.platform_settings.services.configuracoes import (
     SECAO_TEMA,
     AtualizarConfiguracaoService,
@@ -40,15 +44,13 @@ class TemaView(views.APIView):
 
         return Response(ConfiguracaoSerializer(configuracao).data)
 
-    @extend_schema(request=None, responses=ConfiguracaoSerializer)
+    @extend_schema(request=TemaPatchSerializer, responses=ConfiguracaoSerializer)
     def patch(self, request):
-        if not isinstance(request.data, dict):
-            raise serializers.ValidationError(
-                'O corpo do merge patch precisa ser um objeto.'
-            )
+        patch = TemaPatchSerializer(data=request.data)
+        patch.is_valid(raise_exception=True)
 
         configuracao = AtualizarConfiguracaoService().execute(
-            secao=SECAO_TEMA, patch=request.data, ator=request.user
+            secao=SECAO_TEMA, patch=patch.validated_data, ator=request.user
         )
 
         return Response(ConfiguracaoSerializer(configuracao).data)

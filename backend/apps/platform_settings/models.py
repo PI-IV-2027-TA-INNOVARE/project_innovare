@@ -14,14 +14,14 @@ class ConfiguracaoPlataforma(models.Model):
         primary_key=True, db_column='id_configuracao'
     )
     secao = models.CharField(max_length=40, unique=True, db_column='secao')
-    payload = models.JSONField(default=dict, db_column='payload')
+    payload = models.JSONField(default=dict, db_column='conteudo')
     revisao = models.PositiveIntegerField(default=0, db_column='revisao')
     atualizado_por = models.ForeignKey(
         'accounts.Usuario',
         null=True,
         on_delete=models.SET_NULL,
         related_name='configuracoes_atualizadas',
-        db_column='atualizado_por',
+        db_column='id_atualizado_por',
     )
     atualizado_em = models.DateTimeField(auto_now=True, db_column='atualizado_em')
 

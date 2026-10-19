@@ -97,8 +97,9 @@ class MembroRedeSerializer(serializers.ModelSerializer):
         return valor.strip().lower()
 
     def validate_papel_rede(self, valor):
-        if valor not in PapelNaRede.values:
-            raise serializers.ValidationError('Papel na rede invalido.')
+        # RN-A03 / RN-A04: Supervisor cadastra apenas Pesquisadores
+        if valor != PapelNaRede.PESQUISADOR:
+            raise serializers.ValidationError('O Supervisor só pode cadastrar Pesquisadores.')
         return valor
 
 

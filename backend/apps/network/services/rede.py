@@ -10,6 +10,7 @@ from typing import Any
 from django.db import transaction
 
 from apps.accounts.models import FinalidadeToken, Papel, SituacaoConta, TokenAcesso, Usuario
+from apps.accounts.services.contas import garantir_email_livre
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
@@ -33,8 +34,6 @@ LISTAS = {
 PAPEL_REDE_PARA_ACESSO = {
     PapelNaRede.SUPERVISOR: Papel.SUPERVISOR,
     PapelNaRede.PESQUISADOR: Papel.PESQUISADOR,
-    PapelNaRede.COLABORADOR: Papel.PESQUISADOR,
-    PapelNaRede.GRADUANDO: Papel.PESQUISADOR,
 }
 
 
@@ -42,29 +41,107 @@ def sincronizar_competencias(
     membro: MembroRede, listas: dict[str, list[str]]
 ) -> None:
     """
-    Troca os vinculos do membro pelos nomes recebidos.
+    Troca os vinculos do membro pelos nomes recebidos, em lote.
 
     O vocabulario e aberto por ora (P11): nome novo vira `Competencia` nova, do
     tipo da lista em que foi digitado. Quando P11 fechar num vocabulario
     controlado, e aqui que a validacao entra - a tela nao muda.
+
+    Em lote, e nao nome por nome. A versao anterior fazia dois `get_or_create`
+    por nome dentro do laco: treze nomes eram cinquenta e quatro consultas, e a
+    tela aceita digitar quantos quiser. Contra um banco remoto cada uma delas e
+    um RTT, e salvar um perfil levava segundos. O custo agora nao depende da
+    quantidade de nomes - ver `core/tests/test_orcamento_de_queries.py`.
+
+    O `ignore_conflicts` cobre a corrida com `uq_competencia_nome_tipo`: dois
+    Supervisores digitando o mesmo nome novo ao mesmo tempo. Ele nao devolve as
+    PKs das linhas que ja existiam, e por isso a releitura vem depois dele, e
+    nao antes.
     """
-    for campo, tipo in LISTAS.items():
-        if campo not in listas:
-            continue
+    tipos = [tipo for campo, tipo in LISTAS.items() if campo in listas]
 
-        nomes = [n.strip() for n in listas[campo] if n and n.strip()]
+    if not tipos:
+        return
 
-        membro.vinculos_competencia.filter(competencia__tipo=tipo).delete()
-
-        for nome in dict.fromkeys(nomes):
-            competencia, _ = Competencia.objects.get_or_create(
-                nome=nome, tipo=tipo
+    nomes_por_tipo = {
+        tipo: list(
+            dict.fromkeys(
+                nome.strip()
+                for nome in listas[campo]
+                if nome and nome.strip()
             )
-            MembroCompetencia.objects.get_or_create(
+        )
+        for campo, tipo in LISTAS.items()
+        if campo in listas
+    }
+
+    desejados = {
+        (nome, tipo)
+        for tipo, nomes in nomes_por_tipo.items()
+        for nome in nomes
+    }
+
+    membro.vinculos_competencia.filter(competencia__tipo__in=tipos).delete()
+
+    if not desejados:
+        _repor_vinculos_carregados(membro)
+        return
+
+    Competencia.objects.bulk_create(
+        [Competencia(nome=nome, tipo=tipo) for nome, tipo in sorted(desejados)],
+        ignore_conflicts=True,
+    )
+
+    identificadores = {
+        (competencia.nome, competencia.tipo): competencia.pk
+        for competencia in Competencia.objects.filter(
+            nome__in={nome for nome, _ in desejados}, tipo__in=tipos
+        )
+    }
+
+    MembroCompetencia.objects.bulk_create(
+        [
+            MembroCompetencia(
                 membro=membro,
-                competencia=competencia,
-                defaults={'declarado_por': DeclaradoPor.SUPERVISOR},
+                competencia_id=identificadores[(nome, tipo)],
+                declarado_por=DeclaradoPor.SUPERVISOR,
             )
+            for nome, tipo in sorted(desejados)
+        ]
+    )
+
+    _repor_vinculos_carregados(membro)
+
+
+def _repor_vinculos_carregados(membro: MembroRede) -> None:
+    """
+    Troca o cache de `prefetch_related` da instancia pelo estado novo.
+
+    O `get_queryset` do viewset carrega `vinculos_competencia`, e o
+    `get_object` enche esse cache antes desta funcao trocar os vinculos.
+    Serializar a mesma instancia depois devolvia a lista **velha**: a tela
+    salvava e recebia de volta o estado anterior, sem erro nenhum. Nao e
+    cosmetico - quem grava precisa poder ler o que gravou na mesma resposta
+    (ver `RespostaDoSalvamentoDoCadastroTests`).
+
+    Repoe em vez de so esvaziar, e com `select_related`, porque o cache vazio
+    tambem tem custo: `to_representation` le `vinculo.competencia.tipo` para
+    separar as tres listas, e sem a juncao isso volta a ser uma consulta por
+    vinculo - a N+1 que acabou de sair do laco entraria de novo pela
+    serializacao.
+
+    O queryset entra sem ser avaliado de proposito: quem o consome sao as tres
+    passadas de `_nomes`, e a primeira delas o resolve numa consulta so.
+    """
+    cache = getattr(membro, '_prefetched_objects_cache', None)
+    chave = MembroCompetencia.membro.field.remote_field.cache_name
+
+    if cache is None or chave not in cache:
+        return
+
+    cache[chave] = MembroCompetencia.objects.filter(
+        membro=membro
+    ).select_related('competencia')
 
 
 class CadastrarMembroService:
@@ -107,7 +184,12 @@ class CadastrarMembroService:
 
 
 class AtualizarMembroService:
-    """Edicao do cadastro pelo Supervisor (PB16)."""
+    """
+    Edicao do cadastro pelo Supervisor (PB16).
+
+    Com acesso liberado, nome e e-mail seguem para a conta: o e-mail do membro
+    e o login dela, e os dois nao podem divergir.
+    """
 
     @transaction.atomic
     def execute(
@@ -119,12 +201,21 @@ class AtualizarMembroService:
         ator: Usuario,
     ) -> MembroRede:
         antes = {campo: getattr(membro, campo) for campo in dados}
+        conta = membro.usuario
+
+        if conta is not None and 'email' in dados and dados['email'] != membro.email:
+            garantir_email_livre(dados['email'], usuario=conta, membro=membro)
 
         for campo, valor in dados.items():
             setattr(membro, campo, valor)
 
         membro.save()
         sincronizar_competencias(membro, listas)
+
+        if conta is not None and (conta.nome, conta.email) != (membro.nome, membro.email):
+            conta.nome = membro.nome
+            conta.email = membro.email
+            conta.save(update_fields=['nome', 'email', 'atualizado_em'])
 
         mudou = {
             campo: {'de': str(antes[campo]), 'para': str(getattr(membro, campo))}

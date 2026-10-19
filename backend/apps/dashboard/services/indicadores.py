@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Q, QuerySet
 
 from apps.accounts.models import Papel, Usuario
 from apps.decisions.models import Decisao, TipoDecisao
@@ -28,24 +28,46 @@ from apps.opportunities.services.oportunidade import escopo_de
 PAPEIS_QUE_CONSULTAM_A_REDE = (Papel.SUPERVISOR, Papel.PESQUISADOR)
 
 
-def _contagem(consulta: QuerySet, campo: str, choices) -> list[dict[str, Any]]:
+def _contagens(
+    consulta: QuerySet, eixos: dict[str, tuple[str, Any]]
+) -> tuple[int, dict[str, list[dict[str, Any]]]]:
     """
-    Uma contagem por valor do enum, **incluindo os que deram zero**.
+    O total e todos os eixos pedidos, numa consulta so.
 
-    O `values().annotate()` so devolve o que existe no banco. Uma etapa sem
-    ocorrencia sumiria do grafico, e etapa ausente le-se como "nao existe" em
-    vez de "ninguem esta nela" - que e o que o Supervisor precisa enxergar.
+    Uma contagem por valor do enum, **incluindo os que deram zero**: uma etapa
+    sem ocorrencia sumiria do grafico, e etapa ausente le-se como "nao existe"
+    em vez de "ninguem esta nela" - que e o que o Supervisor precisa enxergar.
     A ordem segue a do enum, que e a ordem do fluxo.
+
+    Antes, cada eixo era um `values().annotate()` e cada total um `count()`:
+    cinco numeros custavam sete consultas sequenciais, todas repetindo a
+    subconsulta de escopo. Um `Count` com `filter` por valor resolve o eixo
+    inteiro dentro do mesmo agregado, e o eixo tem tamanho fixo - e `choices`
+    de enum. Ver `core/tests/test_orcamento_de_queries.py`.
+
+    O apelido vai por indice, e nao pelo valor do enum: apelido de agregado e
+    nome de argumento, e um valor com hifen ou que colidisse com `total`
+    quebraria a chamada.
     """
-    totais = {
-        linha[campo]: linha['total']
-        for linha in consulta.values(campo).annotate(total=Count('pk'))
+    apelidos = {
+        f'{eixo}_{indice}': Count('pk', filter=Q(**{campo: valor}))
+        for eixo, (campo, choices) in eixos.items()
+        for indice, (valor, _rotulo) in enumerate(choices)
     }
 
-    return [
-        {'valor': valor, 'rotulo': rotulo, 'total': totais.get(valor, 0)}
-        for valor, rotulo in choices
-    ]
+    agregado = consulta.aggregate(total=Count('pk'), **apelidos)
+
+    return agregado['total'], {
+        eixo: [
+            {
+                'valor': valor,
+                'rotulo': rotulo,
+                'total': agregado[f'{eixo}_{indice}'],
+            }
+            for indice, (valor, rotulo) in enumerate(choices)
+        ]
+        for eixo, (_campo, choices) in eixos.items()
+    }
 
 
 def indicadores_de(usuario: Usuario) -> dict[str, Any]:
@@ -57,37 +79,45 @@ def indicadores_de(usuario: Usuario) -> dict[str, Any]:
     `/api/rede/` nega ao Demandante.
 
     O `pk__in` refaz a consulta sem os joins de `escopo_de`. O escopo do
-    Pesquisador atravessa equipe e membro; agregar sobre ele contaria a mesma
-    oportunidade uma vez por indicacao, e o `distinct()` nao sobrevive ao
-    `values().annotate()`.
+    Pesquisador atravessa equipe e membro; agregar direto sobre ele contaria a
+    mesma oportunidade uma vez por indicacao. A subconsulta de `pk` desfaz a
+    duplicacao antes de a contagem comecar, e por isso ela continua aqui mesmo
+    agora que a contagem e um agregado so.
     """
     oportunidades = Oportunidade.objects.filter(
         pk__in=escopo_de(usuario).values('pk')
     )
     decisoes = Decisao.objects.filter(oportunidade__in=oportunidades)
 
+    total_oportunidades, eixos_oportunidade = _contagens(
+        oportunidades,
+        {
+            'situacao': ('situacao', SituacaoOportunidade.choices),
+            'origem': ('origem', OrigemOportunidade.choices),
+        },
+    )
+    total_decisoes, eixos_decisao = _contagens(
+        decisoes, {'tipo': ('tipo_decisao', TipoDecisao.choices)}
+    )
+
     return {
         'oportunidades': {
-            'total': oportunidades.count(),
-            'por_situacao': _contagem(
-                oportunidades, 'situacao', SituacaoOportunidade.choices
-            ),
-            'por_origem': _contagem(
-                oportunidades, 'origem', OrigemOportunidade.choices
-            ),
+            'total': total_oportunidades,
+            'por_situacao': eixos_oportunidade['situacao'],
+            'por_origem': eixos_oportunidade['origem'],
         },
         'decisoes': {
-            'total': decisoes.count(),
-            'por_tipo': _contagem(decisoes, 'tipo_decisao', TipoDecisao.choices),
+            'total': total_decisoes,
+            'por_tipo': eixos_decisao['tipo'],
         },
         'rede': _rede() if usuario.papel in PAPEIS_QUE_CONSULTAM_A_REDE else None,
     }
 
 
 def _rede() -> dict[str, Any]:
-    membros = MembroRede.objects.all()
+    total, eixos = _contagens(
+        MembroRede.objects.all(),
+        {'papel': ('papel_rede', PapelNaRede.choices)},
+    )
 
-    return {
-        'total': membros.count(),
-        'por_papel': _contagem(membros, 'papel_rede', PapelNaRede.choices),
-    }
+    return {'total': total, 'por_papel': eixos['papel']}

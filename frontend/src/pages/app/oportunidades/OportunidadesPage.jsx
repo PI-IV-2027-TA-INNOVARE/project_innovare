@@ -6,6 +6,7 @@ import {
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { useAuth } from '../../../context/AuthContext'
+import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
@@ -85,6 +86,8 @@ export default function OportunidadesPage() {
   useEffect(() => {
     carregar()
   }, [carregar])
+
+  useAtualizarAoFocar(carregar, { ativo: acompanhaFila })
 
   const indicadores = useMemo(() => resumoPorSituacao(oportunidades), [oportunidades])
 

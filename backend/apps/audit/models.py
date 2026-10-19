@@ -8,11 +8,21 @@ import uuid
 
 from django.db import models
 
+from core.models import lista_fixa
+
 
 class CategoriaEvento(models.TextChoices):
-    """As categorias sao as que a aba Historico do front ja usa."""
+    """
+    As categorias sao as que a aba Historico do front ja usa.
+
+    `OBSERVACAO` e categoria propria, e nao um tipo dentro de `OPORTUNIDADE`,
+    porque o recorte do Demandante e feito por categoria
+    (CATEGORIAS_VISIVEIS_AO_DEMANDANTE): a nota que o Supervisor escreve
+    enquanto avalia e trabalho interno (PB65 x PB71).
+    """
 
     OPORTUNIDADE = 'oportunidade', 'Oportunidade'
+    OBSERVACAO = 'observacao', 'Observacao do Supervisor'
     COPILOTO = 'copiloto', 'Copiloto'
     COMPETENCIA = 'competencia', 'Competencia'
     MATCHING = 'matching', 'Matching'
@@ -38,7 +48,7 @@ class EventoAuditoria(models.Model):
     tipo = models.CharField(max_length=60, db_column='tipo')
     ator = models.CharField(max_length=160, db_column='ator')
     entidade = models.CharField(max_length=60, db_column='entidade')
-    entidade_id = models.CharField(max_length=60, db_column='entidade_id')
+    entidade_id = models.CharField(max_length=60, db_column='id_entidade')
     status = models.CharField(
         max_length=8,
         choices=StatusEvento.choices,
@@ -47,7 +57,7 @@ class EventoAuditoria(models.Model):
     )
     motivo = models.TextField(blank=True, default='', db_column='motivo')
     correlation_id = models.UUIDField(
-        default=uuid.uuid4, db_column='correlation_id'
+        default=uuid.uuid4, db_column='id_correlacao'
     )
     execucao_ia = models.ForeignKey(
         'ai.ExecucaoIA',
@@ -70,6 +80,10 @@ class EventoAuditoria(models.Model):
 
     class Meta:
         db_table = 'historico_evento'
+        constraints = [
+            lista_fixa('historico_evento', 'categoria', CategoriaEvento),
+            lista_fixa('historico_evento', 'status', StatusEvento),
+        ]
         verbose_name = 'evento de auditoria'
         verbose_name_plural = 'eventos de auditoria'
         ordering = ['-ocorrido_em']

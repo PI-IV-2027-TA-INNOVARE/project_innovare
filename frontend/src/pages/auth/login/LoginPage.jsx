@@ -1,10 +1,9 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import ThemeToggle from '../../../components/ThemeToggle'
 import { useAuth } from '../../../context/AuthContext'
 import { Icone, appIcons } from '../../../lib/icons'
 import { destinoAposLogin } from '../../../lib/rotas'
-import { IS_MOCK_AUTH_ENABLED, MOCK_CREDENTIAL_HINTS } from '../../../services/mockAuth'
 import './LoginPage.scss'
 
 const EMPTY_FORM = { email: '', password: '' }
@@ -38,7 +37,6 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isCapsLockOn, setIsCapsLockOn] = useState(false)
-  const [isDemoOpen, setIsDemoOpen] = useState(false)
 
   const emailRef = useRef(null)
   const passwordRef = useRef(null)
@@ -91,12 +89,6 @@ export default function LoginPage() {
     }
 
     setIsSubmitting(false)
-  }
-
-  const fillDemoAccount = (account) => {
-    setForm({ email: account.email, password: account.password })
-    setMessage('')
-    setInvalidField('')
   }
 
   const alertBanner = message
@@ -257,66 +249,6 @@ export default function LoginPage() {
                 Esqueci minha senha
               </Link>
             </form>
-
-            {IS_MOCK_AUTH_ENABLED ? (
-              <div className="login-demo">
-                <button
-                  type="button"
-                  className="login-demo__toggle"
-                  aria-expanded={isDemoOpen}
-                  aria-controls="login-demo-panel"
-                  onClick={() => setIsDemoOpen((open) => !open)}
-                >
-                  <Icone
-                    icon={appIcons.demo}
-                    className="login-demo__icon"
-                    aria-hidden="true"
-                  />
-                  <span className="login-demo__title">
-                    Modo demonstração — sem backend
-                  </span>
-                  <Icone
-                    icon={appIcons.disclosure}
-                    className={`login-demo__chevron${isDemoOpen ? ' is-open' : ''}`}
-                    aria-hidden="true"
-                  />
-                </button>
-
-                <div id="login-demo-panel" className="login-demo__panel" hidden={!isDemoOpen}>
-                <p className="login-demo__hint">
-                  Atalhos de teste — não são tipos de conta. O acesso real é
-                  sempre por e-mail e senha.
-                </p>
-
-                <ul className="login-demo__list">
-                  {MOCK_CREDENTIAL_HINTS.map((account) => (
-                    <li key={account.email}>
-                      <button
-                        type="button"
-                        className="login-demo__account"
-                        onClick={() => fillDemoAccount(account)}
-                        aria-label={`Preencher com a conta de ${account.roleLabel} (${account.email})`}
-                      >
-                        {account.roleLabel}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-
-                <details className="login-demo__details">
-                  <summary className="login-demo__summary">Ver credenciais</summary>
-                  <div className="login-demo__table">
-                    {MOCK_CREDENTIAL_HINTS.map((account) => (
-                      <Fragment key={account.email}>
-                        <span className="login-demo__email">{account.email}</span>
-                        <code className="login-demo__password">{account.password}</code>
-                      </Fragment>
-                    ))}
-                  </div>
-                </details>
-                </div>
-              </div>
-            ) : null}
 
             <p className="login-note">
               Não há autocadastro: o acesso é concedido pelo Núcleo de P&amp;D da

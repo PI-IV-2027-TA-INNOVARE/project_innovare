@@ -7,6 +7,8 @@ compara competencias derivadas da proposta e revisaveis pelo Supervisor.
 """
 from django.db import models
 
+from core.models import lista_fixa
+
 
 class NivelImportancia(models.TextChoices):
     """O `nivel_importancia` do diagrama, no lugar do booleano `essencial`."""
@@ -67,6 +69,8 @@ class CompetenciaNecessaria(models.Model):
         verbose_name = 'competencia necessaria'
         verbose_name_plural = 'competencias necessarias'
         constraints = [
+            lista_fixa('competencia_necessaria', 'nivel_importancia', NivelImportancia),
+            lista_fixa('competencia_necessaria', 'derivada_de', DerivadaDe),
             models.UniqueConstraint(
                 fields=['proposta', 'descricao'],
                 name='uq_competencia_necessaria_prop_desc',

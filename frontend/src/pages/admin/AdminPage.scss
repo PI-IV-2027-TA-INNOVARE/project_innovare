@@ -747,3 +747,392 @@
 .parametros-contato__erro {
   grid-column: 1 / -1;
 }
+
+.saude__consumo,
+.saude__verificacoes,
+.saude__revisao,
+.saude__detalhes {
+  margin-top: var(--admin-pad);
+  padding: var(--admin-pad);
+  background: var(--admin-card-bg);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-lg, 14px);
+}
+
+.saude__consumo-cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: var(--admin-pad);
+}
+
+.saude__selo {
+  padding: 4px 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+
+  &--ok {
+    color: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+  }
+
+  &--atencao,
+  &--critico {
+    color: var(--accent-primary-text);
+    border-color: var(--border-accent);
+    background: var(--accent-primary-dim);
+  }
+}
+
+.saude__valor {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.saude__valor-numero {
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.saude__valor-limite,
+.saude__barra-legenda {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.saude__barra {
+  height: 12px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: 999px;
+}
+
+.saude__barra-preenchida {
+  display: block;
+  height: 100%;
+  background: var(--accent-secondary);
+  transition: width 240ms ease;
+}
+
+.saude__barra--atencao .saude__barra-preenchida,
+.saude__barra--critico .saude__barra-preenchida {
+  background: var(--accent-primary);
+}
+
+.saude__barra-legenda {
+  margin-top: 8px;
+}
+
+.saude__complemento {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin: var(--admin-pad) 0 0;
+  padding-top: var(--admin-pad);
+  border-top: 1px solid var(--admin-card-border);
+}
+
+.saude__gasto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: var(--admin-pad) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saude__gasto-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 8px;
+}
+
+.saude__gasto-rotulo {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.saude__gasto-valor {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.saude__disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.saude__disclosure-nota {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.saude__subtitulo {
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.saude__titulo {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.saude__descricao {
+  margin-top: 4px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.saude__erro {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--accent-primary-text);
+}
+
+.saude__nota {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.saude__metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.saude__metrica {
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-md, 10px);
+
+  dt {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* --- Saude: verificacoes ---------------------------------------------------
+   Um cartao por pergunta. A resposta e legivel sem abrir nada: cor, icone e
+   texto juntos - a cor sozinha nao carrega o estado.
+   -------------------------------------------------------------------------- */
+.saude__verificacoes-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.saude__verificacao {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-md, 10px);
+
+  &--ok {
+    border-left-color: var(--accent-secondary);
+  }
+
+  &--atencao {
+    border-left-color: var(--accent-primary);
+  }
+
+  &--critico {
+    border-left-color: var(--accent-error);
+  }
+}
+
+.saude__verificacao-pergunta {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.saude__verificacao-resposta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text-primary);
+
+  svg {
+    flex: none;
+    width: 17px;
+    height: 17px;
+  }
+}
+
+.saude__verificacao--ok .saude__verificacao-resposta svg {
+  color: var(--accent-secondary);
+}
+
+.saude__verificacao--atencao .saude__verificacao-resposta svg {
+  color: var(--accent-primary);
+}
+
+.saude__verificacao--critico .saude__verificacao-resposta svg {
+  color: var(--accent-error);
+}
+
+.saude__verificacao-corpo {
+  display: grid;
+  gap: 8px;
+
+  .saude__nota {
+    margin: 0;
+  }
+}
+
+.saude__fonte {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.saude__revisao .saude__medidores {
+  margin-top: 14px;
+}
+
+/* --- Saude: o que esta errado, nomeado ----------------------------------- */
+.saude__achados {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: var(--admin-pad);
+  padding: 12px 14px;
+  background: var(--accent-primary-dim);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md, 10px);
+
+  > svg {
+    flex: none;
+    margin-top: 2px;
+    width: 16px;
+    height: 16px;
+    color: var(--accent-primary-text);
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+  }
+
+  li {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+  }
+}
+
+/* --- Saude: medidor (razao contra um limite) ------------------------------ */
+.saude__medidores {
+  display: grid;
+  gap: 14px;
+}
+
+.saude__medidor {
+  display: grid;
+  gap: 6px;
+}
+
+.saude__medidor-cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.saude__medidor-rotulo {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.saude__medidor-valor {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.saude__medidor-legenda {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.saude__barra--ok .saude__barra-preenchida {
+  background: var(--accent-secondary);
+}
+
+.saude__detalhes-corpo {
+  display: grid;
+  gap: var(--admin-pad);
+  margin-top: var(--admin-pad);
+}
+
+.saude__bloco-tecnico {
+  display: grid;
+  gap: 10px;
+  padding-top: var(--admin-pad);
+  border-top: 1px solid var(--admin-card-border);
+
+  &:first-of-type {
+    padding-top: 0;
+    border-top: none;
+  }
+}

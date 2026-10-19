@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useAtualizarAoFocar } from '../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../lib/icons'
 import { formatarUltimoAcesso } from '../lib/people'
 import { ROLES } from '../lib/roles'
@@ -64,7 +65,7 @@ export default function NotificacoesMenu() {
   const painelRef = useRef(null)
   const gatilhoRef = useRef(null)
 
-  useEffect(() => {
+  const contar = useCallback(() => {
     if (!temCaixa) return undefined
 
     let ativo = true
@@ -81,6 +82,10 @@ export default function NotificacoesMenu() {
       ativo = false
     }
   }, [temCaixa])
+
+  useEffect(() => contar(), [contar])
+
+  useAtualizarAoFocar(contar, { ativo: temCaixa })
 
   useEffect(() => {
     if (!temCaixa || !aberto) return undefined

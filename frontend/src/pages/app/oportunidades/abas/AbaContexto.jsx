@@ -1,8 +1,8 @@
-import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
+import { ETAPAS } from '../etapas'
 import { ORIGENS, origemLabel } from '../oportunidadesData'
 
-export default function AbaContexto({ oportunidade }) {
+export default function AbaContexto({ oportunidade, podeConduzir = false, irPara }) {
   const origem = ORIGENS.find((item) => item.id === oportunidade.origem)
 
   return (
@@ -42,62 +42,38 @@ export default function AbaContexto({ oportunidade }) {
       <section className="perfil-card">
         <header className="perfil-card__header">
           <div>
-            <h2 className="perfil-card__title">O que já se sabe</h2>
+            <h2 className="perfil-card__title">Como conduzir esta oportunidade</h2>
             <p className="perfil-card__description">
-              Competências derivadas e equipe sugerida até agora.
+              {podeConduzir
+                ? 'Siga as etapas na ordem. Cada uma usa o resultado da anterior.'
+                : 'As etapas que o Supervisor percorre até a decisão.'}
             </p>
           </div>
         </header>
 
-        <div className="perfil-card__body">
-          <div className="oportunidade-bloco">
-            <h3 className="oportunidade-bloco__titulo">Competências necessárias</h3>
-            {oportunidade.competencias.length > 0 ? (
-              <div className="competencia-lista">
-                {oportunidade.competencias.map((competencia) => (
-                  <span className="admin-tag" key={competencia}>{competencia}</span>
-                ))}
+        <ol className="roteiro">
+          {ETAPAS.filter((etapa) => etapa.id !== 'contexto').map((etapa) => (
+            <li key={etapa.id} className="roteiro__etapa">
+              <span className="roteiro__numero" aria-hidden="true">
+                {etapa.numero}
+              </span>
+              <div className="roteiro__texto">
+                <p className="roteiro__titulo">{etapa.label}</p>
+                <p className="roteiro__resumo">{etapa.resumo}</p>
               </div>
-            ) : (
-              <p className="oportunidade-bloco__vazio">
-                Ainda não derivadas — dependem da proposta estruturada.
-              </p>
-            )}
-          </div>
-
-          {oportunidade.lacunas.length > 0 ? (
-            <div className="oportunidade-bloco">
-              <h3 className="oportunidade-bloco__titulo">Lacunas de competência</h3>
-              <div className="competencia-lista">
-                {oportunidade.lacunas.map((lacuna) => (
-                  <span className="lacuna-tag" key={lacuna}>
-                    <Icone icon={appIcons.warning} aria-hidden="true" />
-                    {lacuna}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="oportunidade-bloco">
-            <h3 className="oportunidade-bloco__titulo">Equipe potencial</h3>
-            {oportunidade.equipe.length > 0 ? (
-              <>
-                <ul className="oportunidade-equipe">
-                  {oportunidade.equipe.map((pessoa) => (
-                    <li key={pessoa}>{pessoa}</li>
-                  ))}
-                </ul>
-                <p className="oportunidade-bloco__nota">
-                  Sugestão do matching, validada pelo Supervisor. Não há convite,
-                  aceite ou recusa pelo pesquisador.
-                </p>
-              </>
-            ) : (
-              <p className="oportunidade-bloco__vazio">Matching ainda não executado.</p>
-            )}
-          </div>
-        </div>
+              {irPara ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--sm admin-btn--outline"
+                  onClick={() => irPara(etapa.id)}
+                  aria-label={`Abrir a etapa ${etapa.label}`}
+                >
+                  Abrir
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ol>
       </section>
     </div>
   )

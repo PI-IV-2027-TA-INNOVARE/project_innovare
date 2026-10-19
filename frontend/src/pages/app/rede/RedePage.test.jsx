@@ -54,7 +54,6 @@ const CARLA = {
   id_membro: 5,
   nome: 'Carla Nogueira',
   email: 'carla.nogueira@ac2microbiologia.com.br',
-  papel_rede: 'colaborador',
   situacao: 'sem_acesso',
   competencias: ['Química analítica'],
   tecnicas: [],
@@ -67,7 +66,6 @@ const PEDRO = {
   id_membro: 6,
   nome: 'Pedro Salgado',
   email: 'pedro.salgado@ac2microbiologia.com.br',
-  papel_rede: 'graduando',
   titulacao_codigo: 'graduacao',
   competencias: ['Cultivo microbiano'],
   tecnicas: [],
@@ -79,7 +77,6 @@ const BANCADA = {
   id_membro: 7,
   nome: 'Núcleo de P&D — Bancada 2',
   email: 'bancada2@ac2microbiologia.com.br',
-  papel_rede: 'colaborador',
   titulacao_codigo: 'graduacao',
   situacao: 'inativo',
   competencias: [],
@@ -216,6 +213,26 @@ describe('RedePage', () => {
 })
 
 describe('RedeFormPage', () => {
+  /**
+   * A dica estava solta como irma do `.admin-form__row`, e nao dentro do
+   * campo que ela explica. A linha e uma grade de colunas automaticas, entao
+   * a dica virava uma **terceira coluna** ao lado dos campos em vez de ficar
+   * sob "Instituicao" - e em tela estreita descia sob "Papel na rede",
+   * explicando o campo errado.
+   */
+  it('a dica da instituição fica dentro do campo que ela explica', async () => {
+    renderRede('/rede/novo')
+
+    const instituicao = await screen.findByLabelText('Instituição')
+    const campo = instituicao.closest('.admin-field')
+
+    expect(within(campo).getByText(/vínculo institucional vem do cadastro/i))
+      .toBeInTheDocument()
+    expect(instituicao).toHaveAccessibleDescription(
+      /vínculo institucional vem do cadastro/i
+    )
+  })
+
   it('separa cadastrar na rede de liberar o acesso', async () => {
     renderRede('/rede/novo')
 

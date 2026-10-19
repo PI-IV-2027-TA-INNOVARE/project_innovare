@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
@@ -261,17 +262,23 @@ export default function PainelPorPapel({ user }) {
     setCarregando(true)
     setErro('')
 
+    const ehSupervisor = papel === ROLES.SUPERVISOR
+    const ehPesquisador = papel === ROLES.PESQUISADOR
+
     try {
-      const fila = await listOportunidades()
+      const [fila, membros, meu] = await Promise.all([
+        listOportunidades(),
+        ehSupervisor ? listarRede() : null,
+        ehPesquisador ? obterMeuPerfil().catch(() => null) : null,
+      ])
+
       setOportunidades((fila.results || fila).map(daApi))
 
-      if (papel === ROLES.SUPERVISOR) {
-        const membros = await listarRede()
+      if (ehSupervisor) {
         setRede((membros.results || membros).map(membroDaApi))
       }
 
-      if (papel === ROLES.PESQUISADOR) {
-        const meu = await obterMeuPerfil().catch(() => null)
+      if (ehPesquisador) {
         setPerfil(meu ? perfilDaApi(meu) : null)
       }
     } catch (falha) {
@@ -285,6 +292,8 @@ export default function PainelPorPapel({ user }) {
   useEffect(() => {
     carregar()
   }, [carregar])
+
+  useAtualizarAoFocar(carregar)
 
   if (!papel || papel === ROLES.ADMINISTRADOR) return null
 

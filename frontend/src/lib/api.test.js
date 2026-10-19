@@ -66,3 +66,30 @@ describe('apiRequest — envio de arquivo', () => {
     expect(chamada().body).toBe(JSON.stringify({ titulo: 'X' }))
   })
 })
+
+describe('apiRequest — cache do navegador', () => {
+  it('não consulta o cache HTTP do navegador', async () => {
+    /**
+     * Um 301 permanente fica guardado no cache do navegador e é seguido sem
+     * nunca mais chegar ao servidor. Se o backend um dia redirecionou para
+     * HTTPS, a tela segue tentando HTTPS contra um runserver que só fala HTTP,
+     * mesmo depois de o servidor ser corrigido. Dado autenticado também não
+     * tem por que ficar em disco.
+     */
+    await apiRequest('/ia/saude/')
+
+    expect(chamada().cache).toBe('no-store')
+  })
+
+  it('renova a sessão também sem consultar o cache', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ...respostaOk(), ok: false, status: 401 })
+      .mockResolvedValueOnce(respostaOk({ access: 'acesso-2' }))
+      .mockResolvedValueOnce(respostaOk())
+
+    await apiRequest('/ia/saude/')
+
+    expect(global.fetch.mock.calls[1][1].cache).toBe('no-store')
+  })
+})

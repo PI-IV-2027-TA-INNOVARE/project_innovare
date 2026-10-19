@@ -5,19 +5,22 @@
 # de decisao (AGENTS.md 3.2) e precisa de aprovacao humana.
 
 # --- Nucleo ------------------------------------------------------------------
-Django==5.2.14
+Django==5.2.17
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
 drf-spectacular==0.29.0
-psycopg2-binary==2.9.11
+psycopg[binary,pool]==3.3.6
+psycopg-pool==3.3.3
 python-decouple==3.8
 
-# --- Chegam com as fases de IA e assincrono ----------------------------------
-# Fase 3.2 (Copiloto) e 3.3 (matching). Descomente quando a fase comecar - ate
-# la nao ha por que instalar torch em maquina de quem so mexe em cadastro.
+# --- IA e Assincrono (Fases 3.2/3.3) ------------------------------------------
 #
-# pgvector==0.4.2
-# sentence-transformers==5.5.0
-# celery==5.5.3
-# redis==6.1.1
+# `pgvector` nao esta aqui de proposito: o embedding fica em coluna `float[]` e
+# a similaridade e cosseno em `numpy`, dentro do servico de matching - ver
+# PLANO_IMPLEMENTACAO.md 8.3. Reintroduzir a extensao e portao de decisao (3.2).
+google-generativeai==0.8.5
+sentence-transformers==5.5.0
+celery==5.5.3
+redis==6.1.1
+scikit-learn==1.7.2

@@ -14,7 +14,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.accounts.managers import UsuarioManager
-from core.models import ModeloComCarimbo
+from core.models import ModeloComCarimbo, lista_fixa
 
 
 class Papel(models.TextChoices):
@@ -62,6 +62,14 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
         null=True, blank=True, db_column='ultimo_acesso'
     )
     is_staff = models.BooleanField(default=False, db_column='acesso_admin_django')
+    is_superuser = models.BooleanField(
+        default=False,
+        help_text='Tem todas as permissoes do admin do Django sem atribuicao explicita.',
+        db_column='superusuario_django',
+    )
+    last_login = models.DateTimeField(
+        null=True, blank=True, db_column='ultima_entrada_admin'
+    )
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['nome', 'papel']
@@ -70,6 +78,10 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
 
     class Meta:
         db_table = 'usuario'
+        constraints = [
+            lista_fixa('usuario', 'papel', Papel),
+            lista_fixa('usuario', 'situacao', SituacaoConta),
+        ]
         verbose_name = 'usuario'
         verbose_name_plural = 'usuarios'
         indexes = [
@@ -173,6 +185,9 @@ class TokenAcesso(models.Model):
 
     class Meta:
         db_table = 'token_acesso'
+        constraints = [
+            lista_fixa('token_acesso', 'finalidade', FinalidadeToken),
+        ]
         indexes = [
             models.Index(fields=['usuario', 'finalidade'], name='idx_token_usuario_final'),
         ]

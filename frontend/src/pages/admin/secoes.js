@@ -34,6 +34,14 @@ export const SECOES_ADMIN = Object.freeze([
     icon: appIcons.settings,
     permissao: PERMISSOES.CONFIGURACAO,
   },
+  {
+    id: 'saude',
+    rota: '/admin/saude',
+    label: 'Saúde',
+    description: 'Se a plataforma está funcionando bem',
+    icon: appIcons.flow,
+    permissao: PERMISSOES.AUDITORIA,
+  },
 ])
 
 export const SECAO_INICIAL = SECOES_ADMIN[0]

@@ -174,6 +174,21 @@ class ConteudoDosIndicadoresTests(IndicadoresBaseTests):
         self.assertEqual(rede['total'], 1)
         self.assertEqual(self.contagem(rede, 'por_papel', 'pesquisador'), 1)
 
+    def test_por_papel_nao_inventa_papel_fora_da_baseline(self):
+        """
+        RN-A01: a contagem inclui os papeis de total zero de proposito, para
+        que etapa vazia nao se leia como inexistente. O efeito colateral e que
+        qualquer valor do enum vira barra na tela - entao o enum nao pode ter
+        papel que o dominio nao reconhece.
+        """
+        self.como(self.supervisor)
+        rede = self.indicadores().data['rede']
+
+        self.assertEqual(
+            [item['valor'] for item in rede['por_papel']],
+            ['supervisor', 'pesquisador'],
+        )
+
     def test_toda_contagem_traz_rotulo_legivel(self):
         """A tela mostra 'Em matching', nao 'matching'."""
         self.como(self.supervisor)

@@ -26,7 +26,7 @@ class Notificacao(models.Model):
         max_length=60, blank=True, default='', db_column='entidade'
     )
     entidade_id = models.CharField(
-        max_length=60, blank=True, default='', db_column='entidade_id'
+        max_length=60, blank=True, default='', db_column='id_entidade'
     )
     lida_em = models.DateTimeField(null=True, blank=True, db_column='lida_em')
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')

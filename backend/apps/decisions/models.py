@@ -6,6 +6,8 @@ automacao alguma percorre sozinha.
 """
 from django.db import models
 
+from core.models import CoerenteComAPreAnalise, lista_fixa
+
 
 class TipoDecisao(models.TextChoices):
     CONTINUAR = 'continuar', 'Continuar'
@@ -13,7 +15,7 @@ class TipoDecisao(models.TextChoices):
     ARQUIVAR = 'arquivar', 'Arquivar'
 
 
-class Decisao(models.Model):
+class Decisao(CoerenteComAPreAnalise, models.Model):
     """
     1:N e nao 1:1: uma oportunidade que recebeu "Revisar" volta ao fluxo e sera
     decidida de novo - e as duas decisoes precisam sobreviver.
@@ -48,6 +50,9 @@ class Decisao(models.Model):
 
     class Meta:
         db_table = 'decisao_oportunidade'
+        constraints = [
+            lista_fixa('decisao_oportunidade', 'tipo_decisao', TipoDecisao),
+        ]
         verbose_name_plural = 'decisoes'
         ordering = ['-registrada_em']
         indexes = [

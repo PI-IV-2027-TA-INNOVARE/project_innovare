@@ -6,10 +6,9 @@ apoio de IA.
 
 React 19 · Vite 6 · React Router 7 · SCSS · Vitest · identidade visual AC2.
 
-> **Este repositório contém apenas o front-end.** O back-end (Django + DRF) e os
-> módulos de IA ainda não foram implementados — ver o roadmap em
-> [`../PLANO_IMPLEMENTACAO.md`](../PLANO_IMPLEMENTACAO.md). Enquanto isso, a
-> aplicação roda inteira em modo demonstração, sem servidor nenhum.
+> **Este diretório contém o front-end.** O back-end (Django + DRF) está em
+> [`../backend`](../backend) e precisa estar no ar: o front consome apenas a API
+> REST e não tem fonte de dados própria.
 
 > Domínio e regras: [`../CONTEXT.md`](../CONTEXT.md) · Mandatos de engenharia:
 > [`../AGENTS.md`](../AGENTS.md)
@@ -28,20 +27,15 @@ npm run dev
 
 Abra **http://localhost:5173** — você cai direto na tela de login.
 
-### Credenciais fictícias
+### Credenciais
 
-O modo demonstração vem ligado (`VITE_AUTH_MOCK=true` no `.env`). As contas
-aparecem **na própria tela de login**: clique em uma e o formulário é preenchido.
+Não existe conta embutida no front, nem modo de demonstração: toda autenticação
+vai para a API (`POST /api/auth/token/`) e todo dado de usuário vem do banco.
+Para entrar localmente, suba o backend e use uma conta criada por lá — o
+`backend/populate_db.py` semeia dados fictícios para desenvolvimento.
 
-| Perfil | E-mail | Senha |
-|---|---|---|
-| **Administrador** | `admin@ac2microbiologia.com.br` | `admin123` |
-| Supervisor | `supervisor@ac2microbiologia.com.br` | `supervisor123` |
-| Pesquisador | `pesquisador@ac2microbiologia.com.br` | `pesquisador123` |
-| Demandante Externo | `demandante@valeverde.com.br` | `demandante123` |
-
-> ⚠️ Credenciais de vitrine, públicas e sem valor de segurança. Existem só para
-> navegar pelo front local. Nunca ligue este modo em ambiente exposto.
+Nenhuma senha mora em arquivo versionado, e `src/test/semCredenciaisNoFonte.test.js`
+falha se alguma voltar.
 
 ### O que já dá para ver
 
@@ -68,8 +62,7 @@ npm run test:coverage  # relatório de cobertura (v8)
 ```
 
 Os testes rodam em jsdom e não tocam rede nem `.env`: o `vite.config.js` fixa
-`VITE_AUTH_MOCK=false` para a suíte, e o modo demonstração é exercitado por um
-arquivo próprio que dubla `services/mockAuth.js`.
+`VITE_API_BASE_URL` para a suíte e cada teste dubla `services/pdConnectApi.js`.
 
 ---
 
@@ -84,7 +77,7 @@ src/
     auth/       login, esqueci-minha-senha, redefinir-senha (+ _auth-shared.scss)
     app/        painel
     admin/      AdminPage + sections/ (Aparência, Usuários)
-  services/     pdConnectApi.js (API real) · mockAuth.js (modo demonstração)
+  services/     pdConnectApi.js — único caminho de dados do front
   theme/        brandTokens.js — tokens editáveis pelo painel de Aparência
   styles/       variables/ · mixins/ · base/ · components/
   test/         setup.js — bootstrap da suíte
@@ -136,9 +129,9 @@ sozinho `--accent-primary-dim`, `--border-accent`, `--shadow-focus` e
 ## Observações
 
 - `.env` não é versionado; só o `.env.example`.
-- Com `VITE_AUTH_MOCK=false` o login vai para a API real (`POST /api/auth/token/`,
-  `GET /api/auth/profile/`) na `VITE_API_BASE_URL`. Sem back-end no ar nada
-  disso responde — é o caminho previsto para quando a Fase 2 entregar a API.
+- O login vai sempre para a API (`POST /api/auth/token/`, `GET /api/auth/profile/`)
+  na `VITE_API_BASE_URL`. Sem back-end no ar, nada disso responde — e não há
+  caminho alternativo que dispense o banco.
 - Sessão real em `localStorage`, chave `pdconnect-auth-session-v2`.
 - Não existe autocadastro: pesquisadores são cadastrados por um Supervisor e as
   demais contas provisionadas pelo Administrador (RN-A04 / D06).

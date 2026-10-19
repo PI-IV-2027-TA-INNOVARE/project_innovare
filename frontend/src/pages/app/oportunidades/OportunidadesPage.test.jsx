@@ -23,6 +23,10 @@ const api = vi.hoisted(() => ({
   obterOportunidade: null,
   listarHistorico: null,
   registrarDecisao: null,
+  obterEstadoCopiloto: null,
+  listarCompetencias: null,
+  obterEquipePotencial: null,
+  obterPreAnalise: null,
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
@@ -30,6 +34,25 @@ vi.mock('../../../services/pdConnectApi', () => ({
   obterOportunidade: (...args) => api.obterOportunidade(...args),
   listarHistorico: (...args) => api.listarHistorico(...args),
   registrarDecisao: (...args) => api.registrarDecisao(...args),
+  obterEstadoCopiloto: (...args) => api.obterEstadoCopiloto(...args),
+  listarCompetencias: (...args) => api.listarCompetencias(...args),
+  obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
+  obterPreAnalise: (...args) => api.obterPreAnalise(...args),
+  iniciarSessaoCopiloto: vi.fn(),
+  responderCopiloto: vi.fn(),
+  estruturarComCopiloto: vi.fn(),
+  concluirSessaoCopiloto: vi.fn(),
+  derivarCompetencias: vi.fn(),
+  adicionarCompetencia: vi.fn(),
+  atualizarCompetencia: vi.fn(),
+  removerCompetencia: vi.fn(),
+  executarMatching: vi.fn(),
+  ajustarMembroEquipe: vi.fn(),
+  adicionarMembroEquipe: vi.fn(),
+  validarEquipe: vi.fn(),
+  executarPreAnalise: vi.fn(),
+  acatarRecomendacao: vi.fn(),
+  listarRede: vi.fn(() => Promise.resolve({ results: [] })),
 }))
 
 function comoApi(oportunidade) {
@@ -105,13 +128,77 @@ beforeEach(() => {
   api.obterOportunidade = vi.fn()
   api.listarHistorico = vi.fn().mockResolvedValue([])
   api.registrarDecisao = vi.fn().mockResolvedValue({})
+  api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+    sessao: null,
+    mensagens: [],
+    perguntas: [],
+    lacunas: [],
+    elementos_vazios: [],
+    proposta_iniciada: false,
+    base_disponivel: false,
+    baseline_id: '?',
+  })
+  api.listarCompetencias = vi.fn().mockResolvedValue([])
+  api.obterEquipePotencial = vi
+    .fn()
+    .mockRejectedValue({ data: { codigo: 'equipe_inexistente' } })
+  api.obterPreAnalise = vi
+    .fn()
+    .mockRejectedValue({ data: { codigo: 'preanalise_inexistente' } })
 
   servidorResponde(OPORTUNIDADES_EXEMPLO)
   servidorDetalha('OP-2026-014')
   entrarComo('supervisor', 'Rafael Antunes')
 })
 
+const abaDaNavegacao = (nome) =>
+  within(screen.getByRole('navigation', { name: /etapas da oportunidade/i })).getByRole(
+    'button',
+    { name: nome },
+  )
+
 describe('OportunidadesPage', () => {
+  /**
+   * A fila so era buscada ao montar a tela. Quem ficasse com a aba aberta via
+   * o estado do momento em que entrou: oportunidade nova, decisao de outro
+   * Supervisor, mudanca de situacao - nada disso aparecia ate trocar de rota
+   * ou recarregar a pagina.
+   *
+   * Voltar para a aba e o sinal mais barato de "estou olhando de novo", e e
+   * onde a fila desatualizada atrapalha de fato.
+   */
+  it('busca a fila de novo quando o usuário volta para a aba', async () => {
+    renderApp()
+    await esperarLista()
+
+    expect(api.listOportunidades).toHaveBeenCalledTimes(1)
+
+    servidorResponde([
+      ...OPORTUNIDADES_EXEMPLO,
+      {
+        ...OPORTUNIDADES_EXEMPLO[0],
+        id: 'OP-2026-099',
+        titulo: 'Conservante natural para pães',
+      },
+    ])
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(await screen.findByText('Conservante natural para pães')).toBeInTheDocument()
+    expect(api.listOportunidades).toHaveBeenCalledTimes(2)
+  })
+
+  it('não busca a fila de quem não a acompanha, nem ao voltar para a aba', async () => {
+    entrarComo('demandante', 'Agroindústria Vale Verde')
+    renderApp()
+
+    await waitFor(() => expect(api.listOportunidades).not.toHaveBeenCalled())
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(api.listOportunidades).not.toHaveBeenCalled()
+  })
+
   it('mostra a fila inteira e os indicadores ao Supervisor', async () => {
     renderApp()
     await esperarLista()
@@ -229,14 +316,27 @@ describe('OportunidadesPage', () => {
 })
 
 describe('OportunidadePage', () => {
-  it('abre no contexto e marca as etapas ainda não implementadas', async () => {
+  it('abre no contexto e oferece as nove etapas do fluxo, nenhuma planejada', async () => {
     renderApp('/oportunidades/OP-2026-014')
 
     expect(await screen.findByRole('heading', { name: 'Entrada', level: 2 })).toBeInTheDocument()
     expect(api.obterOportunidade).toHaveBeenCalledWith('OP-2026-014')
 
-    const abaEquipe = screen.getByRole('button', { name: /equipe potencial/i })
-    expect(within(abaEquipe).getByText('Planejado')).toBeInTheDocument()
+    for (const etapa of [
+      /^contexto/i,
+      /^copiloto/i,
+      /proposta estruturada/i,
+      /^competências/i,
+      /equipe potencial/i,
+      /pré-análise/i,
+      /^decisão/i,
+      /^anexos/i,
+      /^histórico/i,
+    ]) {
+      expect(abaDaNavegacao(etapa)).toBeInTheDocument()
+    }
+
+    expect(screen.queryByText('Planejado')).not.toBeInTheDocument()
   })
 
   it('oferece volta explícita para a lista, não só o breadcrumb', async () => {
@@ -248,14 +348,20 @@ describe('OportunidadePage', () => {
       .toHaveAttribute('href', '/oportunidades')
   })
 
-  it('não simula resultado na etapa planejada', async () => {
+  it('não simula resultado: sem execução, a pré-análise declara a ausência', async () => {
     const user = userEvent.setup()
+    api.obterPreAnalise.mockRejectedValue({
+      data: { codigo: 'preanalise_inexistente' },
+    })
+
     renderApp('/oportunidades/OP-2026-014')
 
     await screen.findByRole('heading', { name: 'Entrada', level: 2 })
-    await user.click(screen.getByRole('button', { name: /pré-análise/i }))
+    await user.click(abaDaNavegacao(/pré-análise/i))
 
-    expect(screen.getByText(/etapa ainda não implementada/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/nenhuma pré-análise foi executada/i),
+    ).toBeInTheDocument()
   })
 
   it('o escopo do detalhe é do servidor: recusa vira "não encontrada"', async () => {
@@ -322,6 +428,29 @@ describe('OportunidadePage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Decisão registrada', level: 2 }))
       .toBeInTheDocument()
+  })
+
+  /**
+   * O relatorio e documento do Supervisor: PB71 da ao Demandante o andamento
+   * sem o trabalho interno, e o Pesquisador le a oportunidade pelo recorte da
+   * equipe. Oferecer o link aos outros prometeria uma tela que o guard nega.
+   */
+  it('leva o Supervisor ao relatório da oportunidade', async () => {
+    entrarComo('supervisor', 'Rafael Antunes')
+    renderApp('/oportunidades/OP-2026-014')
+
+    const link = await screen.findByRole('link', { name: /relatório/i })
+
+    expect(link).toHaveAttribute('href', '/oportunidades/OP-2026-014/relatorio')
+  })
+
+  it('não oferece o relatório ao Pesquisador', async () => {
+    entrarComo('pesquisador', 'Maria Ferreira')
+    renderApp('/oportunidades/OP-2026-014')
+
+    await screen.findByRole('heading', { level: 1 })
+
+    expect(screen.queryByRole('link', { name: /relatório/i })).not.toBeInTheDocument()
   })
 
   it('não oferece o formulário de decisão a quem não é Supervisor', async () => {

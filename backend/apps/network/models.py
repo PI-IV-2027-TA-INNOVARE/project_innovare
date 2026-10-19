@@ -6,16 +6,19 @@ externa em Lattes, ResearchGate ou Scholar (secao 7, OUT OF SCOPE).
 """
 from django.db import models
 
-from core.models import ModeloComCarimbo
+from core.models import ModeloComCarimbo, lista_fixa
 
 
 class PapelNaRede(models.TextChoices):
-    """Distinto do papel de acesso: um colaborador pode nao ter conta."""
+    """
+    Distinto do papel de acesso: o membro da rede pode nao ter conta.
+
+    RN-A01 fecha os atores em Demandante Externo, Pesquisador, Supervisor e
+    Administrador; so os dois ultimos integram a rede interna.
+    """
 
     SUPERVISOR = 'supervisor', 'Supervisor'
     PESQUISADOR = 'pesquisador', 'Pesquisador'
-    COLABORADOR = 'colaborador', 'Colaborador'
-    GRADUANDO = 'graduando', 'Graduando / bolsista'
 
 
 class Disponibilidade(models.TextChoices):
@@ -95,6 +98,7 @@ class Competencia(ModeloComCarimbo):
         db_table = 'competencia'
         verbose_name_plural = 'competencias'
         constraints = [
+            lista_fixa('competencia', 'tipo', TipoCompetencia),
             models.UniqueConstraint(
                 fields=['nome', 'tipo'], name='uq_competencia_nome_tipo'
             ),
@@ -160,7 +164,7 @@ class MembroRede(ModeloComCarimbo):
         null=True,
         on_delete=models.SET_NULL,
         related_name='membros_cadastrados',
-        db_column='cadastrado_por',
+        db_column='id_cadastrado_por',
     )
     competencias = models.ManyToManyField(
         Competencia,
@@ -170,6 +174,11 @@ class MembroRede(ModeloComCarimbo):
 
     class Meta:
         db_table = 'membro_rede'
+        constraints = [
+            lista_fixa('membro_rede', 'papel_rede', PapelNaRede),
+            lista_fixa('membro_rede', 'disponibilidade', Disponibilidade),
+            lista_fixa('membro_rede', 'situacao', SituacaoMembro),
+        ]
         verbose_name = 'membro da rede'
         verbose_name_plural = 'membros da rede'
         indexes = [
@@ -220,6 +229,7 @@ class MembroCompetencia(models.Model):
     class Meta:
         db_table = 'competencia_perfil'
         constraints = [
+            lista_fixa('competencia_perfil', 'declarado_por', DeclaradoPor),
             models.UniqueConstraint(
                 fields=['membro', 'competencia'],
                 name='uq_membro_competencia',

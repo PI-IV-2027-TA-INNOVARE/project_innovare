@@ -6,7 +6,7 @@ empresa com orcamento e prazo, e nao a Oportunidade da baseline v1.2.
 """
 from django.db import models, transaction
 
-from core.models import ModeloComCarimbo
+from core.models import ModeloComCarimbo, lista_fixa
 
 
 class OrigemOportunidade(models.TextChoices):
@@ -117,6 +117,8 @@ class Oportunidade(models.Model):
         verbose_name_plural = 'oportunidades'
         ordering = ['-atualizada_em']
         constraints = [
+            lista_fixa('oportunidade', 'origem', OrigemOportunidade),
+            lista_fixa('oportunidade', 'situacao', SituacaoOportunidade),
             models.CheckConstraint(
                 condition=(
                     models.Q(origem='interna', demandante__isnull=True)
@@ -155,7 +157,7 @@ class AnexoOportunidade(models.Model):
         null=True,
         on_delete=models.SET_NULL,
         related_name='anexos_enviados',
-        db_column='enviado_por',
+        db_column='id_enviado_por',
     )
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 

@@ -214,12 +214,15 @@ export function decisaoDaApi(ultima) {
 }
 
 export function eventoDaApi(evento, indice) {
+  const detalhe = evento.detalhe || {}
+
   return {
     id: `${evento.ocorrido_em}-${indice}`,
     em: Date.parse(evento.ocorrido_em),
     categoria: evento.categoria,
-    ator: evento.ator || 'Sistema',
+    ator: detalhe.autor_nome || evento.ator || 'Sistema',
     texto:
+      detalhe.texto ||
       TEXTO_DO_EVENTO[evento.tipo] ||
       String(evento.tipo || '').replace(/[._]/g, ' '),
   }

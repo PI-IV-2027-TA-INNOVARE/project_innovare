@@ -40,6 +40,23 @@ CONTAS = [
 ]
 
 
+def exigir_banco_local():
+    """
+    Recusa qualquer host que nao seja local (AGENTS.md 0.1).
+
+    Nao ha flag nem variavel que a desligue: seed escreve dado ficticio e, no
+    caso do `semear_dev`, redefine senha - contra um banco compartilhado isso
+    e estrago, nao teste.
+    """
+    host = settings.DATABASES['default'].get('HOST', '')
+
+    if host.strip().lower() not in settings.LOCAL_DB_HOSTS:
+        raise CommandError(
+            f'DB_HOST aponta para {host}, que nao e local. Seed so roda '
+            'contra banco local (AGENTS.md 0.1). Ajuste o backend/.env.'
+        )
+
+
 class Command(BaseCommand):
     help = 'Cria uma conta de cada ator no banco local, para desenvolvimento.'
 
@@ -48,7 +65,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **opcoes):
-        self._exigir_banco_local()
+        exigir_banco_local()
 
         senha = opcoes['senha']
 
@@ -126,12 +143,3 @@ class Command(BaseCommand):
             nome=nome, defaults={'tipo': tipo, 'cnpj': cnpj, 'ativo': True}
         )
         return organizacao
-
-    def _exigir_banco_local(self):
-        host = settings.DATABASES['default'].get('HOST', '')
-
-        if host.strip().lower() not in settings.LOCAL_DB_HOSTS:
-            raise CommandError(
-                f'DB_HOST aponta para {host}, que nao e local. Seed so roda '
-                'contra banco local (AGENTS.md 0.1). Ajuste o backend/.env.'
-            )

@@ -133,3 +133,86 @@ class GravacaoDoTemaTests(TemaBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(ConfiguracaoPlataforma.objects.exists())
+
+
+class ValidacaoDoTemaTests(TemaBaseTests):
+    """
+    O que a tela de Aparencia pode publicar.
+
+    A paleta gravada aqui e servida **publicamente** (o GET e `AllowAny`, para a
+    tela de login pintar a marca) e o front a escreve em custom property no
+    `document.documentElement`. Um valor que nao e cor nao "da erro": ele vira
+    uma variavel CSS que o navegador descarta, e a plataforma inteira - inclusive
+    a tela de login de quem nem tem conta - perde a cor para todos os usuarios,
+    sem uma linha de log.
+
+    Por isso a fronteira valida forma e valor em vez de confiar na tela
+    (AGENTS.md 1: proibido `dict` generico na fronteira). O inventario de tokens
+    continua sendo do front - duplica-lo aqui criaria duas verdades; o que o
+    backend afirma e "isto e um documento de cores", nao "estes sao os tokens".
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.como(self.administrador)
+
+    def test_valor_que_nao_e_cor_e_recusado(self):
+        resposta = self.gravar({'light': {'accentPrimary': 'banana'}})
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(ConfiguracaoPlataforma.objects.exists())
+
+    def test_hex_de_tres_digitos_e_aceito(self):
+        resposta = self.gravar({'light': {'accentPrimary': '#f80'}})
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+
+    def test_rgba_e_aceito_porque_os_veus_do_tema_escuro_nascem_assim(self):
+        resposta = self.gravar(
+            {'dark': {'accentWarm': 'rgba(224, 123, 26, 0.16)'}}
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.ler().data['payload']['dark']['accentWarm'],
+            'rgba(224, 123, 26, 0.16)',
+        )
+
+    def test_funcao_css_que_nao_e_cor_e_recusada(self):
+        resposta = self.gravar(
+            {'light': {'accentPrimary': 'url(https://exemplo.test/x.png)'}}
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(ConfiguracaoPlataforma.objects.exists())
+
+    def test_null_continua_removendo_a_chave(self):
+        self.gravar({'light': {'accentPrimary': '#1B5E20'}})
+
+        resposta = self.gravar({'light': {'accentPrimary': None}})
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.ler().data['payload']['light'], {})
+
+    def test_tema_desconhecido_e_recusado(self):
+        resposta = self.gravar({'sepia': {'accentPrimary': '#1B5E20'}})
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(ConfiguracaoPlataforma.objects.exists())
+
+    def test_profundidade_extra_e_recusada(self):
+        resposta = self.gravar({'light': {'accentPrimary': {'valor': '#1B5E20'}}})
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(ConfiguracaoPlataforma.objects.exists())
+
+    def test_nome_de_token_invalido_e_recusado(self):
+        resposta = self.gravar({'light': {'nao e token': '#1B5E20'}})
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(ConfiguracaoPlataforma.objects.exists())
+
+    def test_mensagem_de_erro_nomeia_o_token_recusado(self):
+        resposta = self.gravar({'light': {'accentPrimary': 'banana'}})
+
+        self.assertIn('accentPrimary', str(resposta.data))

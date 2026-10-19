@@ -7,10 +7,12 @@ export const TITULACOES = Object.freeze([
 ])
 
 export const PAPEIS_REDE = Object.freeze([
+  { id: 'pesquisador', label: 'Pesquisador' },
+])
+
+export const PAPEIS_REDE_TODOS = Object.freeze([
   { id: 'supervisor', label: 'Supervisor' },
   { id: 'pesquisador', label: 'Pesquisador' },
-  { id: 'colaborador', label: 'Colaborador' },
-  { id: 'graduando', label: 'Graduando / bolsista' },
 ])
 
 export const SITUACOES = Object.freeze([
@@ -96,7 +98,7 @@ export const REDE_EXEMPLO = Object.freeze([
     id: 5,
     nome: 'Carla Nogueira',
     email: 'carla.nogueira@ac2microbiologia.com.br',
-    papel: 'colaborador',
+    papel: 'pesquisador',
     titulacao: 'doutorado',
     situacao: 'sem_acesso',
     instituicao: 'UNICAMP · Rede AC2',
@@ -111,7 +113,7 @@ export const REDE_EXEMPLO = Object.freeze([
     id: 6,
     nome: 'Pedro Salgado',
     email: 'pedro.salgado@ac2microbiologia.com.br',
-    papel: 'graduando',
+    papel: 'pesquisador',
     titulacao: 'graduacao',
     situacao: 'ativo',
     instituicao: 'FHO · Rede AC2',
@@ -126,7 +128,7 @@ export const REDE_EXEMPLO = Object.freeze([
     id: 7,
     nome: 'Núcleo de P&D — Bancada 2',
     email: 'bancada2@ac2microbiologia.com.br',
-    papel: 'colaborador',
+    papel: 'pesquisador',
     titulacao: 'graduacao',
     situacao: 'inativo',
     instituicao: 'AC2 Microbiologia',

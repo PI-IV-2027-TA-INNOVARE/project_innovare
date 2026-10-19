@@ -4,95 +4,82 @@
 
 .indicadores-grade {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  margin-top: 16px;
+  gap: var(--admin-gap);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-top: var(--admin-pad);
 }
 
-.indicador-card {
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  border-radius: 12px;
-  padding: 20px;
+.perfil-card__icon {
+  font-size: 1.125rem;
+  color: var(--accent-primary-text);
+  opacity: 0.9;
+}
 
-  &__header {
-    align-items: baseline;
-    display: flex;
-    gap: 12px;
-    justify-content: space-between;
-  }
-
-  &__title {
-    font-size: 1rem;
-    margin: 0;
-  }
-
-  &__total {
-    font-size: 1.75rem;
-    font-weight: 700;
-    line-height: 1;
-    margin: 0;
-  }
-
-  &__description {
-    color: var(--text-muted, #6b7280);
-    font-size: 0.85rem;
-    margin: 4px 0 16px;
-  }
+.perfil-card__total {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+  margin: 0;
 }
 
 .indicador-grupo {
   & + & {
-    margin-top: 16px;
+    margin-top: var(--admin-gap);
   }
 
   &__titulo {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted);
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
-    margin: 0 0 8px;
+    margin: 0 0 12px;
     text-transform: uppercase;
   }
 
   &__lista {
     display: grid;
-    gap: 8px;
+    gap: 10px;
     list-style: none;
     margin: 0;
     padding: 0;
   }
 }
 
-.indicador-barra {
+.indicador-item {
+  display: flex;
   align-items: center;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(96px, 1fr) minmax(48px, 2fr) auto;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-radius: var(--admin-radius-sm);
+  transition: background var(--admin-motion);
+
+  &:hover {
+    background: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
+  }
 
   &__rotulo {
-    font-size: 0.85rem;
-  }
-
-  &__trilho {
-    background: var(--border, rgba(0, 0, 0, 0.08));
-    border-radius: 999px;
-    display: block;
-    height: 8px;
-    overflow: hidden;
-  }
-
-  &__preenchida {
-    background: var(--brand-primary, #1f7a5a);
-    border-radius: 999px;
-    display: block;
-    height: 100%;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    flex: 1;
     min-width: 0;
+    text-align: left;
   }
 
   &__total {
+    font-size: 0.875rem;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
-    font-weight: 600;
+    color: var(--accent-primary-text);
     text-align: right;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .indicadores-grade {
+    grid-template-columns: 1fr;
   }
 }

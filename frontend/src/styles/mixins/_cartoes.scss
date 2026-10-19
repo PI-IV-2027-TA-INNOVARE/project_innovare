@@ -1,0 +1,40 @@
+@use 'media' as *;
+
+@mixin cartoes-orfao-ocupa-a-faixa {
+  > .perfil-card:nth-child(odd of .perfil-card):nth-last-child(1 of .perfil-card) {
+    grid-column: 1 / -1;
+  }
+}
+
+@mixin cartoes-em-grade($colunas: 3) {
+  display: grid;
+  grid-template-columns: repeat($colunas, minmax(0, 1fr));
+  gap: var(--admin-gap);
+
+  > .perfil-card {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 2;
+
+    .perfil-card__header {
+      margin-bottom: 0;
+    }
+
+    .perfil-card__body {
+      align-content: start;
+    }
+  }
+
+  @if $colunas > 2 {
+    @include media-down(xl) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      @include cartoes-orfao-ocupa-a-faixa;
+    }
+  } @else {
+    @include cartoes-orfao-ocupa-a-faixa;
+  }
+
+  @include media-down(sm) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

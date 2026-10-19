@@ -4,10 +4,17 @@ Rastreabilidade das execucoes de IA.
 Uma linha por chamada a provedor. Todas as tabelas que teriam um `ai_run_id`
 solto apontam para ca - e e a mesma tabela que responde quanto o mes ja custou
 contra o teto de `AI_CUSTO_TETO_MENSAL_BRL` (`CONTEXT.md` secao 2).
+
+`oportunidade` e anulavel e `SET_NULL` pela mesma razao de `historico_evento`:
+execucao de embedding nao pende de oportunidade nenhuma, e apagar a
+oportunidade nao pode apagar o gasto - o teto mensal e apurado sobre esta
+tabela, e CASCADE faria a conta do mes mudar sozinha.
 """
 import uuid
 
 from django.db import models
+
+from core.models import lista_fixa
 
 
 class TipoExecucaoIA(models.TextChoices):
@@ -54,10 +61,18 @@ class ExecucaoIA(models.Model):
         default=StatusExecucao.PENDENTE,
         db_column='status',
     )
-    fallback_usado = models.BooleanField(default=False, db_column='fallback_usado')
+    fallback_usado = models.BooleanField(default=False, db_column='usou_caminho_alternativo')
     erro = models.TextField(blank=True, default='', db_column='erro')
     correlation_id = models.UUIDField(
-        default=uuid.uuid4, db_column='correlation_id'
+        default=uuid.uuid4, db_column='id_correlacao'
+    )
+    oportunidade = models.ForeignKey(
+        'opportunities.Oportunidade',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='execucoes_ia',
+        db_column='id_oportunidade',
     )
     executado_por = models.CharField(
         max_length=160, default='__sistema__', db_column='executado_por'
@@ -69,6 +84,10 @@ class ExecucaoIA(models.Model):
 
     class Meta:
         db_table = 'execucao_ia'
+        constraints = [
+            lista_fixa('execucao_ia', 'tipo', TipoExecucaoIA),
+            lista_fixa('execucao_ia', 'status', StatusExecucao),
+        ]
         verbose_name = 'execucao de IA'
         verbose_name_plural = 'execucoes de IA'
         indexes = [

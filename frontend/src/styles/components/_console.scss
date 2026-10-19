@@ -1,3 +1,5 @@
+@use '../mixins' as *;
+
 .console,
 .admin-page {
   --admin-gutter: clamp(18px, 2.4vw, 40px);
@@ -228,13 +230,21 @@
 
   &::placeholder {
     color: var(--text-muted);
-    opacity: 0.75;
+    opacity: 1;
   }
 
   &:focus {
     outline: none;
     border-color: var(--accent-primary);
     box-shadow: var(--shadow-focus);
+  }
+
+  &[readonly] {
+    color: var(--text-primary);
+    background: var(--bg-input-muted);
+    border-color: var(--border-soft);
+    border-style: dashed;
+    cursor: default;
   }
 }
 
@@ -276,7 +286,7 @@
 
   &::placeholder {
     color: var(--text-muted);
-    opacity: 0.75;
+    opacity: 1;
   }
 
   &:focus {
@@ -823,9 +833,7 @@
     background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
   }
 
-  &--demandante,
-  &--colaborador,
-  &--graduando {
+  &--demandante {
     color: var(--text-muted);
     background: transparent;
     border: 1px solid var(--border-color);
@@ -1160,6 +1168,7 @@
 
 .admin-field {
   display: grid;
+  align-content: start;
   gap: 6px;
 }
 
@@ -1455,10 +1464,8 @@
 }
 
 .console-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  align-items: start;
-  gap: var(--admin-gap);
+  @include cartoes-em-grade(2);
+
   margin-top: var(--admin-pad);
 }
 

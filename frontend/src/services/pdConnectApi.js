@@ -112,6 +112,22 @@ export function listarHistorico(codigo) {
   return apiRequest(`/oportunidades/${codigo}/historico/`)
 }
 
+export function obterProposta(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/proposta/`)
+}
+
+export function obterRelatorioOportunidade(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/relatorio/`)
+}
+
+export function criarProposta(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/proposta/`, { method: 'POST' })
+}
+
+export function atualizarProposta(codigo, payload) {
+  return apiRequest(`/oportunidades/${codigo}/proposta/`, { method: 'PATCH', body: payload })
+}
+
 export function listarRede(params = {}) {
   const query = new URLSearchParams({ page_size: '100' })
 
@@ -148,6 +164,20 @@ export function atualizarMeuPerfil(payload) {
 
 export function listarTitulacoes() {
   return apiRequest('/rede/titulacoes/')
+}
+
+export function registrarObservacao(codigo, texto) {
+  return apiRequest(`/oportunidades/${codigo}/observacoes/`, {
+    method: 'POST',
+    body: { texto },
+  })
+}
+
+export function solicitarComplemento(codigo, mensagem) {
+  return apiRequest(`/oportunidades/${codigo}/solicitar-complemento/`, {
+    method: 'POST',
+    body: { mensagem },
+  })
 }
 
 export function listarAnexos(codigo) {
@@ -202,4 +232,124 @@ export function marcarNotificacaoLida(id) {
 
 export function marcarTodasNotificacoesLidas() {
   return apiRequest('/notificacoes/marcar-todas-lidas/', { method: 'POST' })
+}
+
+export function obterEstadoCopiloto(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/`)
+}
+
+export function iniciarSessaoCopiloto(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/`, { method: 'POST' })
+}
+
+export function responderCopiloto(codigo, texto) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/responder/`, {
+    method: 'POST',
+    body: { texto },
+  })
+}
+
+export function estruturarComCopiloto(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/estruturar/`, {
+    method: 'POST',
+  })
+}
+
+export function concluirSessaoCopiloto(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/concluir/`, { method: 'POST' })
+}
+
+export function listarCompetencias(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/competencias/`)
+}
+
+export function derivarCompetencias(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/competencias/derivar/`, {
+    method: 'POST',
+  })
+}
+
+export function adicionarCompetencia(codigo, payload) {
+  return apiRequest(`/oportunidades/${codigo}/competencias/`, {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function atualizarCompetencia(codigo, id, payload) {
+  return apiRequest(`/oportunidades/${codigo}/competencias/${id}/`, {
+    method: 'PATCH',
+    body: payload,
+  })
+}
+
+export function removerCompetencia(codigo, id) {
+  return apiRequest(`/oportunidades/${codigo}/competencias/${id}/`, {
+    method: 'DELETE',
+  })
+}
+
+export function obterEquipePotencial(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/equipe/`)
+}
+
+export function executarMatching(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/equipe/`, { method: 'POST' })
+}
+
+export function ajustarMembroEquipe(codigo, id, payload) {
+  return apiRequest(`/oportunidades/${codigo}/equipe/membros/${id}/`, {
+    method: 'PATCH',
+    body: payload,
+  })
+}
+
+export function adicionarMembroEquipe(codigo, payload) {
+  return apiRequest(`/oportunidades/${codigo}/equipe/membros/`, {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function validarEquipe(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/equipe/validar/`, { method: 'POST' })
+}
+
+export function obterPreAnalise(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/pre-analise/`)
+}
+
+export function executarPreAnalise(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/pre-analise/`, { method: 'POST' })
+}
+
+export function acatarRecomendacao(codigo, id, acatada) {
+  return apiRequest(`/oportunidades/${codigo}/recomendacoes/${id}/`, {
+    method: 'PATCH',
+    body: { acatada },
+  })
+}
+
+export function obterSaudeDaPlataforma() {
+  return apiRequest('/ia/saude/')
+}
+
+export function obterIndicadoresDeIA() {
+  return apiRequest('/indicadores/ia/')
+}
+
+export function obterRelatorioPreAnalise(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/relatorio-preanalise/`)
+}
+
+export function obterRelatorioEquipe(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/relatorio-equipe/`)
+}
+
+export function listarCriteriosPreAnalise() {
+  return apiRequest('/ia/criterios/')
+}
+
+export function importarCriteriosPreAnalise() {
+  return apiRequest('/ia/criterios/', { method: 'POST' })
 }

@@ -8,7 +8,7 @@ import uuid
 
 from django.db import models
 
-from core.models import ModeloComCarimbo
+from core.models import CoerenteComAPreAnalise, ModeloComCarimbo, lista_fixa
 
 
 class EstadoSessao(models.TextChoices):
@@ -125,7 +125,7 @@ class SessaoCopiloto(models.Model):
         null=True,
         on_delete=models.SET_NULL,
         related_name='sessoes_copiloto',
-        db_column='iniciada_por',
+        db_column='id_iniciada_por',
     )
     estado = models.CharField(
         max_length=12,
@@ -140,6 +140,9 @@ class SessaoCopiloto(models.Model):
 
     class Meta:
         db_table = 'sessao_copiloto'
+        constraints = [
+            lista_fixa('sessao_copiloto', 'estado', EstadoSessao),
+        ]
         verbose_name = 'sessao do copiloto'
         verbose_name_plural = 'sessoes do copiloto'
         ordering = ['-criado_em']
@@ -180,13 +183,14 @@ class MensagemCopiloto(models.Model):
         verbose_name_plural = 'mensagens do copiloto'
         ordering = ['sessao', 'ordem']
         constraints = [
+            lista_fixa('mensagem_copiloto', 'autor', AutorMensagem),
             models.UniqueConstraint(
                 fields=['sessao', 'ordem'], name='uq_mensagem_sessao_ordem'
             ),
         ]
 
 
-class Lacuna(models.Model):
+class Lacuna(CoerenteComAPreAnalise, models.Model):
     """Uma tabela com discriminador para os tres usos do termo no glossario."""
 
     id_lacuna = models.BigAutoField(primary_key=True, db_column='id_lacuna')
@@ -234,6 +238,10 @@ class Lacuna(models.Model):
 
     class Meta:
         db_table = 'lacuna_proposta'
+        constraints = [
+            lista_fixa('lacuna_proposta', 'tipo', TipoLacuna),
+            lista_fixa('lacuna_proposta', 'severidade', Severidade),
+        ]
         verbose_name_plural = 'lacunas'
         indexes = [
             models.Index(

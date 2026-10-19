@@ -231,14 +231,6 @@ class MembroRedeBuilder:
         self._papel_rede = PapelNaRede.PESQUISADOR
         return self
 
-    def colaborador(self) -> MembroRedeBuilder:
-        self._papel_rede = PapelNaRede.COLABORADOR
-        return self
-
-    def graduando(self) -> MembroRedeBuilder:
-        self._papel_rede = PapelNaRede.GRADUANDO
-        return self
-
     def chamado(self, nome: str) -> MembroRedeBuilder:
         self._nome = nome
         return self
@@ -407,3 +399,26 @@ class OportunidadeBuilder:
             responsavel=self._responsavel,
             situacao=self._situacao,
         )
+
+
+def indicar_na_equipe(
+    oportunidade: Oportunidade,
+    membro: MembroRede,
+    papel: str | None = None,
+):
+    """
+    Poe a pessoa numa equipe potencial da oportunidade.
+
+    E o que da acesso ao Pesquisador: `escopo_de` o alcanca por uma indicacao
+    `incluido`, nao pelo papel (D02). Sem isto, todo teste de leitura do
+    Pesquisador responde 404 - e o 404 esta certo.
+    """
+    from apps.matching.models import EquipePotencial, MembroEquipe
+
+    equipe = EquipePotencial.objects.create(oportunidade=oportunidade)
+
+    return MembroEquipe.objects.create(
+        equipe=equipe,
+        membro=membro,
+        papel=papel or membro.papel_rede,
+    )

@@ -6,7 +6,7 @@ a empresa demandante (Problema Externo) e a instituicao do membro da rede.
 """
 from django.db import models
 
-from core.models import ModeloComCarimbo
+from core.models import ModeloComCarimbo, lista_fixa
 
 
 class TipoOrganizacao(models.TextChoices):
@@ -37,6 +37,7 @@ class Organizacao(ModeloComCarimbo):
         verbose_name = 'organizacao'
         verbose_name_plural = 'organizacoes'
         constraints = [
+            lista_fixa('organizacao', 'tipo', TipoOrganizacao),
             models.CheckConstraint(
                 condition=(
                     models.Q(tipo='demandante', cnpj__isnull=False)

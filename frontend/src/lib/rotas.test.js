@@ -8,6 +8,37 @@ import {
 } from './rotas'
 
 describe('podeAcessar', () => {
+  /**
+   * O relatorio consolida o trabalho interno da oportunidade, e por isso e so
+   * do Supervisor: PB71 da ao Demandante o andamento "sem acessar informacoes
+   * internas restritas", e o Pesquisador le a oportunidade pelo recorte da
+   * equipe, nao o dossie inteiro.
+   */
+  it('restringe o relatório da oportunidade ao Supervisor', () => {
+    const rota = '/oportunidades/OP-2026-014/relatorio'
+
+    expect(podeAcessar(ROLES.SUPERVISOR, rota)).toBe(true)
+    expect(podeAcessar(ROLES.PESQUISADOR, rota)).toBe(false)
+    expect(podeAcessar(ROLES.DEMANDANTE, rota)).toBe(false)
+    expect(podeAcessar(ROLES.ADMINISTRADOR, rota)).toBe(false)
+  })
+
+  /**
+   * `ROTAS_PROTEGIDAS` e varrida em ordem com `matchPath`. O relatorio precisa
+   * ser testado antes de `/oportunidades/:id` — na ordem inversa, um dia em
+   * que o padrao do detalhe deixe de casar so o fim da URL, o Pesquisador
+   * herdaria o relatorio pela regra do `:id`.
+   */
+  it('testa o relatório antes do detalhe da oportunidade', () => {
+    const padroes = ROTAS_PROTEGIDAS.map((item) => item.padrao)
+
+    expect(padroes).toContain('/oportunidades/:id/relatorio')
+    expect(padroes).toContain('/oportunidades/:id')
+
+    expect(padroes.indexOf('/oportunidades/:id/relatorio'))
+      .toBeLessThan(padroes.indexOf('/oportunidades/:id'))
+  })
+
   it('libera o painel para os quatro atores', () => {
     for (const papel of Object.values(ROLES)) {
       expect(podeAcessar(papel, '/painel')).toBe(true)
@@ -22,6 +53,7 @@ describe('podeAcessar', () => {
       '/admin/usuarios',
       '/admin/parametros',
       '/admin/auditoria',
+      '/admin/saude',
     ]) {
       expect(podeAcessar(ROLES.ADMINISTRADOR, caminho)).toBe(true)
       expect(podeAcessar(ROLES.SUPERVISOR, caminho)).toBe(false)
@@ -159,6 +191,9 @@ describe('ROTAS_PROTEGIDAS', () => {
       '/sem-acesso',
       '/oportunidades',
       '/oportunidades/nova',
+      '/oportunidades/:id/relatorio/pre-analise',
+      '/oportunidades/:id/relatorio/equipe',
+      '/oportunidades/:id/relatorio',
       '/oportunidades/:id',
       '/problemas',
       '/problemas/novo',
@@ -173,6 +208,7 @@ describe('ROTAS_PROTEGIDAS', () => {
       '/admin/usuarios',
       '/admin/parametros',
       '/admin/auditoria',
+      '/admin/saude',
     ])
   })
 

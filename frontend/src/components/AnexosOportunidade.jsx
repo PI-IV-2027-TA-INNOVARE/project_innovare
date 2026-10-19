@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Icone, appIcons } from '../../../../lib/icons'
-import { formatarUltimoAcesso } from '../../../../lib/people'
-import { enviarAnexo, listarAnexos } from '../../../../services/pdConnectApi'
+import { Icone, appIcons } from '../lib/icons'
+import { formatarUltimoAcesso } from '../lib/people'
+import { enviarAnexo, listarAnexos } from '../services/pdConnectApi'
 
 const TETO_BYTES = 10 * 1024 * 1024
 
@@ -13,7 +13,19 @@ function tamanhoLegivel(bytes) {
   return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
 
-export default function AbaAnexos({ codigo, podeEnviar = false }) {
+/**
+ * Os documentos de uma oportunidade (PB21).
+ *
+ * Uma so implementacao para os dois atores que a historia cita: o Supervisor
+ * a ve como aba da conducao, o Demandante como bloco do acompanhamento. O
+ * recorte de quem alcanca o registro ja e do servidor; aqui so muda a moldura.
+ */
+export default function AnexosOportunidade({
+  codigo,
+  podeEnviar = false,
+  titulo = 'Anexos e documentos',
+  descricao = 'Laudos, relatórios e material de apoio da oportunidade. Cada envio fica registrado no histórico.',
+}) {
   const [anexos, setAnexos] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
@@ -64,11 +76,8 @@ export default function AbaAnexos({ codigo, podeEnviar = false }) {
     <section className="perfil-card">
       <header className="perfil-card__header">
         <div>
-          <h2 className="perfil-card__title">Anexos e documentos</h2>
-          <p className="perfil-card__description">
-            Laudos, relatórios e material de apoio da oportunidade. Cada envio
-            fica registrado no histórico.
-          </p>
+          <h2 className="perfil-card__title">{titulo}</h2>
+          <p className="perfil-card__description">{descricao}</p>
         </div>
       </header>
 
