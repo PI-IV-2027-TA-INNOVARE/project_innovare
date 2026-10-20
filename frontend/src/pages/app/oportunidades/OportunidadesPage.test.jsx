@@ -331,7 +331,7 @@ describe('OportunidadesPage', () => {
     renderApp()
     await screen.findByText(primeira.titulo, {}, { timeout: 2000 })
 
-    const botao = screen.getByRole('button', { name: /aguardando minha atuação (2)/i })
+    const botao = screen.getByRole('button', { name: /aguardando minha atuação \(2\)/i })
     expect(botao).toHaveAttribute('aria-pressed', 'false')
 
     await user.click(botao)

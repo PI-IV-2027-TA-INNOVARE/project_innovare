@@ -549,10 +549,10 @@
                 ""
               ]
             },
-            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_create",
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\n`papel_rede` aceita so `pesquisador`: o Supervisor cadastra Pesquisadores\n(RN-A03 / RN-A04). `formacoes` e opcional; cada item exige `curso` e\n`instituicao`.\n\noperationId: rede_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel_rede\": \"supervisor\",\n  \"titulacao_codigo\": \"\",\n  \"organizacao\": 0,\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "raw": "{\n  \"nome\": \"Helena Torres\",\n  \"email\": \"helena.torres@ac2.com.br\",\n  \"papel_rede\": \"pesquisador\",\n  \"titulacao_codigo\": \"mestrado\",\n  \"organizacao\": null,\n  \"disponibilidade\": \"parcial\",\n  \"experiencia\": \"Seis anos em microbiologia de alimentos.\",\n  \"competencias\": [\n    \"Microbiologia de alimentos\"\n  ],\n  \"tecnicas\": [\n    \"PCR em tempo real\"\n  ],\n  \"linhas\": [\n    \"Seguranca de alimentos\"\n  ],\n  \"formacoes\": [\n    {\n      \"curso\": \"Ciencias Biologicas\",\n      \"instituicao\": \"Universidade Estadual de Campinas\",\n      \"titulacao_codigo\": \"mestrado\",\n      \"ano_conclusao\": 2019\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -601,10 +601,10 @@
                 ""
               ]
             },
-            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_partial_update",
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\nPATCH parcial: so os campos enviados mudam. As listas (`competencias`,\n`tecnicas`, `linhas`, `formacoes`) trocam o conjunto inteiro; lista vazia\nremove tudo, campo ausente preserva.\n\noperationId: rede_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel_rede\": \"supervisor\",\n  \"titulacao_codigo\": \"\",\n  \"organizacao\": 0,\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "raw": "{\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"Oito anos em microbiologia de alimentos.\",\n  \"competencias\": [\n    \"Microbiologia de alimentos\",\n    \"Fermentacao\"\n  ],\n  \"formacoes\": [\n    {\n      \"curso\": \"Ciencias Biologicas\",\n      \"instituicao\": \"Universidade Estadual de Campinas\",\n      \"titulacao_codigo\": \"mestrado\",\n      \"ano_conclusao\": 2019\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -673,10 +673,10 @@
                 ""
               ]
             },
-            "description": "`/api/rede/meu-perfil/` - o perfil que o proprio membro mantem (RN-A05).\n\nNao aceita `id`: o alvo e sempre quem esta autenticado. Rota com id abriria\na porta para editar o perfil alheio por engano de permissao.\n\noperationId: rede_meu_perfil_partial_update",
+            "description": "`/api/rede/meu-perfil/` - o perfil que o proprio membro mantem (RN-A05).\n\nNao aceita `id`: o alvo e sempre quem esta autenticado. Rota com id abriria\na porta para editar o perfil alheio por engano de permissao.\n\nNome, e-mail, papel na rede e situacao sao cadastro (Supervisor) e sao\nignorados aqui. `formacoes` troca o conjunto inteiro, como as listas.\n\noperationId: rede_meu_perfil_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"titulacao_codigo\": \"\",\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "raw": "{\n  \"titulacao_codigo\": \"mestrado\",\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"Oito anos em microbiologia de alimentos.\",\n  \"competencias\": [\n    \"Microbiologia de alimentos\"\n  ],\n  \"tecnicas\": [\n    \"PCR em tempo real\"\n  ],\n  \"linhas\": [\n    \"Seguranca de alimentos\"\n  ],\n  \"formacoes\": [\n    {\n      \"curso\": \"Ciencias Biologicas\",\n      \"instituicao\": \"Universidade Estadual de Campinas\",\n      \"titulacao_codigo\": \"mestrado\",\n      \"ano_conclusao\": 2019\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -739,7 +739,19 @@
                 {
                   "key": "busca",
                   "value": "",
-                  "description": "codigo ou titulo",
+                  "description": "codigo, titulo ou nome do demandante",
+                  "disabled": true
+                },
+                {
+                  "key": "cadastrada_de",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo - dia do cadastro (PB28)",
+                  "disabled": true
+                },
+                {
+                  "key": "cadastrada_ate",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo; data malformada ou anterior a inicial devolve 400",
                   "disabled": true
                 },
                 {
@@ -756,7 +768,7 @@
                 }
               ]
             },
-            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_list"
+            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\nCada linha traz `aguarda_minha_atuacao`: para o Supervisor, verdadeiro na\noportunidade sem responsavel ou conduzida por ele que esta em Entrada,\nAguardando decisao ou Revisar com resposta do Demandante (PB61). Para os\noutros atores e sempre falso.\n\noperationId: oportunidades_list"
           }
         },
         {
@@ -1979,9 +1991,47 @@
               "path": [
                 "trilha",
                 ""
+              ],
+              "query": [
+                {
+                  "key": "categoria",
+                  "value": "",
+                  "description": "oportunidade | observacao | copiloto | competencia | matching | preanalise | decisao | rede | conta | config",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "ok | erro | negado",
+                  "disabled": true
+                },
+                {
+                  "key": "busca",
+                  "value": "",
+                  "description": "pessoa (e-mail ou nome), tipo do evento, id gravado, codigo ou titulo da oportunidade",
+                  "disabled": true
+                },
+                {
+                  "key": "desde",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo",
+                  "disabled": true
+                },
+                {
+                  "key": "ate",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                }
               ]
             },
-            "description": "`GET /api/trilha/` - o que aconteceu na plataforma (RF12).\n\nSem `post`, `patch` ou `delete`: a trilha e append-only, e quem grava e o\nservice que causou o evento. Uma rota de escrita aqui seria a porta por\nonde a trilha deixaria de ser confiavel.\n\noperationId: trilha_list"
+            "description": "`GET /api/trilha/` - o que aconteceu na plataforma (RF12).\n\nSem `post`, `patch` ou `delete`: a trilha e append-only, e quem grava e o\nservice que causou o evento. Uma rota de escrita aqui seria a porta por\nonde a trilha deixaria de ser confiavel.\n\nLogin e logout bem-sucedidos so aparecem com `categoria=conta`; entrada\nrecusada aparece sempre. Cada evento traz `tipo_rotulo`, `ator_nome` e\n`alvo` (`rotulo`, `oportunidade`, `removido`) ja legiveis.\n\noperationId: trilha_list"
           }
         },
         {
