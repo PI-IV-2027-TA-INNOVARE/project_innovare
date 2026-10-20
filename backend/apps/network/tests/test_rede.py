@@ -14,6 +14,7 @@ from apps.accounts.models import Papel, SituacaoConta, Usuario
 from apps.audit.models import EventoAuditoria
 from apps.network.models import (
     DeclaradoPor,
+    Formacao,
     MembroRede,
     PapelNaRede,
     SituacaoMembro,
@@ -439,3 +440,103 @@ class IdentidadeDoMembroComAcessoTests(RedeBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
         self.assertFalse(Usuario.objects.filter(nome='Ana Lima Prado').exists())
+
+
+class FormacaoAcademicaTests(RedeBaseTests):
+    """
+    PB11: formacao e titulacao "ficam disponiveis para o matching", e o Escopo
+    (secao 3.3) lista a formacao no perfil. A tabela existia sem caminho de
+    entrada: nao havia campo na API nem na tela.
+
+    O matching ainda nao le a formacao - mudar o algoritmo e portao de decisao
+    (AGENTS.md 3.2). Aqui ela passa a ser gravada e lida.
+    """
+
+    HELENA = {
+        'curso': 'Ciências Biológicas',
+        'instituicao': 'Universidade Estadual de Campinas',
+        'titulacao_codigo': 'mestrado',
+        'ano_conclusao': 2019,
+    }
+
+    def setUp(self):
+        super().setUp()
+        self.membro = MembroRede.objects.create(
+            usuario=self.pesquisador,
+            nome='Maria Ferreira',
+            email=self.pesquisador.email,
+            papel_rede=PapelNaRede.PESQUISADOR,
+            situacao=SituacaoMembro.ATIVO,
+        )
+        self.url_membro = reverse('membro-rede-detail', args=[self.membro.id_membro])
+
+    def test_supervisor_cadastra_a_pessoa_com_a_formacao(self):
+        self.como(self.supervisor)
+
+        resposta = self.cadastrar(formacoes=[self.HELENA])
+
+        self.assertEqual(resposta.status_code, status.HTTP_201_CREATED, resposta.data)
+        self.assertEqual(len(resposta.data['formacoes']), 1)
+        self.assertEqual(resposta.data['formacoes'][0]['curso'], 'Ciências Biológicas')
+        self.assertEqual(resposta.data['formacoes'][0]['titulacao_rotulo'], 'Mestrado')
+
+    def test_a_edicao_troca_o_conjunto_e_a_resposta_ja_traz_o_novo(self):
+        self.como(self.supervisor)
+        self.client.patch(self.url_membro, {'formacoes': [self.HELENA]}, format='json')
+
+        resposta = self.client.patch(
+            self.url_membro,
+            {'formacoes': [{'curso': 'Farmácia', 'instituicao': 'USP'}]},
+            format='json',
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK, resposta.data)
+        self.assertEqual([item['curso'] for item in resposta.data['formacoes']], ['Farmácia'])
+        self.assertEqual(Formacao.objects.filter(membro=self.membro).count(), 1)
+
+    def test_lista_vazia_remove_todas_e_campo_ausente_preserva(self):
+        self.como(self.supervisor)
+        self.client.patch(self.url_membro, {'formacoes': [self.HELENA]}, format='json')
+
+        self.client.patch(self.url_membro, {'experiencia': 'Dez anos.'}, format='json')
+        self.assertEqual(Formacao.objects.filter(membro=self.membro).count(), 1)
+
+        self.client.patch(self.url_membro, {'formacoes': []}, format='json')
+        self.assertEqual(Formacao.objects.filter(membro=self.membro).count(), 0)
+
+    def test_o_pesquisador_mantem_a_propria_formacao(self):
+        self.como(self.pesquisador)
+
+        resposta = self.client.patch(
+            reverse('rede-meu-perfil'), {'formacoes': [self.HELENA]}, format='json'
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK, resposta.data)
+        self.assertEqual(resposta.data['formacoes'][0]['instituicao'], self.HELENA['instituicao'])
+
+    def test_curso_e_instituicao_sao_obrigatorios(self):
+        self.como(self.supervisor)
+
+        resposta = self.client.patch(
+            self.url_membro, {'formacoes': [{'curso': '', 'instituicao': 'USP'}]}, format='json'
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_ano_fora_do_razoavel_e_recusado(self):
+        self.como(self.supervisor)
+
+        resposta = self.client.patch(
+            self.url_membro,
+            {'formacoes': [{**self.HELENA, 'ano_conclusao': 3020}]},
+            format='json',
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_a_alteracao_fica_na_trilha(self):
+        self.como(self.pesquisador)
+        self.client.patch(reverse('rede-meu-perfil'), {'formacoes': [self.HELENA]}, format='json')
+
+        evento = EventoAuditoria.objects.get(tipo='perfil_atualizado')
+        self.assertIn('formacoes', evento.detalhe['campos'])

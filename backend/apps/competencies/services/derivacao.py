@@ -99,10 +99,14 @@ class DerivarCompetenciasService:
 
         return ProvedorGemini()
 
-    @transaction.atomic
     def execute(
         self, *, oportunidade: Oportunidade, ator: Usuario
     ) -> dict[str, Any]:
+        """
+        A chamada ao provedor fica fora da transacao, que so abre para gravar.
+        As competencias existentes sao relidas ali dentro, com a proposta
+        bloqueada: o Supervisor pode ter incluido uma enquanto a IA respondia.
+        """
         from apps.competencies.serializers import SaidaCompetenciasSerializer
 
         proposta = proposta_de(oportunidade)
@@ -129,53 +133,56 @@ class DerivarCompetenciasService:
         aceita = saida.is_valid()
         itens = saida.validated_data.get('competencias', []) if aceita else []
 
-        criadas = []
-        existentes = {
-            registro.descricao.lower()
-            for registro in proposta.competencias_necessarias.all()
-        }
+        with transaction.atomic():
+            PropostaEstruturada.objects.select_for_update().get(pk=proposta.pk)
 
-        for item in itens:
-            descricao = item['descricao'].strip()
+            criadas = []
+            existentes = {
+                registro.descricao.lower()
+                for registro in proposta.competencias_necessarias.all()
+            }
 
-            if not descricao or descricao.lower() in existentes:
-                continue
+            for item in itens:
+                descricao = item['descricao'].strip()
 
-            criadas.append(
-                CompetenciaNecessaria.objects.create(
-                    proposta=proposta,
-                    descricao=descricao[:200],
-                    nivel_importancia=item.get(
-                        'nivel_importancia', NivelImportancia.ESSENCIAL
-                    ),
-                    derivada_de=DerivadaDe.COPILOTO,
-                    competencia=_competencia_do_vocabulario(descricao),
-                    execucao_ia=execucao_ia,
+                if not descricao or descricao.lower() in existentes:
+                    continue
+
+                criadas.append(
+                    CompetenciaNecessaria.objects.create(
+                        proposta=proposta,
+                        descricao=descricao[:200],
+                        nivel_importancia=item.get(
+                            'nivel_importancia', NivelImportancia.ESSENCIAL
+                        ),
+                        derivada_de=DerivadaDe.COPILOTO,
+                        competencia=_competencia_do_vocabulario(descricao),
+                        execucao_ia=execucao_ia,
+                    )
                 )
+                existentes.add(descricao.lower())
+
+            registrar_evento(
+                categoria=CategoriaEvento.COMPETENCIA,
+                tipo='derivacao_executada',
+                entidade='proposta_estruturada',
+                entidade_id=proposta.id_proposta,
+                oportunidade=oportunidade,
+                ator=ator.email,
+                correlation_id=correlation_id,
+                execucao_ia=execucao_ia,
+                detalhe={
+                    'derivadas': len(criadas),
+                    'fallback_usado': fallback_usado,
+                    'saida_aceita': aceita,
+                },
             )
-            existentes.add(descricao.lower())
 
-        registrar_evento(
-            categoria=CategoriaEvento.COMPETENCIA,
-            tipo='derivacao_executada',
-            entidade='proposta_estruturada',
-            entidade_id=proposta.id_proposta,
-            oportunidade=oportunidade,
-            ator=ator.email,
-            correlation_id=correlation_id,
-            execucao_ia=execucao_ia,
-            detalhe={
-                'derivadas': len(criadas),
+            return {
+                'criadas': criadas,
                 'fallback_usado': fallback_usado,
-                'saida_aceita': aceita,
-            },
-        )
-
-        return {
-            'criadas': criadas,
-            'fallback_usado': fallback_usado,
-            'execucao_ia': execucao_ia,
-        }
+                'execucao_ia': execucao_ia,
+            }
 
 
 class AdicionarCompetenciaService:

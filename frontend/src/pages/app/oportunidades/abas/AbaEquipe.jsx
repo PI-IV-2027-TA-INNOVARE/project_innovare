@@ -14,6 +14,7 @@ import {
   validarEquipe,
 } from '../../../../services/pdConnectApi'
 import EsperaIA from './EsperaIA'
+import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -265,6 +266,10 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body equipe__corpo">
+        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+
+          <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+
           {rodando ? (
             <EsperaIA
               titulo="Comparando as competências necessárias com a rede interna."

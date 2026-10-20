@@ -318,8 +318,16 @@ AI_GEMINI_TEMPERATURA = config('AI_GEMINI_TEMPERATURA', default=0.3, cast=float)
 AI_GEMINI_MAX_TOKENS_SAIDA = config(
     'AI_GEMINI_MAX_TOKENS_SAIDA', default=8192, cast=int
 )
+AI_GEMINI_TIMEOUT_S = config('AI_GEMINI_TIMEOUT_S', default=45, cast=float)
+AI_GEMINI_TENTATIVAS = config('AI_GEMINI_TENTATIVAS', default=2, cast=int)
+AI_GEMINI_ESPERA_INICIAL_S = config(
+    'AI_GEMINI_ESPERA_INICIAL_S', default=2.0, cast=float
+)
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 AI_CUSTO_TETO_MENSAL_BRL = config('AI_CUSTO_TETO_MENSAL_BRL', default=50.0, cast=float)
+AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL = config(
+    'AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL', default=0.0, cast=float
+)
 DESEMPENHO_LIMITE_MS = config('DESEMPENHO_LIMITE_MS', default=3000, cast=int)
 AI_CUSTO_ALERTA_PERCENTUAL = config(
     'AI_CUSTO_ALERTA_PERCENTUAL', default=80, cast=int

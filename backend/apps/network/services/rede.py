@@ -17,6 +17,7 @@ from apps.audit.services import registrar_evento
 from apps.network.models import (
     Competencia,
     DeclaradoPor,
+    Formacao,
     MembroCompetencia,
     MembroRede,
     PapelNaRede,
@@ -144,6 +145,34 @@ def _repor_vinculos_carregados(membro: MembroRede) -> None:
     ).select_related('competencia')
 
 
+def sincronizar_formacoes(
+    membro: MembroRede, formacoes: list[dict[str, Any]] | None
+) -> None:
+    """
+    Troca as formacoes do membro pelas recebidas.
+
+    `None` e "o campo nao veio" e preserva o que existe; lista vazia remove
+    tudo - a mesma regra das listas de competencia. O cache do
+    `prefetch_related` e reposto pelo mesmo motivo de
+    `_repor_vinculos_carregados`: a resposta do `PATCH` tem de trazer o que
+    acabou de ser gravado.
+    """
+    if formacoes is None:
+        return
+
+    membro.formacoes.all().delete()
+    Formacao.objects.bulk_create(
+        [Formacao(membro=membro, **formacao) for formacao in formacoes]
+    )
+
+    cache = getattr(membro, '_prefetched_objects_cache', None)
+
+    if cache is not None and 'formacoes' in cache:
+        cache['formacoes'] = Formacao.objects.filter(membro=membro).select_related(
+            'titulacao'
+        )
+
+
 class CadastrarMembroService:
     """
     O Supervisor poe a pessoa na rede (RF02).
@@ -154,7 +183,12 @@ class CadastrarMembroService:
 
     @transaction.atomic
     def execute(
-        self, *, dados: dict[str, Any], listas: dict[str, list[str]], ator: Usuario
+        self,
+        *,
+        dados: dict[str, Any],
+        listas: dict[str, list[str]],
+        ator: Usuario,
+        formacoes: list[dict[str, Any]] | None = None,
     ) -> MembroRede:
         email = dados['email'].strip().lower()
 
@@ -171,6 +205,7 @@ class CadastrarMembroService:
         )
 
         sincronizar_competencias(membro, listas)
+        sincronizar_formacoes(membro, formacoes)
 
         registrar_evento(
             categoria=CategoriaEvento.REDE,
@@ -199,6 +234,7 @@ class AtualizarMembroService:
         dados: dict[str, Any],
         listas: dict[str, list[str]],
         ator: Usuario,
+        formacoes: list[dict[str, Any]] | None = None,
     ) -> MembroRede:
         antes = {campo: getattr(membro, campo) for campo in dados}
         conta = membro.usuario
@@ -211,6 +247,7 @@ class AtualizarMembroService:
 
         membro.save()
         sincronizar_competencias(membro, listas)
+        sincronizar_formacoes(membro, formacoes)
 
         if conta is not None and (conta.nome, conta.email) != (membro.nome, membro.email):
             conta.nome = membro.nome
@@ -229,7 +266,10 @@ class AtualizarMembroService:
             entidade='membro_rede',
             entidade_id=membro.id_membro,
             ator=getattr(ator, 'email', str(ator)),
-            detalhe={'campos': mudou},
+            detalhe={
+                'campos': mudou,
+                'formacoes_alteradas': formacoes is not None,
+            },
         )
         return membro
 
@@ -311,12 +351,14 @@ class AtualizarPerfilProprioService:
         dados: dict[str, Any],
         listas: dict[str, list[str]],
         ator: Usuario,
+        formacoes: list[dict[str, Any]] | None = None,
     ) -> MembroRede:
         for campo, valor in dados.items():
             setattr(membro, campo, valor)
 
         membro.save()
         sincronizar_competencias(membro, listas)
+        sincronizar_formacoes(membro, formacoes)
 
         membro.vinculos_competencia.update(declarado_por=DeclaradoPor.MEMBRO)
 
@@ -326,6 +368,10 @@ class AtualizarPerfilProprioService:
             entidade='membro_rede',
             entidade_id=membro.id_membro,
             ator=getattr(ator, 'email', str(ator)),
-            detalhe={'campos': sorted(dados.keys()) + sorted(listas.keys())},
+            detalhe={
+                'campos': sorted(dados.keys())
+                + sorted(listas.keys())
+                + (['formacoes'] if formacoes is not None else [])
+            },
         )
         return membro

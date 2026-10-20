@@ -10,7 +10,19 @@ from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import (
+    BooleanField,
+    Case,
+    Count,
+    Exists,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+    When,
+)
 from django.utils import timezone
 
 from apps.accounts.models import Papel, Usuario
@@ -75,6 +87,50 @@ def escopo_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     return base.none()
 
 
+def _aguarda_atuacao_de(usuario: Usuario):
+    """
+    Onde a vez e do Supervisor (PB61), com o que o modelo ja tem.
+
+    Tres casos: a oportunidade que ninguem comecou (`entrada`), a que espera
+    a decisao, e a que voltou de *Revisar* e ja tem a resposta do Demandante
+    - complementar nao muda a situacao (quem reconduz e o Supervisor), entao a
+    resposta so aparece na trilha, depois da ultima decisao *Revisar*.
+
+    "Minha" e a que ele conduz ou que ainda nao tem responsavel. Prioridade
+    nao entra: e campo que o PO ainda precisa definir.
+    """
+    if usuario.papel != Papel.SUPERVISOR:
+        return Value(False, output_field=BooleanField())
+
+    ultima_revisao = (
+        Decisao.objects.filter(
+            oportunidade=OuterRef(OuterRef('pk')),
+            tipo_decisao=TipoDecisao.REVISAR,
+        )
+        .order_by('-registrada_em')
+        .values('registrada_em')[:1]
+    )
+    respondeu = EventoAuditoria.objects.filter(
+        oportunidade=OuterRef('pk'),
+        tipo='complementacao_enviada',
+        ocorrido_em__gt=Subquery(ultima_revisao),
+    )
+
+    minha = Q(responsavel__isnull=True) | Q(responsavel__usuario=usuario)
+    vez_dele = Q(
+        situacao__in=[
+            SituacaoOportunidade.ENTRADA,
+            SituacaoOportunidade.AGUARDANDO_DECISAO,
+        ]
+    ) | (Q(situacao=SituacaoOportunidade.REVISAR) & Q(Exists(respondeu)))
+
+    return Case(
+        When(minha & vez_dele, then=Value(True)),
+        default=Value(False),
+        output_field=BooleanField(),
+    )
+
+
 def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     """
     O escopo do ator, pronto para a tela de acompanhamento ler.
@@ -103,7 +159,8 @@ def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     de execucao.
     """
     return escopo_de(usuario).annotate(
-        total_anexos=Count('anexos', distinct=True)
+        total_anexos=Count('anexos', distinct=True),
+        aguarda_minha_atuacao=_aguarda_atuacao_de(usuario),
     ).prefetch_related(
         Prefetch('decisoes', queryset=Decisao.objects.select_related('responsavel'))
     ).order_by('-atualizada_em', '-codigo')

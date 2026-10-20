@@ -63,6 +63,7 @@ class OportunidadeSerializer(serializers.ModelSerializer):
     )
     total_anexos = serializers.SerializerMethodField()
     ultima_decisao = serializers.SerializerMethodField()
+    aguarda_minha_atuacao = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Oportunidade
@@ -70,7 +71,7 @@ class OportunidadeSerializer(serializers.ModelSerializer):
             'codigo', 'titulo', 'origem', 'origem_rotulo', 'resumo', 'contexto',
             'demandante', 'demandante_nome', 'responsavel', 'responsavel_nome',
             'situacao', 'situacao_rotulo', 'total_anexos', 'ultima_decisao',
-            'criada_em', 'atualizada_em',
+            'aguarda_minha_atuacao', 'criada_em', 'atualizada_em',
         ]
         read_only_fields = [
             'codigo', 'origem', 'demandante', 'situacao', 'ultima_decisao',
@@ -147,6 +148,29 @@ class CadastroOportunidadeSerializer(serializers.Serializer):
             required=False,
             allow_null=True,
         )
+
+
+class FiltroDaFilaSerializer(serializers.Serializer):
+    """
+    Os filtros de data da fila (PB28), no formato `AAAA-MM-DD`.
+
+    Data malformada e recusada: ignorada, a fila voltaria inteira e quem
+    filtrou leria o resultado como se o filtro tivesse valido.
+    """
+
+    cadastrada_de = serializers.DateField(required=False, input_formats=['iso-8601'])
+    cadastrada_ate = serializers.DateField(required=False, input_formats=['iso-8601'])
+
+    def validate(self, dados):
+        inicio = dados.get('cadastrada_de')
+        fim = dados.get('cadastrada_ate')
+
+        if inicio and fim and inicio > fim:
+            raise serializers.ValidationError(
+                {'cadastrada_ate': 'A data final vem antes da inicial.'}
+            )
+
+        return dados
 
 
 class DecisaoSerializer(serializers.Serializer):

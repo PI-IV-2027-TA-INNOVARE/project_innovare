@@ -15,9 +15,11 @@ import {
   TITULACOES,
   completudeDoPerfil,
   disponibilidadeLabel,
+  formacoesParaApi,
   perfilDaApi,
   titulacaoLabel,
 } from '../rede/redeData'
+import ListaDeFormacoes from '../rede/ListaDeFormacoes'
 import ListaEditavel from './ListaEditavel'
 import './PerfilPage.scss'
 
@@ -30,17 +32,18 @@ const PERFIL_VAZIO = {
   competencias: [],
   tecnicas: [],
   linhas: [],
+  formacoes: [],
 }
 
 const SENHA_VAZIA = { senhaAtual: '', novaSenha: '', confirmarSenha: '' }
 
 const TITULO_PROFISSIONAL = 'titulo-perfil-profissional'
 
-function Secao({ title, description, children, readOnly, hint, nivel = 2 }) {
+function Secao({ title, description, children, readOnly, hint, nivel = 2, className = '' }) {
   const Titulo = `h${nivel}`
 
   return (
-    <section className="perfil-card">
+    <section className={`perfil-card ${className}`.trim()}>
       <header className="perfil-card__header">
         <div>
           <Titulo className="perfil-card__title">{title}</Titulo>
@@ -228,6 +231,7 @@ export default function PerfilPage() {
         competencias: perfil.competencias,
         tecnicas: perfil.tecnicas,
         linhas: perfil.linhas,
+        formacoes: formacoesParaApi(perfil.formacoes),
       })
 
       setPerfil(perfilDaApi(dados))
@@ -480,6 +484,18 @@ export default function PerfilPage() {
                 />
               </Secao>
             </div>
+
+            <Secao
+              nivel={3}
+              className="perfil-card--larga"
+              title="Formação acadêmica"
+              description="Cursos concluídos ou em andamento, com a instituição e o nível."
+            >
+              <ListaDeFormacoes
+                values={perfil.formacoes}
+                onChange={alterar('formacoes')}
+              />
+            </Secao>
           </section>
         ) : null}
       </div>

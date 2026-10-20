@@ -145,6 +145,10 @@
   @include cartoes-em-grade(3);
 }
 
+.perfil-card--larga {
+  margin-top: var(--admin-gap);
+}
+
 .perfil-page__footer {
   max-width: 76ch;
   margin-top: var(--admin-section-gap);

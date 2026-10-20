@@ -14,6 +14,8 @@ import inspect
 import pkgutil
 import uuid
 
+from google.api_core import exceptions as excecoes_google
+
 from django.test import TestCase, override_settings
 
 from apps.ai.models import ExecucaoIA, TipoExecucaoIA
@@ -121,3 +123,175 @@ class CamadaDoProvedorTests(TestCase):
         ]
 
         self.assertEqual(encontrados, [])
+
+
+class ClienteFalso:
+    """Faz as vezes do `GenerativeModel`: devolve ou levanta, na ordem dada."""
+
+    def __init__(self, *respostas):
+        self._respostas = list(respostas)
+        self.chamadas = []
+
+    def generate_content(self, prompt, **kwargs):
+        self.chamadas.append(kwargs)
+        resposta = self._respostas.pop(0)
+        if isinstance(resposta, Exception):
+            raise resposta
+        return resposta
+
+
+class RespostaFalsa:
+    text = '{"competencias": []}'
+    usage_metadata = None
+
+
+@override_settings(
+    AI_GEMINI_TIMEOUT_S=40,
+    AI_GEMINI_TENTATIVAS=3,
+    AI_GEMINI_ESPERA_INICIAL_S=1.5,
+)
+class TimeoutERetryTests(TestCase):
+    """
+    `Metodos_Integracao_IA.md`, API externa: "timeout e retry limitado;
+    tratamento de 429, 5xx e indisponibilidade".
+
+    Sem timeout, um provedor travado prendia a requisicao pelo tempo que ele
+    quisesse. Sem retry, um 503 passageiro virava modo sem IA na hora. Retry
+    so vale para o que e passageiro: um 400 repetido devolve o mesmo 400.
+    """
+
+    def _provedor(self, *respostas):
+        self.esperas = []
+        self.cliente = ClienteFalso(*respostas)
+        return ProvedorGemini(cliente=self.cliente, dormir=self.esperas.append)
+
+    def _derivar(self, provedor):
+        return provedor.derivar_competencias(
+            oportunidade_id=None,
+            proposta_texto='Deteccao rapida de contaminacao.',
+            correlation_id=uuid.uuid4(),
+            executado_por='supervisor@ac2microbiologia.com.br',
+        )
+
+    def test_toda_chamada_leva_o_timeout_das_settings(self):
+        provedor = self._provedor(RespostaFalsa())
+
+        self._derivar(provedor)
+
+        self.assertEqual(self.cliente.chamadas[0]['request_options']['timeout'], 40)
+
+    def test_429_e_5xx_sao_tentados_de_novo_com_espera_crescente(self):
+        provedor = self._provedor(
+            excecoes_google.TooManyRequests('cota'),
+            excecoes_google.ServiceUnavailable('fora'),
+            RespostaFalsa(),
+        )
+
+        resultado = self._derivar(provedor)
+
+        self.assertFalse(resultado['fallback_usado'])
+        self.assertEqual(len(self.cliente.chamadas), 3)
+        self.assertEqual(self.esperas, [1.5, 3.0])
+
+    def test_timeout_estourado_conta_como_passageiro(self):
+        provedor = self._provedor(
+            excecoes_google.DeadlineExceeded('demorou'), RespostaFalsa()
+        )
+
+        resultado = self._derivar(provedor)
+
+        self.assertFalse(resultado['fallback_usado'])
+        self.assertEqual(len(self.cliente.chamadas), 2)
+
+    def test_esgotadas_as_tentativas_cai_no_fallback_e_registra_o_erro(self):
+        provedor = self._provedor(
+            *[excecoes_google.InternalServerError('quebrou')] * 3
+        )
+
+        resultado = self._derivar(provedor)
+
+        self.assertTrue(resultado['fallback_usado'])
+        self.assertEqual(len(self.cliente.chamadas), 3)
+        self.assertEqual(len(self.esperas), 2)
+        execucao = ExecucaoIA.objects.get()
+        self.assertIn('3 tentativas', execucao.erro)
+
+    def test_erro_que_nao_e_passageiro_nao_e_repetido(self):
+        provedor = self._provedor(
+            excecoes_google.InvalidArgument('prompt invalido'), RespostaFalsa()
+        )
+
+        resultado = self._derivar(provedor)
+
+        self.assertTrue(resultado['fallback_usado'])
+        self.assertEqual(len(self.cliente.chamadas), 1)
+        self.assertEqual(self.esperas, [])
+
+
+class RespostaComTexto:
+    usage_metadata = None
+
+    def __init__(self, texto, entrada=10, saida=20):
+        self.text = texto
+
+        class Uso:
+            prompt_token_count = entrada
+            candidates_token_count = saida
+
+        self.usage_metadata = Uso()
+
+
+@override_settings(AI_GEMINI_TENTATIVAS=1)
+class JsonInvalidoTests(TestCase):
+    """
+    Tabela de falhas de Engenharia_IA: JSON invalido -> "tentar uma correcao
+    controlada". A correcao e pedir de novo, uma vez, o mesmo prompt - mudar o
+    prompt seria portao de decisao (AGENTS.md 3.2). Persistindo, o resultado
+    continua marcado como erro, e o caso de uso cai no caminho sem IA.
+    """
+
+    def _derivar(self, *respostas):
+        self.cliente = ClienteFalso(*respostas)
+        provedor = ProvedorGemini(cliente=self.cliente, dormir=lambda _segundos: None)
+        return provedor.derivar_competencias(
+            oportunidade_id=None,
+            proposta_texto='Deteccao rapida de contaminacao.',
+            correlation_id=uuid.uuid4(),
+            executado_por='supervisor@ac2microbiologia.com.br',
+        )
+
+    def test_json_invalido_e_pedido_de_novo_uma_vez(self):
+        resultado = self._derivar(
+            RespostaComTexto('isto nao e json'),
+            RespostaComTexto('{"competencias": []}'),
+        )
+
+        self.assertEqual(len(self.cliente.chamadas), 2)
+        self.assertEqual(resultado['dados'], {'competencias': []})
+        self.assertEqual(resultado['execucao_ia'].status, 'ok')
+
+    def test_os_tokens_das_duas_chamadas_entram_na_conta(self):
+        resultado = self._derivar(
+            RespostaComTexto('isto nao e json', entrada=10, saida=20),
+            RespostaComTexto('{"competencias": []}', entrada=11, saida=5),
+        )
+
+        execucao = resultado['execucao_ia']
+        execucao.refresh_from_db()
+        self.assertEqual(execucao.tokens_entrada, 21)
+        self.assertEqual(execucao.tokens_saida, 25)
+
+    def test_persistindo_o_erro_nao_ha_terceira_chamada(self):
+        resultado = self._derivar(
+            RespostaComTexto('isto nao e json'),
+            RespostaComTexto('nem isto'),
+        )
+
+        self.assertEqual(len(self.cliente.chamadas), 2)
+        self.assertTrue(resultado['dados'].get('_erro_parse'))
+        self.assertEqual(resultado['execucao_ia'].status, 'erro')
+
+    def test_json_valido_de_primeira_nao_repete(self):
+        self._derivar(RespostaComTexto('{"competencias": []}'))
+
+        self.assertEqual(len(self.cliente.chamadas), 1)

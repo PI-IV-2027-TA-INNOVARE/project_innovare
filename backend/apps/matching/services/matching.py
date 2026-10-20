@@ -107,10 +107,14 @@ class ExecutarMatchingService:
 
         return ProvedorGemini()
 
-    @transaction.atomic
     def execute(
         self, *, oportunidade: Oportunidade, ator: Usuario
     ) -> dict[str, Any]:
+        """
+        O motor e o rerank rodam antes da transacao, que so abre para gravar:
+        o rerank chama o provedor externo, e dentro de `atomic` prenderia a
+        conexao do banco durante a espera.
+        """
         proposta = proposta_de(oportunidade)
         necessarias = list(proposta.competencias_necessarias.select_related('competencia'))
 
@@ -132,16 +136,6 @@ class ExecutarMatchingService:
         avaliacoes = motor.avaliar(necessarias, candidatos)
         sem_semantica = not motor.semantico_disponivel
 
-        execucao = ExecucaoMatching.objects.create(
-            oportunidade=oportunidade,
-            estrategia=motor.estrategia,
-            pesos=self._pesos_registrados(motor),
-            versao_modelo='',
-            executado_por=ator.email,
-            status=StatusExecucao.EXECUTANDO,
-            fallback_usado=sem_semantica,
-        )
-
         selecionadas = [
             avaliacao
             for avaliacao in avaliacoes
@@ -156,67 +150,78 @@ class ExecutarMatchingService:
         )
         selecionadas = rerank['selecionadas']
 
-        equipe = EquipePotencial.objects.create(
-            oportunidade=oportunidade, execucao=execucao
-        )
-
-        for avaliacao in selecionadas:
-            MembroEquipe.objects.create(
-                equipe=equipe,
-                membro=avaliacao.membro,
-                papel=avaliacao.candidato.papel_sugerido,
-                score_compatibilidade=avaliacao.score,
-                justificativa=' '.join(avaliacao.motivos),
-                match_reasons=avaliacao.motivos,
-                score_features=avaliacao.features,
-                origem=OrigemIndicacao.IA,
+        with transaction.atomic():
+            execucao = ExecucaoMatching.objects.create(
+                oportunidade=oportunidade,
+                estrategia=motor.estrategia,
+                pesos=self._pesos_registrados(motor),
+                versao_modelo='',
+                executado_por=ator.email,
+                status=StatusExecucao.EXECUTANDO,
+                fallback_usado=sem_semantica,
             )
 
-        lacunas = self._registrar_lacunas(
-            equipe=equipe, necessarias=necessarias, selecionadas=selecionadas
-        )
+            equipe = EquipePotencial.objects.create(
+                oportunidade=oportunidade, execucao=execucao
+            )
 
-        execucao.status = StatusExecucao.OK
-        execucao.usou_rerank = rerank['usou_rerank']
-        execucao.versao_modelo = rerank['versao_modelo']
-        execucao.execucao_ia = rerank['execucao_ia']
-        execucao.concluido_em = timezone.now()
-        execucao.save(
-            update_fields=[
-                'status',
-                'usou_rerank',
-                'versao_modelo',
-                'execucao_ia',
-                'concluido_em',
-            ]
-        )
+            for avaliacao in selecionadas:
+                MembroEquipe.objects.create(
+                    equipe=equipe,
+                    membro=avaliacao.membro,
+                    papel=avaliacao.candidato.papel_sugerido,
+                    score_compatibilidade=avaliacao.score,
+                    justificativa=' '.join(avaliacao.motivos),
+                    match_reasons=avaliacao.motivos,
+                    score_features=avaliacao.features,
+                    origem=OrigemIndicacao.IA,
+                )
 
-        registrar_evento(
-            categoria=CategoriaEvento.MATCHING,
-            tipo='execucao',
-            entidade='equipe_potencial',
-            entidade_id=equipe.id_equipe,
-            oportunidade=oportunidade,
-            ator=ator.email,
-            execucao_ia=rerank['execucao_ia'],
-            detalhe={
-                'candidatos': len(candidatos),
-                'sugeridos': len(selecionadas),
-                'lacunas': len(lacunas),
-                'estrategia': motor.estrategia,
-                'pesos': self._pesos_registrados(motor),
-                'score_minimo': float(settings.AI_MATCH_MIN_SCORE),
-                'semantico_disponivel': not sem_semantica,
-                'usou_rerank': rerank['usou_rerank'],
-            },
-        )
+            lacunas = self._registrar_lacunas(
+                equipe=equipe, necessarias=necessarias, selecionadas=selecionadas
+            )
 
-        return {
-            'equipe': equipe,
-            'execucao': execucao,
-            'avaliados': len(candidatos),
-            'lacunas': lacunas,
-        }
+            execucao.status = StatusExecucao.OK
+            execucao.usou_rerank = rerank['usou_rerank']
+            execucao.versao_modelo = rerank['versao_modelo']
+            execucao.execucao_ia = rerank['execucao_ia']
+            execucao.concluido_em = timezone.now()
+            execucao.save(
+                update_fields=[
+                    'status',
+                    'usou_rerank',
+                    'versao_modelo',
+                    'execucao_ia',
+                    'concluido_em',
+                ]
+            )
+
+            registrar_evento(
+                categoria=CategoriaEvento.MATCHING,
+                tipo='execucao',
+                entidade='equipe_potencial',
+                entidade_id=equipe.id_equipe,
+                oportunidade=oportunidade,
+                ator=ator.email,
+                execucao_ia=rerank['execucao_ia'],
+                detalhe={
+                    'candidatos': len(candidatos),
+                    'sugeridos': len(selecionadas),
+                    'lacunas': len(lacunas),
+                    'estrategia': motor.estrategia,
+                    'pesos': self._pesos_registrados(motor),
+                    'score_minimo': float(settings.AI_MATCH_MIN_SCORE),
+                    'semantico_disponivel': not sem_semantica,
+                    'usou_rerank': rerank['usou_rerank'],
+                },
+            )
+
+            return {
+                'equipe': equipe,
+                'execucao': execucao,
+                'avaliados': len(candidatos),
+                'lacunas': lacunas,
+            }
 
     def _pesos_registrados(self, motor: MotorDeMatching) -> dict[str, Any]:
         """

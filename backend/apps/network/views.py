@@ -63,7 +63,7 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
         queryset = (
             MembroRede.objects
             .select_related('titulacao', 'organizacao', 'usuario')
-            .prefetch_related('vinculos_competencia__competencia')
+            .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
             .order_by('nome')
         )
 
@@ -95,9 +95,11 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         validados = dict(serializer.validated_data)
         listas = separar_listas(validados)
+        formacoes = validados.pop('formacoes', None)
 
         membro = CadastrarMembroService().execute(
-            dados=validados, listas=listas, ator=request.user
+            dados=validados, listas=listas, ator=request.user,
+            formacoes=formacoes,
         )
 
         return Response(
@@ -111,9 +113,11 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         validados = dict(serializer.validated_data)
         listas = separar_listas(validados)
+        formacoes = validados.pop('formacoes', None)
 
         membro = AtualizarMembroService().execute(
-            membro=membro, dados=validados, listas=listas, ator=request.user
+            membro=membro, dados=validados, listas=listas, ator=request.user,
+            formacoes=formacoes,
         )
 
         return Response(self.get_serializer(membro).data)
@@ -144,7 +148,7 @@ class PerfilProprioView(views.APIView):
         membro = (
             MembroRede.objects
             .select_related('titulacao', 'organizacao')
-            .prefetch_related('vinculos_competencia__competencia')
+            .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
             .filter(usuario=request.user)
             .first()
         )
@@ -169,9 +173,11 @@ class PerfilProprioView(views.APIView):
 
         validados = dict(serializer.validated_data)
         listas = separar_listas(validados)
+        formacoes = validados.pop('formacoes', None)
 
         membro = AtualizarPerfilProprioService().execute(
-            membro=membro, dados=validados, listas=listas, ator=request.user
+            membro=membro, dados=validados, listas=listas, ator=request.user,
+            formacoes=formacoes,
         )
 
         return Response(PerfilProprioSerializer(membro).data)

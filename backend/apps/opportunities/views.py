@@ -18,6 +18,7 @@ from apps.opportunities.serializers import (
     ComplementacaoSerializer,
     DecisaoSerializer,
     EventoHistoricoSerializer,
+    FiltroDaFilaSerializer,
     ObservacaoRegistradaSerializer,
     ObservacaoSerializer,
     SolicitacaoComplementoSerializer,
@@ -200,6 +201,19 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
                 Q(titulo__icontains=busca)
                 | Q(codigo__icontains=busca)
                 | Q(demandante__nome__icontains=busca)
+            )
+
+        filtro = FiltroDaFilaSerializer(data=self.request.query_params)
+        filtro.is_valid(raise_exception=True)
+
+        if 'cadastrada_de' in filtro.validated_data:
+            queryset = queryset.filter(
+                criada_em__date__gte=filtro.validated_data['cadastrada_de']
+            )
+
+        if 'cadastrada_ate' in filtro.validated_data:
+            queryset = queryset.filter(
+                criada_em__date__lte=filtro.validated_data['cadastrada_ate']
             )
 
         return queryset

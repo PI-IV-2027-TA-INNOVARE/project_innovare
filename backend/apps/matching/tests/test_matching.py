@@ -11,6 +11,7 @@ Duas familias de teste, de proposito separadas:
 Nenhum teste chama provedor externo: o rerank fica desligado pela settings de
 teste (AGENTS.md 0.1) e, quando exercitado, recebe duble.
 """
+from django.db import connection
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -40,7 +41,7 @@ from core.tests.builders import (
     UsuarioBuilder,
     indicar_na_equipe,
 )
-from core.tests.dubles import ProvedorFake
+from core.tests.dubles import ProvedorFake, ProvedorQueObservaATransacao
 
 PROPOSTA = {
     'problema_pesquisa': 'Contaminacao por Alicyclobacillus na linha de envase.',
@@ -399,3 +400,18 @@ class AcessoAEquipeTests(MatchingBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(resposta.data['codigo'], 'equipe_inexistente')
+
+
+class ChamadaForaDaTransacaoTests(MatchingBaseTests):
+    """A espera pelo rerank nao segura conexao nem bloqueio do banco."""
+
+    @override_settings(AI_MATCH_RERANK_ENABLED=True, AI_MATCH_MIN_SCORE=0.0)
+    def test_o_rerank_e_chamado_fora_de_transacao_aberta_pelo_caso_de_uso(self):
+        provedor = ProvedorQueObservaATransacao()
+        antes = len(connection.atomic_blocks)
+
+        ExecutarMatchingService(provedor=provedor).execute(
+            oportunidade=self.oportunidade, ator=self.supervisor
+        )
+
+        self.assertEqual(provedor.profundidades, [antes])

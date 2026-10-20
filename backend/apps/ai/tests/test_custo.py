@@ -346,3 +346,81 @@ class ExecucaoVinculadaAOportunidadeTests(TestCase):
         self.assertEqual(
             registro.oportunidade_id, self.oportunidade.id_oportunidade
         )
+
+
+@override_settings(
+    AI_CUSTO_ENTRADA_BRL_POR_MILHAO=1.0,
+    AI_CUSTO_SAIDA_BRL_POR_MILHAO=4.0,
+    AI_CUSTO_TETO_MENSAL_BRL=0,
+    AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL=5.0,
+)
+class TetoPorOportunidadeTests(TestCase):
+    """
+    `Plano_Integracao_IA.md`, Controle de custo: "limite mensal e um limite
+    por oportunidade". So o mensal existia, e uma oportunidade sozinha podia
+    consumir o mes inteiro.
+
+    O valor e do PO: em zero o limite fica desligado, como o teto mensal.
+    """
+
+    setUp = ExecucaoVinculadaAOportunidadeTests.setUp
+
+    def test_abaixo_do_limite_a_chamada_segue(self):
+        execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('4.00'))
+
+        garantir_orcamento(oportunidade_id=self.oportunidade.id_oportunidade)
+
+    def test_no_limite_a_chamada_daquela_oportunidade_e_interrompida(self):
+        execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('5.00'))
+
+        with self.assertRaises(TetoDeCustoExcedido) as contexto:
+            garantir_orcamento(oportunidade_id=self.oportunidade.id_oportunidade)
+
+        self.assertEqual(contexto.exception.codigo, 'teto_por_oportunidade_excedido')
+
+    def test_o_gasto_de_outra_oportunidade_nao_conta(self):
+        execucao(custo_estimado=Decimal('50.00'))
+
+        garantir_orcamento(oportunidade_id=self.oportunidade.id_oportunidade)
+
+    def test_o_estouro_fica_na_trilha_com_a_oportunidade(self):
+        from apps.audit.models import EventoAuditoria
+
+        execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('6.00'))
+
+        with self.assertRaises(TetoDeCustoExcedido):
+            garantir_orcamento(oportunidade_id=self.oportunidade.id_oportunidade)
+
+        evento = EventoAuditoria.objects.get(tipo='teto_por_oportunidade_excedido')
+        self.assertEqual(evento.oportunidade_id, self.oportunidade.id_oportunidade)
+        self.assertEqual(evento.status, 'negado')
+
+    @override_settings(AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL=0)
+    def test_limite_zerado_fica_desligado(self):
+        execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('999.00'))
+
+        garantir_orcamento(oportunidade_id=self.oportunidade.id_oportunidade)
+
+    def test_chamada_sem_oportunidade_so_responde_ao_teto_mensal(self):
+        execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('999.00'))
+
+        garantir_orcamento()
+
+    def test_o_gateway_cai_no_fallback_quando_a_oportunidade_estourou(self):
+        from apps.ai.services import ProvedorGemini
+
+        execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('5.00'))
+
+        class ClienteQueNaoPodeSerChamado:
+            def generate_content(self, *args, **kwargs):
+                raise AssertionError('a chamada nao podia ter saido')
+
+        resultado = ProvedorGemini(cliente=ClienteQueNaoPodeSerChamado()).derivar_competencias(
+            oportunidade_id=self.oportunidade.id_oportunidade,
+            proposta_texto='Deteccao rapida de contaminacao.',
+            correlation_id=uuid.uuid4(),
+            executado_por='supervisor@ac2microbiologia.com.br',
+        )
+
+        self.assertTrue(resultado['fallback_usado'])
+        self.assertEqual(ExecucaoIA.objects.count(), 1)

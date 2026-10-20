@@ -216,3 +216,62 @@ class ValidacaoDoTemaTests(TemaBaseTests):
         resposta = self.gravar({'light': {'accentPrimary': 'banana'}})
 
         self.assertIn('accentPrimary', str(resposta.data))
+
+
+class TrilhaDaConfiguracaoTests(TemaBaseTests):
+    """
+    Mudar a configuracao muda a plataforma para todo mundo, e a pergunta que
+    vem depois e "quem mudou, quando e o que". A gravacao ja guardava o autor
+    da ultima revisao; a trilha guarda cada uma, com o antes e o depois.
+    """
+
+    def eventos(self):
+        from apps.audit.models import EventoAuditoria
+
+        return EventoAuditoria.objects.filter(tipo='configuracao_alterada')
+
+    def test_cada_gravacao_fica_na_trilha_com_autor_e_diff(self):
+        self.como(self.administrador)
+        self.gravar({'light': {'accentPrimary': '#1B5E20'}})
+        self.gravar({'light': {'accentPrimary': '#0F6B5C', 'surface': '#FFFFFF'}})
+
+        ultimo = self.eventos().order_by('-id_evento').first()
+
+        self.assertEqual(self.eventos().count(), 2)
+        self.assertEqual(ultimo.categoria, 'config')
+        self.assertEqual(ultimo.entidade, 'configuracao')
+        self.assertEqual(ultimo.entidade_id, 'tema')
+        self.assertEqual(ultimo.ator, self.administrador.email)
+        self.assertEqual(ultimo.detalhe['revisao'], 2)
+        self.assertEqual(
+            ultimo.detalhe['alteracoes'],
+            {
+                'light.accentPrimary': {'antes': '#1B5E20', 'depois': '#0F6B5C'},
+                'light.surface': {'antes': None, 'depois': '#FFFFFF'},
+            },
+        )
+
+    def test_remocao_aparece_como_volta_ao_padrao(self):
+        self.como(self.administrador)
+        self.gravar({'light': {'accentPrimary': '#1B5E20'}})
+        self.gravar({'light': {'accentPrimary': None}})
+
+        ultimo = self.eventos().order_by('-id_evento').first()
+
+        self.assertEqual(
+            ultimo.detalhe['alteracoes'],
+            {'light.accentPrimary': {'antes': '#1B5E20', 'depois': None}},
+        )
+
+    def test_gravar_o_mesmo_valor_nao_suja_a_trilha(self):
+        self.como(self.administrador)
+        self.gravar({'light': {'accentPrimary': '#1B5E20'}})
+        self.gravar({'light': {'accentPrimary': '#1B5E20'}})
+
+        self.assertEqual(self.eventos().count(), 1)
+
+    def test_gravacao_recusada_nao_entra_na_trilha(self):
+        self.como(self.supervisor)
+        self.gravar({'light': {'accentPrimary': '#1B5E20'}})
+
+        self.assertEqual(self.eventos().count(), 0)

@@ -14,7 +14,9 @@ Provedor sempre duble (AGENTS.md 0.1).
 """
 import tempfile
 
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -31,6 +33,7 @@ from apps.maturity.models import (
 )
 from apps.maturity.serializers import AVISO_ORIENTATIVO
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
+from apps.maturity.services.preanalise import _texto_da_equipe
 from core.tests.builders import (
     MembroRedeBuilder,
     OportunidadeBuilder,
@@ -38,7 +41,12 @@ from core.tests.builders import (
     UsuarioBuilder,
     indicar_na_equipe,
 )
-from core.tests.dubles import ProvedorFake, ProvedorIndisponivel, escrever_base_pipe
+from core.tests.dubles import (
+    ProvedorFake,
+    ProvedorIndisponivel,
+    ProvedorQueObservaATransacao,
+    escrever_base_pipe,
+)
 
 PROPOSTA = {
     'problema_pesquisa': 'Contaminacao resiste a pasteurizacao.',
@@ -340,3 +348,148 @@ class AcessoAPreAnaliseTests(PreAnaliseBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(resposta.data['codigo'], 'preanalise_inexistente')
+
+
+class ChamadaForaDaTransacaoTests(PreAnaliseBaseTests):
+    """A espera pela IA nao segura conexao nem bloqueio do banco."""
+
+    def test_o_provedor_e_chamado_fora_de_transacao_aberta_pelo_caso_de_uso(self):
+        self.importar_criterios()
+        provedor = ProvedorQueObservaATransacao()
+        antes = len(connection.atomic_blocks)
+
+        self.analisar(provedor=provedor)
+
+        self.assertEqual(provedor.profundidades, [antes])
+
+
+class TextoDaEquipeTests(PreAnaliseBaseTests):
+    """
+    Montar a equipe para o prompt custa o mesmo para 1 ou 5 pessoas.
+
+    Eram duas consultas por pessoa (o membro e a titulacao), e com o banco de
+    homologacao remoto cada uma e uma ida e volta pela rede.
+    """
+
+    def _equipe_com(self, quantidade):
+        from apps.matching.models import EquipePotencial, MembroEquipe
+
+        oportunidade = (
+            OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        )
+        equipe = EquipePotencial.objects.create(oportunidade=oportunidade)
+
+        for indice in range(quantidade):
+            membro = (
+                MembroRedeBuilder()
+                .pesquisador()
+                .chamado(f'Pessoa {indice}')
+                .com_titulacao('doutorado')
+                .build()
+            )
+            MembroEquipe.objects.create(
+                equipe=equipe, membro=membro, papel=membro.papel_rede
+            )
+
+        return oportunidade
+
+    def _consultas_para(self, oportunidade):
+        with CaptureQueriesContext(connection) as consultas:
+            texto = _texto_da_equipe(oportunidade)
+
+        return len(consultas), texto
+
+    def test_o_numero_de_consultas_nao_cresce_com_a_equipe(self):
+        uma, _ = self._consultas_para(self._equipe_com(1))
+        cinco, texto = self._consultas_para(self._equipe_com(5))
+
+        self.assertEqual(uma, cinco)
+        self.assertEqual(texto.count('Pessoa'), 5)
+
+
+def _preanalise_com(niveis, lacunas=1):
+    return {
+        'dimensoes': [
+            {
+                'dimensao': dimensao,
+                'avaliacao': f'Avaliacao de {dimensao}.',
+                'nivel': nivel,
+                'evidencias': [],
+            }
+            for dimensao, nivel in niveis.items()
+        ],
+        'lacunas': [
+            {'dimensao': 'infraestrutura', 'descricao': f'Lacuna {indice}.'}
+            for indice in range(lacunas)
+        ],
+        'recomendacoes': ['Descrever a infraestrutura disponivel.'],
+        'sintese': 'Sintese da rodada.',
+    }
+
+
+class ComparacaoComAAnteriorTests(PreAnaliseBaseTests):
+    """
+    PB59: a reavaliacao "permite comparar a evolucao em relacao a anterior".
+
+    Toda execucao ja ficava guardada; o que faltava era a comparacao. Ela e
+    por nivel de cada dimensao - rotulo orientativo, nunca nota (AGENTS.md
+    0.2) - e pela quantidade de lacunas.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.importar_criterios()
+
+    def rodada(self, niveis, lacunas=1):
+        return self.analisar(
+            provedor=ProvedorFake(preanalise=_preanalise_com(niveis, lacunas))
+        )
+
+    def comparacao(self):
+        resposta = self.client.get(self.url())
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        return resposta.data['comparacao']
+
+    def test_a_primeira_analise_nao_tem_com_o_que_comparar(self):
+        self.rodada({'inovacao': 'fragil'})
+
+        self.assertIsNone(self.comparacao())
+
+    def test_compara_o_nivel_de_cada_dimensao_com_a_rodada_anterior(self):
+        anterior = self.rodada(
+            {'inovacao': 'fragil', 'viabilidade': 'consolidada', 'infraestrutura': 'fragil'},
+            lacunas=3,
+        )
+        self.rodada(
+            {'inovacao': 'em_desenvolvimento', 'viabilidade': 'fragil', 'plano_pesquisa': 'fragil'},
+            lacunas=1,
+        )
+
+        comparacao = self.comparacao()
+        movimentos = {
+            item['dimensao']: (item['nivel_anterior'], item['nivel_atual'], item['movimento'])
+            for item in comparacao['dimensoes']
+        }
+
+        self.assertEqual(comparacao['anterior']['id_pre_analise'], str(anterior.id_pre_analise))
+        self.assertEqual(movimentos['inovacao'], ('fragil', 'em_desenvolvimento', 'avancou'))
+        self.assertEqual(movimentos['viabilidade'], ('consolidada', 'fragil', 'recuou'))
+        self.assertEqual(movimentos['plano_pesquisa'], (None, 'fragil', 'nova'))
+        self.assertEqual(movimentos['infraestrutura'], ('fragil', None, 'sem_avaliacao'))
+        self.assertEqual(comparacao['lacunas'], {'anterior': 3, 'atual': 1})
+
+    def test_rodada_que_falhou_nao_serve_de_referencia(self):
+        self.rodada({'inovacao': 'fragil'})
+        self.analisar(provedor=ProvedorIndisponivel())
+        self.rodada({'inovacao': 'consolidada'})
+
+        movimento = self.comparacao()['dimensoes'][0]
+
+        self.assertEqual(movimento['nivel_anterior'], 'fragil')
+        self.assertEqual(movimento['movimento'], 'avancou')
+
+    def test_sinaliza_quando_os_criterios_mudaram_entre_as_rodadas(self):
+        self.rodada({'inovacao': 'fragil'})
+        self.rodada({'inovacao': 'fragil'})
+
+        self.assertTrue(self.comparacao()['mesmos_criterios'])

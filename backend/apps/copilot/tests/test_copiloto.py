@@ -14,6 +14,7 @@ O provedor e sempre duble: nenhum teste toca o Gemini (AGENTS.md 0.1).
 """
 import tempfile
 
+from django.db import connection
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -40,7 +41,13 @@ from core.tests.builders import (
     UsuarioBuilder,
     indicar_na_equipe,
 )
-from core.tests.dubles import ProvedorFake, ProvedorIndisponivel, escrever_base_pipe
+from core.tests.dubles import (
+    PROPOSTA_PADRAO,
+    ProvedorFake,
+    ProvedorIndisponivel,
+    ProvedorQueObservaATransacao,
+    escrever_base_pipe,
+)
 
 
 class CopilotoBaseTests(TestCase):
@@ -307,4 +314,47 @@ class AcessoAoCopilotoTests(CopilotoBaseTests):
 
         self.assertEqual(
             self.client.get(self.url()).status_code, status.HTTP_403_FORBIDDEN
+        )
+
+
+class ChamadaForaDaTransacaoTests(CopilotoBaseTests):
+    """A espera pela IA nao segura conexao nem bloqueio do banco."""
+
+    def test_o_provedor_e_chamado_fora_de_transacao_aberta_pelo_caso_de_uso(self):
+        provedor = ProvedorQueObservaATransacao()
+        antes = len(connection.atomic_blocks)
+
+        with override_settings(BASE_CONHECIMENTO_PIPE=self.base):
+            EstruturarPropostaService(provedor=provedor).execute(
+                oportunidade=self.oportunidade, ator=self.supervisor
+            )
+
+        self.assertEqual(provedor.profundidades, [antes])
+
+    def test_texto_que_o_humano_salvou_durante_a_espera_nao_e_sobrescrito(self):
+        """
+        Sem a transacao em volta da chamada, a proposta pode mudar enquanto a
+        IA responde. O caso de uso tem de reler antes de gravar.
+        """
+        PropostaEstruturada.objects.create(oportunidade=self.oportunidade)
+
+        def supervisor_salva_a_metodologia():
+            PropostaEstruturada.objects.filter(
+                oportunidade=self.oportunidade
+            ).update(metodologia='Escrita pelo Supervisor durante a espera.')
+
+        provedor = ProvedorQueObservaATransacao(durante=supervisor_salva_a_metodologia)
+
+        with override_settings(BASE_CONHECIMENTO_PIPE=self.base):
+            resultado = EstruturarPropostaService(provedor=provedor).execute(
+                oportunidade=self.oportunidade, ator=self.supervisor
+            )
+
+        proposta = PropostaEstruturada.objects.get(oportunidade=self.oportunidade)
+        self.assertEqual(
+            proposta.metodologia, 'Escrita pelo Supervisor durante a espera.'
+        )
+        self.assertNotIn('metodologia', resultado['preenchidos'])
+        self.assertEqual(
+            proposta.problema_pesquisa, PROPOSTA_PADRAO['problema_pesquisa']
         )

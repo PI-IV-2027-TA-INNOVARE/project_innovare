@@ -10,6 +10,7 @@ import {
   obterMembroRede,
 } from '../../../services/pdConnectApi'
 import ListaEditavel from '../perfil/ListaEditavel'
+import ListaDeFormacoes from './ListaDeFormacoes'
 import {
   DISPONIBILIDADES,
   PAPEIS_REDE,
@@ -30,6 +31,7 @@ const VAZIO = {
   tecnicas: [],
   linhas: [],
   experiencia: '',
+  formacoes: [],
   liberarAcesso: false,
 }
 
@@ -294,6 +296,21 @@ export default function RedeFormPage() {
                 placeholder="Projetos relevantes e tempo de atuação."
               />
             </label>
+          </div>
+        </section>
+
+        <section className="perfil-card">
+          <header className="perfil-card__header">
+            <div>
+              <h2 className="perfil-card__title">Formação acadêmica</h2>
+              <p className="perfil-card__description">
+                Cursos concluídos ou em andamento, com a instituição e o nível.
+              </p>
+            </div>
+          </header>
+
+          <div className="perfil-card__body">
+            <ListaDeFormacoes values={valores.formacoes} onChange={alterar('formacoes')} />
           </div>
         </section>
 

@@ -29,6 +29,13 @@ const COLUNAS = [
   { id: 'atualizadaEm', label: 'Atualizada', ordenavel: true },
 ]
 
+function diaLocal(instante) {
+  const data = new Date(instante)
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const dia = String(data.getDate()).padStart(2, '0')
+  return `${data.getFullYear()}-${mes}-${dia}`
+}
+
 function comparar(a, b, campo) {
   if (campo === 'atualizadaEm') return a.atualizadaEm - b.atualizadaEm
 
@@ -58,6 +65,9 @@ export default function OportunidadesPage() {
     () => parametros.get('situacao') || 'todas'
   )
   const [origemFiltro, setOrigemFiltro] = useState('todas')
+  const [cadastradaDe, setCadastradaDe] = useState('')
+  const [cadastradaAte, setCadastradaAte] = useState('')
+  const [soMinhaAtuacao, setSoMinhaAtuacao] = useState(false)
   const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
 
   const acompanhaFila = ehSupervisor || ehPesquisador
@@ -102,17 +112,41 @@ export default function OportunidadesPage() {
         item.titulo.toLowerCase().includes(termo) ||
         item.id.toLowerCase().includes(termo) ||
         item.demandante.toLowerCase().includes(termo)
+      const dia = diaLocal(item.criadaEm)
+      const dataOk =
+        (!cadastradaDe || dia >= cadastradaDe) && (!cadastradaAte || dia <= cadastradaAte)
 
-      return situacaoOk && origemOk && buscaOk
+      const atuacaoOk = !soMinhaAtuacao || item.aguardaMinhaAtuacao
+
+      return situacaoOk && origemOk && buscaOk && dataOk && atuacaoOk
     })
-  }, [busca, oportunidades, origemFiltro, situacaoFiltro])
+  }, [
+    busca,
+    cadastradaAte,
+    cadastradaDe,
+    oportunidades,
+    origemFiltro,
+    situacaoFiltro,
+    soMinhaAtuacao,
+  ])
+
+  const aguardandoMinhaAtuacao = useMemo(
+    () => oportunidades.filter((item) => item.aguardaMinhaAtuacao).length,
+    [oportunidades]
+  )
 
   const ordenadas = useMemo(() => {
     const fator = ordem.direcao === 'asc' ? 1 : -1
     return [...filtradas].sort((a, b) => comparar(a, b, ordem.campo) * fator)
   }, [filtradas, ordem])
 
-  const temFiltro = Boolean(busca) || situacaoFiltro !== 'todas' || origemFiltro !== 'todas'
+  const temFiltro =
+    Boolean(busca) ||
+    situacaoFiltro !== 'todas' ||
+    origemFiltro !== 'todas' ||
+    Boolean(cadastradaDe) ||
+    Boolean(cadastradaAte) ||
+    soMinhaAtuacao
 
   const ordenarPor = (campo) => {
     setOrdem((atual) => ({
@@ -130,6 +164,9 @@ export default function OportunidadesPage() {
     setBusca('')
     trocarSituacao('todas')
     setOrigemFiltro('todas')
+    setCadastradaDe('')
+    setCadastradaAte('')
+    setSoMinhaAtuacao(false)
   }
 
   return (
@@ -228,6 +265,18 @@ export default function OportunidadesPage() {
         </div>
 
         <div className="admin-toolbar__actions">
+          {ehSupervisor ? (
+            <button
+              type="button"
+              className={`admin-btn admin-btn--outline${soMinhaAtuacao ? ' is-active' : ''}`}
+              aria-pressed={soMinhaAtuacao}
+              title="Sem responsável ou conduzidas por você, em Entrada, aguardando decisão ou com resposta do Demandante a um pedido de revisão."
+              onClick={() => setSoMinhaAtuacao((atual) => !atual)}
+            >
+              Aguardando minha atuação ({aguardandoMinhaAtuacao})
+            </button>
+          ) : null}
+
           <label className="sr-only" htmlFor="filtro-situacao">Filtrar por situação</label>
           <select
             id="filtro-situacao"
@@ -253,6 +302,28 @@ export default function OportunidadesPage() {
               <option key={origem.id} value={origem.id}>{origem.label}</option>
             ))}
           </select>
+
+          <label className="oportunidades-page__data">
+            <span>Cadastrada a partir de</span>
+            <input
+              type="date"
+              className="admin-input"
+              value={cadastradaDe}
+              max={cadastradaAte || undefined}
+              onChange={(event) => setCadastradaDe(event.target.value)}
+            />
+          </label>
+
+          <label className="oportunidades-page__data">
+            <span>Cadastrada até</span>
+            <input
+              type="date"
+              className="admin-input"
+              value={cadastradaAte}
+              min={cadastradaDe || undefined}
+              onChange={(event) => setCadastradaAte(event.target.value)}
+            />
+          </label>
         </div>
       </div>
 

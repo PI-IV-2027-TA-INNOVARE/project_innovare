@@ -78,14 +78,31 @@ def custo_do_mes() -> float:
     return float(total or 0)
 
 
-def garantir_orcamento() -> None:
+def custo_da_oportunidade(oportunidade_id: int) -> float:
+    """O que uma oportunidade ja custou, somado de todas as suas execucoes."""
+    from apps.ai.models import ExecucaoIA
+
+    total = ExecucaoIA.objects.filter(oportunidade_id=oportunidade_id).aggregate(
+        custo=Sum('custo_estimado')
+    )['custo']
+
+    return float(total or 0)
+
+
+def garantir_orcamento(oportunidade_id: int | None = None) -> None:
     """
-    O hard stop do plano de integracao.
+    O hard stop do plano de integracao: o teto do mes e o da oportunidade.
 
     Teto em zero e "sem teto configurado", nao "tudo proibido": bloquear o
     projeto inteiro por falta de configuracao seria pior que o gasto que o
     bloqueio evita.
+
+    O limite por oportunidade soma todas as execucoes dela, sem recorte de
+    mes: e o que impede uma oportunidade sozinha de consumir o orcamento.
     """
+    if oportunidade_id is not None:
+        _garantir_teto_da_oportunidade(oportunidade_id)
+
     teto = float(getattr(settings, 'AI_CUSTO_TETO_MENSAL_BRL', 0) or 0)
 
     if teto <= 0:
@@ -102,6 +119,39 @@ def garantir_orcamento() -> None:
         f'O teto mensal de IA (R$ {teto:.2f}) foi atingido: '
         f'R$ {gasto:.2f} apurados neste mes.',
         codigo='teto_de_custo_excedido',
+    )
+
+
+def _garantir_teto_da_oportunidade(oportunidade_id: int) -> None:
+    from apps.audit.models import CategoriaEvento, StatusEvento
+    from apps.audit.services import registrar_evento
+    from apps.opportunities.models import Oportunidade
+
+    teto = float(getattr(settings, 'AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL', 0) or 0)
+
+    if teto <= 0:
+        return
+
+    gasto = custo_da_oportunidade(oportunidade_id)
+
+    if gasto < teto:
+        return
+
+    registrar_evento(
+        categoria=CategoriaEvento.CONFIG,
+        tipo='teto_por_oportunidade_excedido',
+        entidade='ia',
+        entidade_id=oportunidade_id,
+        status=StatusEvento.NEGADO,
+        motivo=f'Gasto apurado R$ {gasto:.2f} contra limite de R$ {teto:.2f}.',
+        detalhe={'gasto_brl': round(gasto, 4), 'teto_brl': round(teto, 4)},
+        oportunidade=Oportunidade.objects.filter(pk=oportunidade_id).first(),
+    )
+
+    raise TetoDeCustoExcedido(
+        f'O limite de IA por oportunidade (R$ {teto:.2f}) foi atingido: '
+        f'R$ {gasto:.2f} apurados nesta oportunidade.',
+        codigo='teto_por_oportunidade_excedido',
     )
 
 

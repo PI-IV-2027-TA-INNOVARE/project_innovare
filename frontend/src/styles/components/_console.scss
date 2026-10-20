@@ -1533,3 +1533,27 @@
   line-height: 1.6;
   color: var(--text-muted);
 }
+
+.console-section .trilha__texto {
+  display: block;
+  color: var(--text-primary);
+}
+
+.console-section .trilha__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.console-section .trilha__alvo--removido {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.trilha__nota {
+  margin: 0 0 var(--admin-gap);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}

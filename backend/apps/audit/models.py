@@ -22,19 +22,19 @@ class CategoriaEvento(models.TextChoices):
     """
 
     OPORTUNIDADE = 'oportunidade', 'Oportunidade'
-    OBSERVACAO = 'observacao', 'Observacao do Supervisor'
+    OBSERVACAO = 'observacao', 'Observação do Supervisor'
     COPILOTO = 'copiloto', 'Copiloto'
-    COMPETENCIA = 'competencia', 'Competencia'
+    COMPETENCIA = 'competencia', 'Competência'
     MATCHING = 'matching', 'Matching'
-    PREANALISE = 'preanalise', 'Pre-analise'
-    DECISAO = 'decisao', 'Decisao'
+    PREANALISE = 'preanalise', 'Pré-análise'
+    DECISAO = 'decisao', 'Decisão'
     REDE = 'rede', 'Rede interna'
     CONTA = 'conta', 'Conta e acesso'
-    CONFIG = 'config', 'Configuracao'
+    CONFIG = 'config', 'Configuração'
 
 
 class StatusEvento(models.TextChoices):
-    OK = 'ok', 'Concluido'
+    OK = 'ok', 'Concluído'
     ERRO = 'erro', 'Erro'
     NEGADO = 'negado', 'Negado'
 

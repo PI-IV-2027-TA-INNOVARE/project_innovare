@@ -199,7 +199,8 @@ class ConteudoDoEventoTests(TrilhaBaseTests):
             set(evento),
             {
                 'id_evento', 'ocorrido_em', 'categoria', 'categoria_rotulo',
-                'tipo', 'ator', 'entidade', 'entidade_id', 'status',
+                'tipo', 'tipo_rotulo', 'ator', 'ator_nome', 'alvo',
+                'entidade', 'entidade_id', 'status',
                 'status_rotulo', 'motivo', 'detalhe', 'correlation_id',
             },
         )

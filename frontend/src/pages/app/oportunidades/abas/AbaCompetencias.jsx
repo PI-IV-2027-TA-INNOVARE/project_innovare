@@ -11,6 +11,7 @@ import {
   removerCompetencia,
 } from '../../../../services/pdConnectApi'
 import EsperaIA from './EsperaIA'
+import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -323,6 +324,8 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
       </header>
 
       <div className="perfil-card__body competencias__corpo">
+        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+
         {derivando ? (
           <EsperaIA titulo="A IA está lendo a proposta para identificar as competências." />
         ) : null}

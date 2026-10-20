@@ -290,8 +290,13 @@ class EstruturarPropostaService:
 
         return ProvedorGemini()
 
-    @transaction.atomic
     def execute(self, *, oportunidade: Oportunidade, ator: Usuario) -> dict[str, Any]:
+        """
+        A chamada ao provedor fica fora da transacao: ela leva segundos, e
+        dentro de `atomic` prenderia a conexao e os bloqueios do banco durante
+        toda a espera. O preco e que a proposta pode mudar enquanto a IA
+        responde - por isso ela e relida, com bloqueio, antes de gravar.
+        """
         from apps.copilot.serializers import SaidaCopilotoSerializer
 
         proposta = proposta_para_estruturar(oportunidade)
@@ -312,6 +317,34 @@ class EstruturarPropostaService:
         aceita = saida.is_valid()
         dados = dict(saida.validated_data) if aceita else {}
 
+        with transaction.atomic():
+            return self._gravar_rodada(
+                proposta=PropostaEstruturada.objects.select_for_update().get(
+                    pk=proposta.pk
+                ),
+                oportunidade=oportunidade,
+                sessao=sessao,
+                dados=dados,
+                aceita=aceita,
+                execucao_ia=execucao_ia,
+                fallback_usado=fallback_usado,
+                correlation_id=correlation_id,
+                ator=ator,
+            )
+
+    def _gravar_rodada(
+        self,
+        *,
+        proposta: PropostaEstruturada,
+        oportunidade: Oportunidade,
+        sessao: SessaoCopiloto | None,
+        dados: dict[str, Any],
+        aceita: bool,
+        execucao_ia,
+        fallback_usado: bool,
+        correlation_id: uuid.UUID,
+        ator: Usuario,
+    ) -> dict[str, Any]:
         preenchidos = []
 
         for elemento in elementos_vazios(proposta):

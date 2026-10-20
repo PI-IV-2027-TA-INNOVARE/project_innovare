@@ -5,6 +5,7 @@ Vocabulario sob vigilancia: nenhum campo se chama nota, parecer, score ou
 aprovacao, e o `aviso` viaja junto do resultado para a tela nao ter como
 esquecer que a analise e orientativa (AGENTS.md 0.2).
 """
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.copilot.serializers import LacunaSerializer
@@ -82,6 +83,41 @@ class RecomendacaoSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class RodadaAnteriorSerializer(serializers.Serializer):
+    id_pre_analise = serializers.UUIDField()
+    executada_em = serializers.DateTimeField()
+    versao_proposta = serializers.IntegerField()
+    versao_criterios = serializers.CharField()
+
+
+class MovimentoDimensaoSerializer(serializers.Serializer):
+    MOVIMENTOS = ('avancou', 'recuou', 'manteve', 'nova', 'sem_avaliacao')
+
+    dimensao = serializers.ChoiceField(choices=DimensaoMaturidade.choices)
+    dimensao_rotulo = serializers.CharField()
+    nivel_anterior = serializers.ChoiceField(
+        choices=NivelDimensao.choices, allow_null=True
+    )
+    nivel_atual = serializers.ChoiceField(
+        choices=NivelDimensao.choices, allow_null=True
+    )
+    movimento = serializers.ChoiceField(choices=MOVIMENTOS)
+
+
+class ContagemDeLacunasSerializer(serializers.Serializer):
+    anterior = serializers.IntegerField()
+    atual = serializers.IntegerField()
+
+
+class ComparacaoSerializer(serializers.Serializer):
+    """A evolucao em relacao a rodada anterior (PB59). Nivel, nunca nota."""
+
+    anterior = RodadaAnteriorSerializer()
+    mesmos_criterios = serializers.BooleanField()
+    dimensoes = MovimentoDimensaoSerializer(many=True)
+    lacunas = ContagemDeLacunasSerializer()
+
+
 class PreAnaliseSerializer(serializers.ModelSerializer):
     """O Relatorio de Maturidade como a tela o apresenta."""
 
@@ -93,6 +129,7 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
         source='execucao_ia_id', read_only=True, default=None
     )
     aviso = serializers.SerializerMethodField()
+    comparacao = serializers.SerializerMethodField()
 
     class Meta:
         model = PreAnalise
@@ -111,11 +148,20 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
             'dimensoes',
             'lacunas',
             'recomendacoes',
+            'comparacao',
         ]
         read_only_fields = fields
 
     def get_aviso(self, instancia) -> str:
         return AVISO_ORIENTATIVO
+
+    @extend_schema_field(ComparacaoSerializer(allow_null=True))
+    def get_comparacao(self, instancia):
+        from apps.maturity.services import comparacao_com_anterior
+
+        comparacao = comparacao_com_anterior(instancia)
+
+        return None if comparacao is None else ComparacaoSerializer(comparacao).data
 
 
 class ItemDimensaoIASerializer(serializers.Serializer):

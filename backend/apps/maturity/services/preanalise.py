@@ -37,6 +37,7 @@ from apps.copilot.services.proposta import proposta_de
 from apps.maturity.models import (
     CriterioPreAnalise,
     DimensaoMaturidade,
+    NivelDimensao,
     OrigemRecomendacao,
     PreAnalise,
     PreAnaliseDimensao,
@@ -137,6 +138,85 @@ def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
     return analise
 
 
+ORDEM_DO_NIVEL = {
+    NivelDimensao.FRAGIL: 0,
+    NivelDimensao.EM_DESENVOLVIMENTO: 1,
+    NivelDimensao.CONSOLIDADA: 2,
+}
+
+
+def _movimento(anterior: str | None, atual: str | None) -> str:
+    if anterior is None:
+        return 'nova'
+
+    if atual is None:
+        return 'sem_avaliacao'
+
+    diferenca = ORDEM_DO_NIVEL[atual] - ORDEM_DO_NIVEL[anterior]
+
+    if diferenca > 0:
+        return 'avancou'
+
+    return 'recuou' if diferenca < 0 else 'manteve'
+
+
+def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
+    """
+    A evolucao em relacao a rodada anterior (PB59 / RF10).
+
+    A referencia e a ultima rodada **concluida** antes desta: uma execucao que
+    falhou nao tem dimensao nenhuma, e compara-la faria toda dimensao parecer
+    nova. Sem rodada concluida antes - ou com esta falha - nao ha comparacao.
+    """
+    if analise.status != StatusExecucao.OK:
+        return None
+
+    anterior = (
+        PreAnalise.objects.filter(
+            proposta_id=analise.proposta_id,
+            status=StatusExecucao.OK,
+            executada_em__lt=analise.executada_em,
+        )
+        .prefetch_related('dimensoes', 'lacunas')
+        .first()
+    )
+
+    if anterior is None:
+        return None
+
+    niveis_antes = {item.dimensao: item.nivel for item in anterior.dimensoes.all()}
+    niveis_agora = {item.dimensao: item.nivel for item in analise.dimensoes.all()}
+
+    dimensoes = [
+        {
+            'dimensao': dimensao.value,
+            'dimensao_rotulo': dimensao.label,
+            'nivel_anterior': niveis_antes.get(dimensao.value),
+            'nivel_atual': niveis_agora.get(dimensao.value),
+            'movimento': _movimento(
+                niveis_antes.get(dimensao.value), niveis_agora.get(dimensao.value)
+            ),
+        }
+        for dimensao in DimensaoMaturidade
+        if dimensao.value in niveis_antes or dimensao.value in niveis_agora
+    ]
+
+    return {
+        'anterior': {
+            'id_pre_analise': anterior.id_pre_analise,
+            'executada_em': anterior.executada_em,
+            'versao_proposta': anterior.versao_proposta,
+            'versao_criterios': anterior.versao_criterios,
+        },
+        'mesmos_criterios': anterior.versao_criterios == analise.versao_criterios,
+        'dimensoes': dimensoes,
+        'lacunas': {
+            'anterior': len(anterior.lacunas.all()),
+            'atual': len(analise.lacunas.all()),
+        },
+    }
+
+
 def _texto_da_equipe(oportunidade: Oportunidade) -> str:
     equipe = oportunidade.equipes_potenciais.prefetch_related(
         'membros__membro__titulacao'
@@ -147,7 +227,10 @@ def _texto_da_equipe(oportunidade: Oportunidade) -> str:
 
     linhas = []
 
-    for membro in equipe.membros.filter(incluido=True):
+    for membro in equipe.membros.all():
+        if not membro.incluido:
+            continue
+
         titulacao = (
             membro.membro.titulacao.rotulo if membro.membro.titulacao_id else 'N/A'
         )
@@ -267,8 +350,12 @@ class PreAnalisarService:
 
         return ProvedorGemini()
 
-    @transaction.atomic
     def execute(self, *, oportunidade: Oportunidade, ator: Usuario) -> PreAnalise:
+        """
+        A chamada ao provedor fica fora da transacao, que so abre para gravar
+        o resultado: a pre-analise e a chamada mais longa do produto, e dentro
+        de `atomic` prendia a conexao do banco durante toda a espera.
+        """
         from apps.maturity.serializers import SaidaPreAnaliseSerializer
 
         proposta = proposta_de(oportunidade)
@@ -297,52 +384,53 @@ class PreAnalisarService:
         dados = dict(saida.validated_data) if aceita else {}
         dimensoes = dados.get('dimensoes', [])
 
-        analise = PreAnalise.objects.create(
-            proposta=proposta,
-            versao_criterios=versao,
-            versao_proposta=proposta.versao,
-            sintese=dados.get('sintese', ''),
-            executada_por=ator.email,
-            execucao_ia=execucao_ia,
-            status=StatusExecucao.OK if dimensoes else StatusExecucao.ERRO,
-            erro='' if dimensoes else self._motivo_da_falha(fallback_usado, aceita),
-        )
+        with transaction.atomic():
+            analise = PreAnalise.objects.create(
+                proposta=proposta,
+                versao_criterios=versao,
+                versao_proposta=proposta.versao,
+                sintese=dados.get('sintese', ''),
+                executada_por=ator.email,
+                execucao_ia=execucao_ia,
+                status=StatusExecucao.OK if dimensoes else StatusExecucao.ERRO,
+                erro='' if dimensoes else self._motivo_da_falha(fallback_usado, aceita),
+            )
 
-        self._gravar_dimensoes(analise, dimensoes)
-        lacunas = self._gravar_lacunas(
-            analise=analise,
-            oportunidade=oportunidade,
-            itens=dados.get('lacunas', []),
-            execucao_ia=execucao_ia,
-        )
-        recomendacoes = self._gravar_recomendacoes(
-            analise=analise,
-            oportunidade=oportunidade,
-            itens=dados.get('recomendacoes', []),
-            execucao_ia=execucao_ia,
-        )
+            self._gravar_dimensoes(analise, dimensoes)
+            lacunas = self._gravar_lacunas(
+                analise=analise,
+                oportunidade=oportunidade,
+                itens=dados.get('lacunas', []),
+                execucao_ia=execucao_ia,
+            )
+            recomendacoes = self._gravar_recomendacoes(
+                analise=analise,
+                oportunidade=oportunidade,
+                itens=dados.get('recomendacoes', []),
+                execucao_ia=execucao_ia,
+            )
 
-        registrar_evento(
-            categoria=CategoriaEvento.PREANALISE,
-            tipo='execucao',
-            entidade='pre_analise_maturidade',
-            entidade_id=analise.id_pre_analise,
-            oportunidade=oportunidade,
-            ator=ator.email,
-            correlation_id=correlation_id,
-            execucao_ia=execucao_ia,
-            detalhe={
-                'versao_criterios': versao,
-                'versao_proposta': proposta.versao,
-                'dimensoes': len(dimensoes),
-                'lacunas': len(lacunas),
-                'recomendacoes': len(recomendacoes),
-                'fallback_usado': fallback_usado,
-                'saida_aceita': aceita,
-            },
-        )
+            registrar_evento(
+                categoria=CategoriaEvento.PREANALISE,
+                tipo='execucao',
+                entidade='pre_analise_maturidade',
+                entidade_id=analise.id_pre_analise,
+                oportunidade=oportunidade,
+                ator=ator.email,
+                correlation_id=correlation_id,
+                execucao_ia=execucao_ia,
+                detalhe={
+                    'versao_criterios': versao,
+                    'versao_proposta': proposta.versao,
+                    'dimensoes': len(dimensoes),
+                    'lacunas': len(lacunas),
+                    'recomendacoes': len(recomendacoes),
+                    'fallback_usado': fallback_usado,
+                    'saida_aceita': aceita,
+                },
+            )
 
-        return analise
+            return analise
 
     def _motivo_da_falha(self, fallback_usado: bool, aceita: bool) -> str:
         if fallback_usado:

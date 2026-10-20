@@ -15,10 +15,12 @@ permite o duble em teste (AGENTS.md 0.1).
 """
 import json
 import logging
+import time
 import uuid
 from typing import Any
 from django.conf import settings
 import google.generativeai as genai
+from google.api_core import exceptions as excecoes_google
 from apps.ai.models import ExecucaoIA, TipoExecucaoIA, StatusExecucao
 from apps.ai.services.custo import (
     TetoDeCustoExcedido,
@@ -63,6 +65,22 @@ def tokens_da_resposta(response, *, prompt: str) -> tuple[int, int]:
     )
 
 
+FALHAS_PASSAGEIRAS = (
+    excecoes_google.TooManyRequests,
+    excecoes_google.ServerError,
+)
+"""
+O que vale tentar de novo: 429, 5xx e o timeout (`DeadlineExceeded` e um 504).
+
+Erro de requisicao - prompt invalido, chave recusada - devolve a mesma resposta
+na segunda vez, e repeti-lo so gasta a espera do usuario.
+"""
+
+
+class ChamadaEsgotada(Exception):
+    """A falha passageira persistiu em todas as tentativas permitidas."""
+
+
 class ProvedorGemini:
     """
     O Gemini com rastreabilidade, fallback e parsing robusto.
@@ -71,8 +89,20 @@ class ProvedorGemini:
     sem tocar a rede - e o que mantem a suite isolada (AGENTS.md 0.1).
     """
 
-    def __init__(self, modelo: str | None = None, temperatura: float | None = None):
+    def __init__(
+        self,
+        modelo: str | None = None,
+        temperatura: float | None = None,
+        cliente=None,
+        dormir=time.sleep,
+    ):
+        """
+        `cliente` substitui o `GenerativeModel` e `dormir` a espera entre
+        tentativas - e o que deixa o teste exercitar o retry sem rede e sem
+        relogio (AGENTS.md 0.1).
+        """
         self._modelo = modelo or settings.AI_MATCH_GEMINI_MODEL
+        self._dormir = dormir
         temperatura = (
             temperatura
             if temperatura is not None
@@ -80,7 +110,10 @@ class ProvedorGemini:
         )
 
         api_key = getattr(settings, 'GEMINI_API_KEY', None)
-        if not api_key:
+        if cliente is not None:
+            self.model = cliente
+            self._disponivel = True
+        elif not api_key:
             logger.warning('GEMINI_API_KEY nao configurada. IA indisponivel - fallback ativo.')
             self._disponivel = False
             self.model = None
@@ -192,6 +225,35 @@ class ProvedorGemini:
         logger.warning(f'Falha ao parsear JSON da IA: {texto[:200]}')
         return {'_erro_parse': True, '_raw': texto[:500]}
 
+    def _gerar(self, prompt: str):
+        """
+        A chamada ao provedor com timeout e retry limitado.
+
+        `Metodos_Integracao_IA.md` pede "timeout e retry limitado; tratamento
+        de 429, 5xx e indisponibilidade". A espera dobra a cada tentativa para
+        nao insistir sobre um provedor que pediu calma (429).
+        """
+        tentativas = max(1, settings.AI_GEMINI_TENTATIVAS)
+        espera = settings.AI_GEMINI_ESPERA_INICIAL_S
+
+        for tentativa in range(1, tentativas + 1):
+            try:
+                return self.model.generate_content(
+                    prompt,
+                    request_options={'timeout': settings.AI_GEMINI_TIMEOUT_S},
+                )
+            except FALHAS_PASSAGEIRAS as falha:
+                if tentativa == tentativas:
+                    raise ChamadaEsgotada(
+                        f'Falha passageira em {tentativas} tentativas: {falha}'
+                    ) from falha
+                logger.warning(
+                    f'Falha passageira no Gemini (tentativa {tentativa} de '
+                    f'{tentativas}): {falha}'
+                )
+                self._dormir(espera)
+                espera *= 2
+
     def _executar_com_fallback(
         self,
         tipo: TipoExecucaoIA,
@@ -223,7 +285,7 @@ class ProvedorGemini:
             }
 
         try:
-            garantir_orcamento()
+            garantir_orcamento(oportunidade_id=oportunidade_id)
         except TetoDeCustoExcedido as estouro:
             logger.warning(f'{estouro} Executando fallback para {tipo}.')
             return {
@@ -241,11 +303,10 @@ class ProvedorGemini:
             executado_por=executado_por,
         )
 
-        import time
         inicio = time.perf_counter()
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self._gerar(prompt)
             latencia_ms = int((time.perf_counter() - inicio) * 1000)
 
             tokens_entrada, tokens_saida = tokens_da_resposta(
@@ -253,6 +314,17 @@ class ProvedorGemini:
             )
 
             resultado = self._parse_json_seguro(response.text or '{}')
+
+            if resultado.get('_erro_parse'):
+                logger.warning(f'JSON invalido do Gemini ({tipo}); pedindo de novo.')
+                response = self._gerar(prompt)
+                latencia_ms = int((time.perf_counter() - inicio) * 1000)
+                entrada_extra, saida_extra = tokens_da_resposta(
+                    response, prompt=prompt
+                )
+                tokens_entrada += entrada_extra
+                tokens_saida += saida_extra
+                resultado = self._parse_json_seguro(response.text or '{}')
 
             self._finalizar_execucao(
                 execucao=execucao,

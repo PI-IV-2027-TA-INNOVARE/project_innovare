@@ -241,6 +241,7 @@ export function daApi(registro) {
     totalAnexos: registro.total_anexos || 0,
     criadaEm: Date.parse(registro.criada_em),
     atualizadaEm: Date.parse(registro.atualizada_em),
+    aguardaMinhaAtuacao: Boolean(registro.aguarda_minha_atuacao),
     decisao: decisaoDaApi(registro.ultima_decisao),
     competencias: [],
     equipe: [],

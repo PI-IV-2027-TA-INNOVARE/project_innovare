@@ -7,6 +7,8 @@ Nenhum toca banco remoto, SMTP real, provedor de IA ou disco de producao
 """
 import shutil
 import tempfile
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -271,6 +273,139 @@ class EscopoDeLeituraTests(OportunidadeBaseTests):
         )
         self.assertEqual(por_origem.data['count'], 1)
         self.assertEqual(por_origem.data['results'][0]['codigo'], self.codigo_interna)
+
+
+class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
+    """
+    PB61: a fila mostra "as oportunidades que aguardam sua atuacao". Sem campo
+    de prioridade (decisao do PO), o que da para dizer com o que existe e
+    onde a vez e do Supervisor: a oportunidade que ninguem comecou, a que
+    espera a decisao e a que voltou de Revisar com a resposta do Demandante.
+    So conta a que ele conduz ou que ainda nao tem responsavel.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo = self.criar_externo().data['codigo']
+        self.como(self.supervisor)
+
+    def marca(self, codigo=None):
+        resposta = self.client.get(reverse('oportunidade-list'))
+        linha = next(
+            item for item in resposta.data['results']
+            if item['codigo'] == (codigo or self.codigo)
+        )
+        return linha['aguarda_minha_atuacao']
+
+    def mudar(self, **campos):
+        Oportunidade.objects.filter(codigo=self.codigo).update(**campos)
+
+    def test_oportunidade_que_ninguem_comecou_aguarda(self):
+        self.assertTrue(self.marca())
+
+    def test_em_andamento_nao_aguarda(self):
+        self.mudar(situacao=SituacaoOportunidade.MATCHING)
+
+        self.assertFalse(self.marca())
+
+    def test_aguardando_decisao_aguarda(self):
+        self.mudar(situacao=SituacaoOportunidade.AGUARDANDO_DECISAO)
+
+        self.assertTrue(self.marca())
+
+    def test_revisar_so_aguarda_depois_da_resposta_do_demandante(self):
+        self.client.post(
+            reverse('oportunidade-decisao', args=[self.codigo]),
+            {'tipo': TipoDecisao.REVISAR, 'justificativa': 'Falta descrever o processo.'},
+            format='json',
+        )
+        self.assertFalse(self.marca())
+
+        self.como(self.demandante)
+        resposta = self.client.post(
+            reverse('oportunidade-complementar', args=[self.codigo]),
+            {'texto': 'O processo e a pasteurizacao HTST.'},
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK, resposta.data)
+        self.como(self.supervisor)
+
+        self.assertTrue(self.marca())
+
+    def test_conduzida_por_outro_supervisor_nao_e_minha(self):
+        outro = Usuario.objects.create_user(
+            email='outro@ac2microbiologia.com.br', nome='Outra Supervisora',
+            papel=Papel.SUPERVISOR, password=SENHA,
+        )
+        membro = MembroRede.objects.create(
+            usuario=outro, nome='Outra Supervisora', email=outro.email,
+            papel_rede=PapelNaRede.SUPERVISOR, situacao=SituacaoMembro.ATIVO,
+        )
+        self.mudar(responsavel=membro)
+
+        self.assertFalse(self.marca())
+
+    def test_conduzida_por_mim_aguarda(self):
+        self.mudar(responsavel=self.membro_supervisor)
+
+        self.assertTrue(self.marca())
+
+    def test_para_quem_nao_e_supervisor_a_marca_e_sempre_falsa(self):
+        self.como(self.demandante)
+
+        self.assertFalse(self.marca())
+
+
+class FiltroPorDataTests(OportunidadeBaseTests):
+    """
+    PB28: filtros por "status, origem, data". A data e a do cadastro, o dia
+    em que a oportunidade entrou no fluxo; os dois limites sao inclusivos.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo_vale = self.criar_externo().data['codigo']
+        self.codigo_terra = self.criar_externo(titulo='Nitrito em embutidos').data['codigo']
+        self.codigo_interna = self.criar_externo(titulo='Biofilme em trocador').data['codigo']
+        datas = {
+            self.codigo_vale: datetime(2026, 9, 1, 10, tzinfo=dt_timezone.utc),
+            self.codigo_terra: datetime(2026, 9, 15, 10, tzinfo=dt_timezone.utc),
+            self.codigo_interna: datetime(2026, 10, 1, 10, tzinfo=dt_timezone.utc),
+        }
+        for codigo, quando in datas.items():
+            Oportunidade.objects.filter(codigo=codigo).update(criada_em=quando)
+
+        self.como(self.supervisor)
+
+    def codigos(self, **parametros):
+        resposta = self.client.get(reverse('oportunidade-list'), parametros)
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        return {item['codigo'] for item in resposta.data['results']}
+
+    def test_cadastrada_de_e_inclusivo(self):
+        self.assertEqual(
+            self.codigos(cadastrada_de='2026-09-15'),
+            {self.codigo_terra, self.codigo_interna},
+        )
+
+    def test_cadastrada_ate_e_inclusivo(self):
+        self.assertEqual(
+            self.codigos(cadastrada_ate='2026-09-15'),
+            {self.codigo_vale, self.codigo_terra},
+        )
+
+    def test_os_dois_limites_juntos_fazem_um_intervalo(self):
+        self.assertEqual(
+            self.codigos(cadastrada_de='2026-09-02', cadastrada_ate='2026-09-30'),
+            {self.codigo_terra},
+        )
+
+    def test_data_malformada_e_recusada_em_vez_de_ignorada(self):
+        resposta = self.client.get(
+            reverse('oportunidade-list'), {'cadastrada_de': '15/09/2026'}
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class DecisaoTests(OportunidadeBaseTests):

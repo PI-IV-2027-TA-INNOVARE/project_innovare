@@ -11,6 +11,7 @@ import {
   obterPreAnalise,
 } from '../../../../services/pdConnectApi'
 import EsperaIA from './EsperaIA'
+import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -111,6 +112,60 @@ function Dimensao({ dimensao, lacunas }) {
         </>
       ) : null}
     </li>
+  )
+}
+
+const MOVIMENTOS = {
+  avancou: 'Avançou',
+  recuou: 'Recuou',
+  manteve: 'Manteve',
+  nova: 'Avaliada agora',
+  sem_avaliacao: 'Não avaliada agora',
+}
+
+const rotuloDoNivelId = (id) => NIVEIS.find((nivel) => nivel.id === id)?.rotulo || '—'
+
+const lacunasPorExtenso = (total) => `${total} ${total === 1 ? 'lacuna' : 'lacunas'}`
+
+function Comparacao({ comparacao, versaoAtual }) {
+  const data = formatarData(comparacao.anterior.executada_em)
+
+  return (
+    <div className="preanalise__bloco preanalise__comparacao">
+      <h3 className="preanalise__subtitulo">
+        Em relação à análise anterior
+        {data ? <span className="preanalise__contagem"> ({data})</span> : null}
+      </h3>
+
+      {!comparacao.mesmos_criterios ? (
+        <p className="preanalise__comparacao-aviso">
+          Os critérios mudaram entre as duas rodadas ({comparacao.anterior.versao_criterios} antes,{' '}
+          {versaoAtual} agora): parte da diferença pode vir da régua, não da proposta.
+        </p>
+      ) : null}
+
+      {comparacao.dimensoes.length > 0 ? (
+        <ul className="preanalise__movimentos">
+          {comparacao.dimensoes.map((item) => (
+            <li key={item.dimensao} className="preanalise__movimento">
+              <span className="preanalise__movimento-dimensao">
+                {ROTULOS_DAS_DIMENSOES[item.dimensao] || item.dimensao_rotulo}
+              </span>
+              <span className="preanalise__movimento-niveis">
+                {rotuloDoNivelId(item.nivel_anterior)} → {rotuloDoNivelId(item.nivel_atual)}
+              </span>
+              <span className={`preanalise__direcao preanalise__direcao--${item.movimento}`}>
+                {MOVIMENTOS[item.movimento] || item.movimento}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <p className="preanalise__comparacao-lacunas">
+        {lacunasPorExtenso(comparacao.lacunas.anterior)} antes, {comparacao.lacunas.atual} agora.
+      </p>
+    </div>
   )
 }
 
@@ -316,6 +371,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         <div className="perfil-card__body preanalise__corpo">
           {espera}
           {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
+
+        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+          <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
           <p className="oportunidade-page__vazio">
             {podeExecutar
               ? 'Nenhuma pré-análise foi executada ainda.'
@@ -408,6 +466,8 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
             <Resumo dimensoes={dimensoes} />
           </div>
         ) : null}
+
+        {analise.comparacao ? <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} /> : null}
 
         {dimensoes.length > 0 ? (
           <div className="preanalise__bloco">

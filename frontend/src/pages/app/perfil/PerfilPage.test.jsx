@@ -165,6 +165,58 @@ describe('PerfilPage', () => {
     expect(await screen.findByText(/perfil salvo/i)).toBeInTheDocument()
   })
 
+  it('mostra a formação acadêmica que veio da API', async () => {
+    estado.obterMeuPerfil = vi.fn().mockResolvedValue({
+      ...MEU_PERFIL,
+      formacoes: [
+        {
+          id_formacao: 3,
+          curso: 'Ciências Biológicas',
+          instituicao: 'Unicamp',
+          titulacao_codigo: 'mestrado',
+          titulacao_rotulo: 'Mestrado',
+          ano_conclusao: 2019,
+        },
+      ],
+    })
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    expect(screen.getByDisplayValue('Ciências Biológicas')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('2019')).toBeInTheDocument()
+  })
+
+  it('declara uma formação e a envia junto com o perfil', async () => {
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    await user.click(screen.getByRole('button', { name: /adicionar formação/i }))
+    await user.type(screen.getByLabelText('Curso'), 'Farmácia')
+    await user.type(screen.getByLabelText('Instituição de ensino'), 'USP')
+    await user.selectOptions(screen.getByLabelText('Nível'), 'doutorado')
+    await user.type(screen.getByLabelText('Conclusão'), '2021')
+    await user.click(screen.getByRole('button', { name: /salvar perfil/i }))
+
+    expect(estado.atualizarMeuPerfil.mock.calls[0][0].formacoes).toEqual([
+      {
+        curso: 'Farmácia',
+        instituicao: 'USP',
+        titulacao_codigo: 'doutorado',
+        ano_conclusao: 2021,
+      },
+    ])
+  })
+
+  it('a formação fica dentro do grupo que o Salvar perfil governa', async () => {
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    expect(
+      within(grupoProfissional()).getByRole('heading', { name: 'Formação acadêmica', level: 3 })
+    ).toBeInTheDocument()
+  })
+
   it('recalcula a completude quando uma dimensão é preenchida', async () => {
     const user = userEvent.setup()
     render(<PerfilPage />)

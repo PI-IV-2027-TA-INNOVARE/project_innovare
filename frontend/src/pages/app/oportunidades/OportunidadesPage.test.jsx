@@ -70,6 +70,7 @@ function comoApi(oportunidade) {
     ultima_decisao: null,
     criada_em: new Date(oportunidade.criadaEm).toISOString(),
     atualizada_em: new Date(oportunidade.atualizadaEm).toISOString(),
+    aguarda_minha_atuacao: Boolean(oportunidade.aguardaMinhaAtuacao),
   }
 }
 
@@ -294,6 +295,59 @@ describe('OportunidadesPage', () => {
 
     expect(screen.getByText('Controle de Listeria em linha de laticínios')).toBeInTheDocument()
     expect(screen.queryByText('Bioinsumo para cana-de-açúcar')).not.toBeInTheDocument()
+  })
+
+  it('filtra pelo dia do cadastro, com os dois limites inclusivos', async () => {
+    const [antiga, recente, nova] = OPORTUNIDADES_EXEMPLO
+    servidorResponde([
+      { ...antiga, criadaEm: Date.parse('2026-09-01T12:00:00') },
+      { ...recente, criadaEm: Date.parse('2026-09-15T12:00:00') },
+      { ...nova, criadaEm: Date.parse('2026-10-01T12:00:00') },
+    ])
+    const user = userEvent.setup()
+    renderApp()
+    await screen.findByText(antiga.titulo, {}, { timeout: 2000 })
+
+    await user.type(screen.getByLabelText(/cadastrada a partir de/i), '2026-09-15')
+    await user.type(screen.getByLabelText(/cadastrada até/i), '2026-09-15')
+
+    expect(screen.getByText(recente.titulo)).toBeInTheDocument()
+    expect(screen.queryByText(antiga.titulo)).not.toBeInTheDocument()
+    expect(screen.queryByText(nova.titulo)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /limpar filtros/i }))
+
+    expect(screen.getByText(antiga.titulo)).toBeInTheDocument()
+  })
+
+  it('o Supervisor recorta a fila no que aguarda a atuação dele', async () => {
+    const [primeira, segunda, terceira] = OPORTUNIDADES_EXEMPLO
+    servidorResponde([
+      { ...primeira, aguardaMinhaAtuacao: true },
+      { ...segunda, aguardaMinhaAtuacao: false },
+      { ...terceira, aguardaMinhaAtuacao: true },
+    ])
+    const user = userEvent.setup()
+    renderApp()
+    await screen.findByText(primeira.titulo, {}, { timeout: 2000 })
+
+    const botao = screen.getByRole('button', { name: /aguardando minha atuação (2)/i })
+    expect(botao).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(botao)
+
+    expect(botao).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(primeira.titulo)).toBeInTheDocument()
+    expect(screen.getByText(terceira.titulo)).toBeInTheDocument()
+    expect(screen.queryByText(segunda.titulo)).not.toBeInTheDocument()
+  })
+
+  it('o recorte de atuação não aparece para o Pesquisador', async () => {
+    entrarComo('pesquisador', 'Maria Ferreira')
+    renderApp()
+    await esperarLista()
+
+    expect(screen.queryByRole('button', { name: /aguardando minha atuação/i })).not.toBeInTheDocument()
   })
 
   it('leva o Supervisor ao cadastro de ideia interna', async () => {

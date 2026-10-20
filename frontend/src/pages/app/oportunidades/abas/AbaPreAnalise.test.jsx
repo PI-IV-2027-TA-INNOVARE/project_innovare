@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -101,6 +101,75 @@ describe('AbaPreAnalise', () => {
     expect(
       screen.getByText('Descrever a infraestrutura disponível.'),
     ).toBeInTheDocument()
+  })
+
+  it('sem rodada anterior, não mostra comparação', async () => {
+    renderizar()
+
+    await screen.findByText('Desafio tecnológico')
+    expect(screen.queryByText(/em relação à análise anterior/i)).not.toBeInTheDocument()
+  })
+
+  it('compara cada dimensão e as lacunas com a análise anterior', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      comparacao: {
+        anterior: {
+          id_pre_analise: 'pa-0',
+          executada_em: '2026-10-01T12:00:00Z',
+          versao_proposta: 1,
+          versao_criterios: 'V2',
+        },
+        mesmos_criterios: true,
+        dimensoes: [
+          {
+            dimensao: 'inovacao',
+            dimensao_rotulo: 'Inovacao',
+            nivel_anterior: 'fragil',
+            nivel_atual: 'em_desenvolvimento',
+            movimento: 'avancou',
+          },
+          {
+            dimensao: 'viabilidade',
+            dimensao_rotulo: 'Viabilidade',
+            nivel_anterior: 'consolidada',
+            nivel_atual: 'fragil',
+            movimento: 'recuou',
+          },
+        ],
+        lacunas: { anterior: 3, atual: 1 },
+      },
+    })
+
+    renderizar()
+
+    const bloco = (await screen.findByText(/em relação à análise anterior/i)).closest('div')
+    expect(within(bloco).getByText('Inovação')).toBeInTheDocument()
+    expect(within(bloco).getByText('Avançou')).toBeInTheDocument()
+    expect(within(bloco).getByText('Recuou')).toBeInTheDocument()
+    expect(within(bloco).getByText(/3 lacunas antes, 1 agora/i)).toBeInTheDocument()
+    expect(within(bloco).queryByText(/critérios mudaram/i)).not.toBeInTheDocument()
+  })
+
+  it('avisa quando as duas rodadas usaram critérios diferentes', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      comparacao: {
+        anterior: {
+          id_pre_analise: 'pa-0',
+          executada_em: '2026-10-01T12:00:00Z',
+          versao_proposta: 1,
+          versao_criterios: 'V1',
+        },
+        mesmos_criterios: false,
+        dimensoes: [],
+        lacunas: { anterior: 1, atual: 1 },
+      },
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/critérios mudaram/i)).toBeInTheDocument()
   })
 
   it('cita a versão dos critérios e da proposta', async () => {

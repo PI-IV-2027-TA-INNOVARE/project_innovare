@@ -246,3 +246,35 @@ def escrever_base_pipe(diretorio: str | Path, dados: dict[str, Any] | None = Non
     )
 
     return destino
+
+
+class ProvedorQueObservaATransacao(ProvedorFake):
+    """
+    Anota quantos blocos `atomic` estavam abertos no instante da chamada.
+
+    A chamada ao provedor leva segundos. Feita dentro de `transaction.atomic`,
+    ela prende a conexao do banco - e os bloqueios das linhas ja escritas -
+    durante toda a espera. O teste compara a profundidade da chamada com a de
+    antes do caso de uso: igual quer dizer que o caso de uso nao abriu
+    transacao em volta dela.
+
+    `durante` roda no meio da chamada e imita o que outra requisicao faria
+    enquanto o provedor responde.
+    """
+
+    def __init__(self, *, durante=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._durante = durante
+        self.profundidades: list[int] = []
+
+    def _responder(
+        self, tipo: str, dados: dict[str, Any], executado_por: str
+    ) -> dict[str, Any]:
+        from django.db import connection
+
+        self.profundidades.append(len(connection.atomic_blocks))
+
+        if self._durante is not None:
+            self._durante()
+
+        return super()._responder(tipo, dados, executado_por)

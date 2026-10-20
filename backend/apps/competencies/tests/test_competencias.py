@@ -7,6 +7,7 @@ na rede.
 
 Provedor sempre duble (AGENTS.md 0.1).
 """
+from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
@@ -28,7 +29,11 @@ from core.tests.builders import (
     UsuarioBuilder,
     indicar_na_equipe,
 )
-from core.tests.dubles import ProvedorFake, ProvedorIndisponivel
+from core.tests.dubles import (
+    ProvedorFake,
+    ProvedorIndisponivel,
+    ProvedorQueObservaATransacao,
+)
 
 PROPOSTA_PREENCHIDA = {
     'problema_pesquisa': 'Contaminacao resiste a pasteurizacao.',
@@ -265,3 +270,36 @@ class AcessoAsCompetenciasTests(CompetenciasBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(resposta.data['codigo'], 'proposta_inexistente')
+
+
+class ChamadaForaDaTransacaoTests(CompetenciasBaseTests):
+    """A espera pela IA nao segura conexao nem bloqueio do banco."""
+
+    def test_o_provedor_e_chamado_fora_de_transacao_aberta_pelo_caso_de_uso(self):
+        provedor = ProvedorQueObservaATransacao()
+        antes = len(connection.atomic_blocks)
+
+        self.derivar(provedor=provedor)
+
+        self.assertEqual(provedor.profundidades, [antes])
+
+    def test_competencia_que_o_humano_incluiu_durante_a_espera_nao_duplica(self):
+        proposta = PropostaEstruturada.objects.get(oportunidade=self.oportunidade)
+
+        def supervisor_inclui_a_mao():
+            CompetenciaNecessaria.objects.create(
+                proposta=proposta,
+                descricao='PCR em tempo real',
+                derivada_de=DerivadaDe.MANUAL,
+            )
+
+        self.derivar(
+            provedor=ProvedorQueObservaATransacao(durante=supervisor_inclui_a_mao)
+        )
+
+        self.assertEqual(
+            CompetenciaNecessaria.objects.filter(
+                proposta=proposta, descricao__iexact='PCR em tempo real'
+            ).count(),
+            1,
+        )

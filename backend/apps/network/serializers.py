@@ -4,10 +4,12 @@ Contrato da rede interna (RF02, RF03).
 O vocabulario e o do cliente: membro da rede, titulacao, competencia, tecnica,
 linha de pesquisa, disponibilidade.
 """
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.network.models import (
     Competencia,
+    Formacao,
     MembroRede,
     PapelNaRede,
     TipoCompetencia,
@@ -25,6 +27,42 @@ class CompetenciaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Competencia
         fields = ['id_competencia', 'nome', 'tipo']
+
+
+class FormacaoSerializer(serializers.ModelSerializer):
+    """Um curso concluido ou em andamento (PB11 / Escopo 3.3)."""
+
+    titulacao_codigo = serializers.SlugRelatedField(
+        source='titulacao',
+        slug_field='codigo',
+        queryset=Titulacao.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    titulacao_rotulo = serializers.CharField(
+        source='titulacao.rotulo', read_only=True, default=None
+    )
+    ano_conclusao = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1950
+    )
+
+    class Meta:
+        model = Formacao
+        fields = [
+            'id_formacao', 'curso', 'instituicao',
+            'titulacao_codigo', 'titulacao_rotulo', 'ano_conclusao',
+        ]
+        read_only_fields = ['id_formacao']
+
+    def validate_ano_conclusao(self, valor):
+        limite = timezone.now().year + 10
+
+        if valor is not None and valor > limite:
+            raise serializers.ValidationError(
+                f'Ano de conclusão acima de {limite}.'
+            )
+
+        return valor
 
 
 class ListaDeNomes(serializers.ListField):
@@ -57,6 +95,7 @@ class MembroRedeSerializer(serializers.ModelSerializer):
     competencias = ListaDeNomes(required=False, write_only=True)
     tecnicas = ListaDeNomes(required=False, write_only=True)
     linhas = ListaDeNomes(required=False, write_only=True)
+    formacoes = FormacaoSerializer(many=True, required=False)
 
     class Meta:
         model = MembroRede
@@ -65,7 +104,7 @@ class MembroRedeSerializer(serializers.ModelSerializer):
             'titulacao_codigo', 'titulacao_rotulo',
             'organizacao', 'organizacao_nome',
             'disponibilidade', 'experiencia', 'situacao',
-            'competencias', 'tecnicas', 'linhas', 'tem_acesso',
+            'competencias', 'tecnicas', 'linhas', 'formacoes', 'tem_acesso',
             'criado_em', 'atualizado_em',
         ]
         read_only_fields = ['id_membro', 'situacao', 'criado_em', 'atualizado_em']

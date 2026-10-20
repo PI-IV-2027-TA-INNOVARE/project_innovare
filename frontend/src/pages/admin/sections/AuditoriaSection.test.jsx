@@ -16,9 +16,10 @@ const FILTROS = {
     { valor: 'conta', rotulo: 'Conta e acesso' },
   ],
   status: [
-    { valor: 'ok', rotulo: 'Concluido' },
+    { valor: 'ok', rotulo: 'Concluído' },
     { valor: 'negado', rotulo: 'Negado' },
   ],
+  rotina_oculta: { categoria: 'conta', tipos: ['login', 'logout'] },
 }
 
 const EVENTOS = [
@@ -28,7 +29,10 @@ const EVENTOS = [
     categoria: 'conta',
     categoria_rotulo: 'Conta e acesso',
     tipo: 'login_recusado',
+    tipo_rotulo: 'Entrada recusada',
     ator: 'maria@ac2microbiologia.com.br',
+    ator_nome: 'Maria Ferreira',
+    alvo: { rotulo: 'A própria conta', oportunidade: null, removido: false },
     entidade: 'usuario',
     entidade_id: '7',
     status: 'negado',
@@ -43,11 +47,18 @@ const EVENTOS = [
     categoria: 'oportunidade',
     categoria_rotulo: 'Oportunidade',
     tipo: 'oportunidade_cadastrada',
+    tipo_rotulo: 'Oportunidade cadastrada',
     ator: '__sistema__',
+    ator_nome: 'Sistema',
+    alvo: {
+      rotulo: 'Detecção rápida de contaminação',
+      oportunidade: 'OP-2026-001',
+      removido: false,
+    },
     entidade: 'oportunidade',
     entidade_id: 'OP-2026-001',
     status: 'ok',
-    status_rotulo: 'Concluido',
+    status_rotulo: 'Concluído',
     motivo: '',
     detalhe: { origem: 'interna' },
     correlation_id: '22222222-2222-2222-2222-222222222222',
@@ -67,8 +78,8 @@ describe('Console — Auditoria', () => {
   it('lista a trilha vinda do servidor', async () => {
     render(<AuditoriaSection />)
 
-    expect(await screen.findByText('login_recusado')).toBeInTheDocument()
-    expect(screen.getByText('oportunidade_cadastrada')).toBeInTheDocument()
+    expect(await screen.findByText('Entrada recusada')).toBeInTheDocument()
+    expect(screen.getByText('Oportunidade cadastrada')).toBeInTheDocument()
     expect(linhas()).toHaveLength(2)
   })
 
@@ -86,7 +97,7 @@ describe('Console — Auditoria', () => {
   it('filtra no servidor, e não no cliente', async () => {
     const user = userEvent.setup({ delay: null })
     render(<AuditoriaSection />)
-    await screen.findByText('login_recusado')
+    await screen.findByText('Entrada recusada')
 
     await user.selectOptions(screen.getByLabelText(/categoria/i), 'conta')
 
@@ -100,7 +111,7 @@ describe('Console — Auditoria', () => {
   it('a busca também vai ao servidor', async () => {
     const user = userEvent.setup({ delay: null })
     render(<AuditoriaSection />)
-    await screen.findByText('login_recusado')
+    await screen.findByText('Entrada recusada')
 
     await user.type(screen.getByLabelText(/buscar/i), 'OP-2026-001')
     await user.click(screen.getByRole('button', { name: /aplicar/i }))
@@ -112,6 +123,81 @@ describe('Console — Auditoria', () => {
     )
   })
 
+  it('mostra o evento pelo nome, não pelo identificador gravado', async () => {
+    render(<AuditoriaSection />)
+
+    await screen.findByText('Entrada recusada')
+    expect(screen.queryByText('login_recusado')).not.toBeInTheDocument()
+  })
+
+  it('mostra quem agiu pelo nome, com o e-mail como apoio', async () => {
+    render(<AuditoriaSection />)
+
+    const linha = (await screen.findByText('Maria Ferreira')).closest('tr')
+    expect(within(linha).getByText('maria@ac2microbiologia.com.br')).toBeInTheDocument()
+  })
+
+  it('mostra sobre o que foi o evento, com a oportunidade, sem o id interno', async () => {
+    render(<AuditoriaSection />)
+
+    const linha = (await screen.findByText('Detecção rápida de contaminação')).closest('tr')
+    expect(within(linha).getByText('OP-2026-001')).toBeInTheDocument()
+    expect(screen.queryByText(/usuario 7/)).not.toBeInTheDocument()
+  })
+
+  it('diz quando o alvo do evento não existe mais', async () => {
+    api.listarTrilha = vi.fn().mockResolvedValue(
+      pagina([
+        {
+          ...EVENTOS[1],
+          alvo: {
+            rotulo: 'Competência removida do sistema (registro 8)',
+            oportunidade: 'OP-2026-001',
+            removido: true,
+          },
+        },
+      ])
+    )
+    render(<AuditoriaSection />)
+
+    const alvo = await screen.findByText('Competência removida do sistema (registro 8)')
+    expect(alvo).toHaveClass('trilha__alvo--removido')
+  })
+
+  it('avisa que entradas e saídas ficam no filtro Conta e acesso', async () => {
+    const user = userEvent.setup({ delay: null })
+    render(<AuditoriaSection />)
+
+    expect(await screen.findByText(/entradas e saídas da plataforma/i)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/categoria/i), 'conta')
+
+    expect(screen.queryByText(/entradas e saídas da plataforma/i)).not.toBeInTheDocument()
+  })
+
+  it('diz quantos itens uma alteração de configuração mudou', async () => {
+    api.listarTrilha = vi.fn().mockResolvedValue(
+      pagina([
+        {
+          ...EVENTOS[1],
+          categoria: 'config',
+          tipo: 'configuracao_alterada',
+          tipo_rotulo: 'Configuração alterada',
+          detalhe: {
+            revisao: 4,
+            alteracoes: {
+              'light.accentPrimary': { antes: '#1B5E20', depois: '#0F6B5C' },
+              'light.surface': { antes: null, depois: '#FFFFFF' },
+            },
+          },
+        },
+      ])
+    )
+    render(<AuditoriaSection />)
+
+    expect(await screen.findByText('2 itens alterados')).toBeInTheDocument()
+  })
+
   it('mostra o motivo de um evento negado', async () => {
     render(<AuditoriaSection />)
 
@@ -120,7 +206,7 @@ describe('Console — Auditoria', () => {
 
   it('traduz o ator do sistema em vez de mostrar o marcador cru', async () => {
     render(<AuditoriaSection />)
-    await screen.findByText('oportunidade_cadastrada')
+    await screen.findByText('Oportunidade cadastrada')
 
     expect(screen.queryByText('__sistema__')).not.toBeInTheDocument()
     expect(screen.getByText(/sistema/i)).toBeInTheDocument()
@@ -129,7 +215,7 @@ describe('Console — Auditoria', () => {
   it('período invertido é recusado antes de ir ao servidor', async () => {
     const user = userEvent.setup({ delay: null })
     render(<AuditoriaSection />)
-    await screen.findByText('login_recusado')
+    await screen.findByText('Entrada recusada')
 
     api.listarTrilha.mockClear()
 
@@ -159,7 +245,7 @@ describe('Console — Auditoria', () => {
 
   it('não oferece nenhuma ação de escrita sobre a trilha', async () => {
     render(<AuditoriaSection />)
-    await screen.findByText('login_recusado')
+    await screen.findByText('Entrada recusada')
 
     const rotulos = screen
       .getAllByRole('button')
