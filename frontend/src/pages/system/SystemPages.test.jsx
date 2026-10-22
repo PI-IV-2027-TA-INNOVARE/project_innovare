@@ -6,13 +6,22 @@ import NaoEncontradaPage from './NaoEncontradaPage'
 
 const auth = { user: null, isAuthenticated: true }
 
+const api = vi.hoisted(() => ({ lerContatosSuporte: null }))
+
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => auth,
+}))
+
+vi.mock('../../services/pdConnectApi', () => ({
+  lerContatosSuporte: (...args) => api.lerContatosSuporte(...args),
 }))
 
 beforeEach(() => {
   auth.user = { role: 'pesquisador', displayName: 'Maria Ferreira' }
   auth.isAuthenticated = true
+  api.lerContatosSuporte = vi.fn().mockResolvedValue([
+    { nome: 'Núcleo de P&D — AC2', email: 'pd@ac2microbiologia.com.br', papel: 'Cadastro e liberação de acesso' },
+  ])
 })
 
 function renderRota(Componente, rota, state) {
@@ -35,12 +44,32 @@ describe('AcessoRestritoPage', () => {
     expect(screen.getByText('Pesquisador')).toBeInTheDocument()
   })
 
-  it('oferece com quem falar, não só um botão de voltar', () => {
+  it('oferece com quem falar, não só um botão de voltar', async () => {
     renderRota(AcessoRestritoPage, '/sem-acesso')
 
-    expect(screen.getByRole('link', { name: /pd@ac2microbiologia\.com\.br/ }))
+    expect(await screen.findByRole('link', { name: /pd@ac2microbiologia\.com\.br/ }))
       .toHaveAttribute('href', 'mailto:pd@ac2microbiologia.com.br')
     expect(screen.getByRole('link', { name: /voltar ao painel/i })).toHaveAttribute('href', '/painel')
+  })
+
+  it('mostra os contatos gravados pelo Administrador, que valem para todos', async () => {
+    api.lerContatosSuporte = vi.fn().mockResolvedValue([
+      { nome: 'Pesquisa AC2', email: 'pesquisa@ac2microbiologia.com.br', papel: 'Rede' },
+    ])
+
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(await screen.findByRole('link', { name: /pesquisa@ac2microbiologia\.com\.br/ }))
+      .toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /pd@ac2microbiologia/ })).not.toBeInTheDocument()
+  })
+
+  it('avisa quando não consegue carregar os contatos', async () => {
+    api.lerContatosSuporte = vi.fn().mockRejectedValue(new Error('offline'))
+
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(await screen.findByText(/não foi possível carregar os contatos/i)).toBeInTheDocument()
   })
 })
 

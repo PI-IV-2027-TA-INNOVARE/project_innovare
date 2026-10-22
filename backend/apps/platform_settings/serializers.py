@@ -125,6 +125,12 @@ class TemaPatchSerializer(serializers.Serializer):
         return None
 
 
+class ContatoSuporteSerializer(serializers.Serializer):
+    nome = serializers.CharField(max_length=160)
+    email = serializers.EmailField()
+    papel = serializers.CharField(max_length=120, allow_blank=True, required=False, default='')
+
+
 def secao_vazia(secao):
     """A resposta de uma secao que ninguem gravou - mesmo formato do serializer."""
     return {

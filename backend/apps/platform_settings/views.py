@@ -9,8 +9,14 @@ from rest_framework.response import Response
 
 from apps.platform_settings.serializers import (
     ConfiguracaoSerializer,
+    ContatoSuporteSerializer,
     TemaPatchSerializer,
     secao_vazia,
+)
+from apps.platform_settings.services.contatos import (
+    RestaurarContatosService,
+    SubstituirContatosService,
+    contatos_vigentes,
 )
 from apps.platform_settings.services.configuracoes import (
     SECAO_TEMA,
@@ -54,3 +60,44 @@ class TemaView(views.APIView):
         )
 
         return Response(ConfiguracaoSerializer(configuracao).data)
+
+
+class ContatosSuporteView(views.APIView):
+    """
+    `/api/configuracoes/contatos-suporte/` - quem procurar quando o acesso e barrado.
+
+    O GET e publico pelo mesmo motivo do tema: a conta inativa e recusada antes
+    de existir JWT e ainda assim precisa do contato. PUT troca a lista inteira e
+    DELETE volta ao padrao da AC2; os dois sao do Administrador. Lista vazia
+    nao passa: e a saida de quem foi barrado.
+    """
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'DELETE'):
+            return [permissions.IsAuthenticated(), EhAdministrador()]
+
+        return [permissions.AllowAny()]
+
+    @extend_schema(responses=ContatoSuporteSerializer(many=True))
+    def get(self, request):
+        return Response(ContatoSuporteSerializer(contatos_vigentes(), many=True).data)
+
+    @extend_schema(
+        request=ContatoSuporteSerializer(many=True),
+        responses=ContatoSuporteSerializer(many=True),
+    )
+    def put(self, request):
+        contatos = ContatoSuporteSerializer(data=request.data, many=True, allow_empty=False)
+        contatos.is_valid(raise_exception=True)
+
+        gravados = SubstituirContatosService().execute(
+            contatos=contatos.validated_data, ator=request.user
+        )
+
+        return Response(ContatoSuporteSerializer(gravados, many=True).data)
+
+    @extend_schema(request=None, responses=ContatoSuporteSerializer(many=True))
+    def delete(self, request):
+        padrao = RestaurarContatosService().execute(ator=request.user)
+
+        return Response(ContatoSuporteSerializer(padrao, many=True).data)

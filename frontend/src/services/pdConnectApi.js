@@ -353,3 +353,15 @@ export function listarCriteriosPreAnalise() {
 export function importarCriteriosPreAnalise() {
   return apiRequest('/ia/criterios/', { method: 'POST' })
 }
+
+export function lerContatosSuporte() {
+  return apiRequest('/configuracoes/contatos-suporte/', { skipAuth: true, skipAuthRefresh: true })
+}
+
+export function gravarContatosSuporte(contatos) {
+  return apiRequest('/configuracoes/contatos-suporte/', { method: 'PUT', body: contatos })
+}
+
+export function restaurarContatosSuporte() {
+  return apiRequest('/configuracoes/contatos-suporte/', { method: 'DELETE' })
+}

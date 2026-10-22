@@ -297,6 +297,20 @@ describe('OportunidadesPage', () => {
     expect(screen.queryByText('Bioinsumo para cana-de-açúcar')).not.toBeInTheDocument()
   })
 
+  it('separa a busca dos filtros de refino, todos com rótulo visível', async () => {
+    renderApp()
+    await esperarLista()
+
+    const filtros = screen.getByRole('region', { name: /filtros da fila/i })
+    const refino = filtros.querySelector('.filtros-oportunidades__refino')
+
+    expect(within(filtros).getByLabelText(/buscar oportunidades/i)).toBeInTheDocument()
+    expect(within(refino).getByLabelText('Situação')).toHaveRole('combobox')
+    expect(within(refino).getByLabelText('Origem')).toHaveRole('combobox')
+    expect(within(refino).getByLabelText('Cadastrada a partir de')).toBeInTheDocument()
+    expect(within(refino).getByLabelText('Cadastrada até')).toBeInTheDocument()
+  })
+
   it('filtra pelo dia do cadastro, com os dois limites inclusivos', async () => {
     const [antiga, recente, nova] = OPORTUNIDADES_EXEMPLO
     servidorResponde([

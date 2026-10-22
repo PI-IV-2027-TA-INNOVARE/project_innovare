@@ -167,6 +167,20 @@ class CriteriosTests(PreAnaliseBaseTests):
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
         self.assertEqual(len(resposta.data), 2)
 
+    def test_rotulos_das_dimensoes_chegam_acentuados_a_tela(self):
+        """O rotulo vai direto para a interface: sem acento, a tela sai errada."""
+        self.assertEqual(
+            [rotulo for _, rotulo in DimensaoMaturidade.choices],
+            [
+                'Desafio tecnológico',
+                'Inovação',
+                'Plano de pesquisa',
+                'Equipe e supervisão',
+                'Infraestrutura',
+                'Viabilidade',
+            ],
+        )
+
 
 class ExecucaoDaPreAnaliseTests(PreAnaliseBaseTests):
     def test_sem_criterio_cadastrado_a_analise_recusa(self):

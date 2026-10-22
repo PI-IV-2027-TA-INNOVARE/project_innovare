@@ -17,10 +17,10 @@ from apps.ai.models import StatusExecucao
 class DimensaoMaturidade(models.TextChoices):
     """As seis dimensoes de referencia do glossario (`CONTEXT.md` secao 4)."""
 
-    DESAFIO_TECNOLOGICO = 'desafio_tecnologico', 'Desafio tecnologico'
-    INOVACAO = 'inovacao', 'Inovacao'
+    DESAFIO_TECNOLOGICO = 'desafio_tecnologico', 'Desafio tecnológico'
+    INOVACAO = 'inovacao', 'Inovação'
     PLANO_PESQUISA = 'plano_pesquisa', 'Plano de pesquisa'
-    EQUIPE_SUPERVISAO = 'equipe_supervisao', 'Equipe e supervisao'
+    EQUIPE_SUPERVISAO = 'equipe_supervisao', 'Equipe e supervisão'
     INFRAESTRUTURA = 'infraestrutura', 'Infraestrutura'
     VIABILIDADE = 'viabilidade', 'Viabilidade'
 
@@ -30,12 +30,12 @@ class NivelDimensao(models.TextChoices):
 
     CONSOLIDADA = 'consolidada', 'Consolidada'
     EM_DESENVOLVIMENTO = 'em_desenvolvimento', 'Em desenvolvimento'
-    FRAGIL = 'fragil', 'Fragil'
+    FRAGIL = 'fragil', 'Frágil'
 
 
 class OrigemRecomendacao(models.TextChoices):
     COPILOTO = 'copiloto', 'Copiloto'
-    PRE_ANALISE = 'pre_analise', 'Pre-analise'
+    PRE_ANALISE = 'pre_analise', 'Pré-análise'
     MANUAL = 'manual', 'Manual'
 
 

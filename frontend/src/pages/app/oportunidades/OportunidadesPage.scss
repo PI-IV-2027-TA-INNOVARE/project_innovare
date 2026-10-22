@@ -46,17 +46,38 @@
   background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 
-.oportunidades-page__data {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  white-space: nowrap;
+.filtros-oportunidades {
+  display: grid;
+  gap: var(--admin-gap);
+  margin-bottom: var(--admin-pad);
+  padding: var(--admin-gap);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow-soft);
 }
 
-.oportunidades-page__data .admin-input {
-  width: auto;
+.filtros-oportunidades__principal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  .admin-search {
+    max-width: none;
+  }
+}
+
+.filtros-oportunidades__refino {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+  padding-top: var(--admin-gap);
+  border-top: 1px solid var(--admin-card-border);
+
+  .admin-input {
+    width: 100%;
+  }
 }
 
 .oportunidade-page__meta {
@@ -87,57 +108,6 @@
 
   a {
     color: var(--accent-primary-text);
-  }
-}
-
-.origem-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 999px;
-  white-space: nowrap;
-
-  &--externo {
-    color: var(--accent-secondary);
-    background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
-  }
-
-  &--interna {
-    color: var(--accent-primary-text);
-    background: var(--accent-primary-dim);
-  }
-}
-
-.fluxo-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  border-radius: 999px;
-  white-space: nowrap;
-
-  &--aguardando_decisao {
-    color: var(--accent-primary-text);
-    background: var(--accent-primary-dim);
-  }
-
-  &--continuar {
-    color: var(--accent-green);
-    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
-  }
-
-  &--revisar {
-    color: var(--accent-primary-text);
-    background: var(--accent-primary-dim);
-  }
-
-  &--arquivada,
-  &--arquivar {
-    color: var(--accent-error);
-    background: var(--bg-danger-soft);
   }
 }
 
@@ -511,8 +481,7 @@
 .preanalise__dimensoes,
 .preanalise__evidencias,
 .preanalise__lacunas,
-.preanalise__recomendacoes,
-.criterios__lista {
+.preanalise__recomendacoes {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -546,8 +515,7 @@
 
 .copiloto__pergunta-motivo,
 .competencias__meta,
-.equipe__meta,
-.criterios__dimensao {
+.equipe__meta {
   margin-top: 4px;
   font-size: 0.8125rem;
   color: var(--text-muted);
@@ -601,8 +569,7 @@
 
 .copiloto__lacuna,
 .competencias__item,
-.equipe__membro,
-.criterios__item {
+.equipe__membro {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -615,8 +582,7 @@
   }
 }
 
-.copiloto__lacuna,
-.criterios__item {
+.copiloto__lacuna {
   justify-content: flex-start;
 }
 
@@ -658,8 +624,7 @@
 }
 
 .competencias__texto,
-.equipe__nome,
-.criterios__descricao {
+.equipe__nome {
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -806,19 +771,6 @@
 .preanalise__acatada {
   text-decoration: line-through;
   color: var(--text-muted);
-}
-
-.criterios__codigo {
-  flex-shrink: 0;
-  min-width: 42px;
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-align: center;
-  color: var(--accent-primary-text);
-  background: var(--accent-primary-dim);
-  border: 1px solid var(--border-accent);
-  border-radius: 999px;
 }
 
 @media (max-width: 640px) {

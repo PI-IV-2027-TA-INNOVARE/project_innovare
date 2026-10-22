@@ -240,31 +240,31 @@ export default function OportunidadesPage() {
         </div>
       ) : null}
 
-      <div className="admin-toolbar">
-        <div className="admin-search">
-          <Icone icon={appIcons.search} className="admin-search__icon" />
-          <input
-            type="search"
-            className="admin-search__input"
-            value={busca}
-            onChange={(event) => setBusca(event.target.value)}
-            placeholder="Buscar por título, código ou demandante..."
-            aria-label="Buscar oportunidades"
-          />
-          {busca ? (
-            <button
-              type="button"
-              className="admin-search__clear"
-              onClick={() => setBusca('')}
-              title="Limpar pesquisa"
-              aria-label="Limpar pesquisa"
-            >
-              <Icone icon={appIcons.clear} />
-            </button>
-          ) : null}
-        </div>
+      <section className="filtros-oportunidades" aria-label="Filtros da fila">
+        <div className="filtros-oportunidades__principal">
+          <div className="admin-search">
+            <Icone icon={appIcons.search} className="admin-search__icon" />
+            <input
+              type="search"
+              className="admin-search__input"
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Buscar por título, código ou demandante..."
+              aria-label="Buscar oportunidades"
+            />
+            {busca ? (
+              <button
+                type="button"
+                className="admin-search__clear"
+                onClick={() => setBusca('')}
+                title="Limpar pesquisa"
+                aria-label="Limpar pesquisa"
+              >
+                <Icone icon={appIcons.clear} />
+              </button>
+            ) : null}
+          </div>
 
-        <div className="admin-toolbar__actions">
           {ehSupervisor ? (
             <button
               type="button"
@@ -276,35 +276,39 @@ export default function OportunidadesPage() {
               Aguardando minha atuação ({aguardandoMinhaAtuacao})
             </button>
           ) : null}
+        </div>
 
-          <label className="sr-only" htmlFor="filtro-situacao">Filtrar por situação</label>
-          <select
-            id="filtro-situacao"
-            className="admin-input admin-input--select"
-            value={situacaoFiltro}
-            onChange={(event) => trocarSituacao(event.target.value)}
-          >
-            <option value="todas">Todas as situações</option>
-            {SITUACOES.map((situacao) => (
-              <option key={situacao.id} value={situacao.id}>{situacao.label}</option>
-            ))}
-          </select>
+        <div className="filtros-oportunidades__refino">
+          <label className="admin-field">
+            <span className="admin-field__label">Situação</span>
+            <select
+              className="admin-input admin-input--select"
+              value={situacaoFiltro}
+              onChange={(event) => trocarSituacao(event.target.value)}
+            >
+              <option value="todas">Todas as situações</option>
+              {SITUACOES.map((situacao) => (
+                <option key={situacao.id} value={situacao.id}>{situacao.label}</option>
+              ))}
+            </select>
+          </label>
 
-          <label className="sr-only" htmlFor="filtro-origem">Filtrar por origem</label>
-          <select
-            id="filtro-origem"
-            className="admin-input admin-input--select"
-            value={origemFiltro}
-            onChange={(event) => setOrigemFiltro(event.target.value)}
-          >
-            <option value="todas">Todas as origens</option>
-            {ORIGENS.map((origem) => (
-              <option key={origem.id} value={origem.id}>{origem.label}</option>
-            ))}
-          </select>
+          <label className="admin-field">
+            <span className="admin-field__label">Origem</span>
+            <select
+              className="admin-input admin-input--select"
+              value={origemFiltro}
+              onChange={(event) => setOrigemFiltro(event.target.value)}
+            >
+              <option value="todas">Todas as origens</option>
+              {ORIGENS.map((origem) => (
+                <option key={origem.id} value={origem.id}>{origem.label}</option>
+              ))}
+            </select>
+          </label>
 
-          <label className="oportunidades-page__data">
-            <span>Cadastrada a partir de</span>
+          <label className="admin-field">
+            <span className="admin-field__label">Cadastrada a partir de</span>
             <input
               type="date"
               className="admin-input"
@@ -314,8 +318,8 @@ export default function OportunidadesPage() {
             />
           </label>
 
-          <label className="oportunidades-page__data">
-            <span>Cadastrada até</span>
+          <label className="admin-field">
+            <span className="admin-field__label">Cadastrada até</span>
             <input
               type="date"
               className="admin-input"
@@ -325,7 +329,7 @@ export default function OportunidadesPage() {
             />
           </label>
         </div>
-      </div>
+      </section>
 
       {temFiltro ? (
         <div className="active-filters">

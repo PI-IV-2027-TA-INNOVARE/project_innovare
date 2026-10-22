@@ -71,6 +71,10 @@ function flattenErrorDetail(detail) {
   }
 
   if (typeof detail === 'object') {
+    if ('detail' in detail) {
+      return flattenErrorDetail(detail.detail)
+    }
+
     return Object.entries(detail)
       .map(([field, value]) => {
         const message = flattenErrorDetail(value)

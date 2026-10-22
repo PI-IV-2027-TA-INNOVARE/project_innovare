@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icone, appIcons } from '../../lib/icons'
 import { iniciais, tomDoAvatar } from '../../lib/people'
 
@@ -30,16 +31,70 @@ export function SkeletonRows({ colunas, linhas = 6 }) {
   ))
 }
 
+const DISTANCIA_DO_GATILHO = 4
+
+function posicionarMenu(gatilho, lista) {
+  const ancora = gatilho.getBoundingClientRect()
+  const alturaDaTela = window.innerHeight
+  const larguraDaTela = document.documentElement.clientWidth || window.innerWidth
+  const altura = lista.offsetHeight
+  const cabeAbaixo = ancora.bottom + DISTANCIA_DO_GATILHO + altura <= alturaDaTela
+  const cabeAcima = ancora.top - DISTANCIA_DO_GATILHO - altura >= 0
+  const acima = !cabeAbaixo && cabeAcima
+
+  return {
+    acima,
+    estilo: {
+      right: `${Math.max(larguraDaTela - ancora.right, 0)}px`,
+      ...(acima
+        ? { bottom: `${alturaDaTela - ancora.top + DISTANCIA_DO_GATILHO}px` }
+        : { top: `${ancora.bottom + DISTANCIA_DO_GATILHO}px` }),
+    },
+  }
+}
+
 export function RowActionsMenu({ label, items }) {
   const [aberto, setAberto] = useState(false)
+  const [posicao, setPosicao] = useState(null)
   const containerRef = useRef(null)
   const gatilhoRef = useRef(null)
+  const listaRef = useRef(null)
+  const raizRef = useRef(null)
+
+  const alternar = () => {
+    raizRef.current = gatilhoRef.current?.closest('.console, .admin-page') || document.body
+    setPosicao(null)
+    setAberto((atual) => !atual)
+  }
+
+  useLayoutEffect(() => {
+    if (!aberto) return undefined
+
+    const reposicionar = () => {
+      if (gatilhoRef.current && listaRef.current) {
+        setPosicao(posicionarMenu(gatilhoRef.current, listaRef.current))
+      }
+    }
+
+    reposicionar()
+    window.addEventListener('resize', reposicionar)
+    window.addEventListener('scroll', reposicionar, true)
+
+    return () => {
+      window.removeEventListener('resize', reposicionar)
+      window.removeEventListener('scroll', reposicionar, true)
+    }
+  }, [aberto])
 
   useEffect(() => {
     if (!aberto) return undefined
 
     const onPointerDown = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
+      const dentro = [containerRef.current, listaRef.current].some(
+        (elemento) => elemento && elemento.contains(event.target)
+      )
+
+      if (!dentro) {
         setAberto(false)
       }
     }
@@ -70,13 +125,19 @@ export function RowActionsMenu({ label, items }) {
         aria-expanded={aberto}
         title={`Ações para ${label}`}
         aria-label={`Ações para ${label}`}
-        onClick={() => setAberto((atual) => !atual)}
+        onClick={alternar}
       >
         <Icone icon={appIcons.more} />
       </button>
 
-      {aberto ? (
-        <div className="row-menu__list" role="menu" aria-label={`Ações para ${label}`}>
+      {aberto && raizRef.current ? createPortal(
+        <div
+          ref={listaRef}
+          className={`row-menu__list${posicao?.acima ? ' row-menu__list--acima' : ''}`}
+          role="menu"
+          aria-label={`Ações para ${label}`}
+          style={posicao ? posicao.estilo : { visibility: 'hidden' }}
+        >
           {items.map((item) => (
             <button
               key={item.label}
@@ -92,7 +153,8 @@ export function RowActionsMenu({ label, items }) {
               {item.label}
             </button>
           ))}
-        </div>
+        </div>,
+        raizRef.current
       ) : null}
     </div>
   )
