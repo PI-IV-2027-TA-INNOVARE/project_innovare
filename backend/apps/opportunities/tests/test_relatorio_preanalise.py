@@ -10,14 +10,16 @@ Provedor sempre duble (AGENTS.md 0.1).
 """
 import tempfile
 
+from django.db.models import F
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.copilot.models import PropostaEstruturada
-from apps.maturity.models import CriterioPreAnalise
+from apps.maturity.models import CriterioPreAnalise, VersaoCriterio
 from apps.maturity.serializers import AVISO_ORIENTATIVO
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
 from core.tests.builders import (
@@ -140,15 +142,14 @@ class DocumentoTests(RelatorioPreAnaliseBaseTests):
         self.importar()
         self.analisar()
 
-        CriterioPreAnalise.objects.filter(versao='V9').update(
-            vigente_ate='2026-10-20'
-        )
+        VersaoCriterio.objects.filter(versao='V9').update(vigente_ate=F('vigente_de'))
         CriterioPreAnalise.objects.create(
-            versao='V10',
+            versao_criterio=VersaoCriterio.objects.create(
+                versao='V10', vigente_de=timezone.localdate()
+            ),
             dimensao='inovacao',
             codigo='X1',
             descricao='Criterio de uma versao posterior.',
-            vigente_de='2026-10-21',
         )
 
         dados = self.client.get(self.url()).data

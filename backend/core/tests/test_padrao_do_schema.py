@@ -1,10 +1,15 @@
 """
 Convencao de nomes do banco: o schema do projeto fala portugues.
 
+Tabela tem cada palavra com inicial maiuscula, separada por `_`
+(`Proposta_Estruturada`); coluna, restricao e indice ficam em minusculas
+(`id_proposta`, `ck_proposta_estruturada_...`).
+
 Vale para as tabelas dos apps do projeto. As do framework - `auth_*`,
-`django_*`, `token_blacklist_*` e as N:N que o `PermissionsMixin` cria em
-`usuario` - seguem com os nomes do Django e do SimpleJWT: renomea-las quebra
-as migrations e o codigo deles, que nao sao nossos.
+`django_*` e `token_blacklist_*` - seguem com os nomes do Django e do
+SimpleJWT: renomea-las quebra as migrations e o codigo deles, que nao sao
+nossos. As N:N que o `PermissionsMixin` cria em `Usuario` sao do projeto e
+seguem a convencao; so as colunas delas sao do Django.
 
 Ficam de fora tambem os termos tecnicos sem traducao consagrada (`token`,
 `prompt`, `mime`) e o que o dicionario ja acolheu (`status`).
@@ -36,7 +41,43 @@ def colunas(modelo):
     return [campo for campo in modelo._meta.local_fields]
 
 
+def tabelas_do_projeto():
+    tabelas = set()
+
+    for modelo in modelos_do_projeto():
+        tabelas.add(modelo._meta.db_table)
+
+        for campo in modelo._meta.local_many_to_many:
+            if campo.remote_field.through._meta.auto_created:
+                tabelas.add(campo.remote_field.through._meta.db_table)
+
+    return tabelas
+
+
+def em_maiuscula_por_palavra(nome):
+    return nome == '_'.join(palavra.capitalize() for palavra in nome.split('_'))
+
+
 class PadraoDoSchemaTests(SimpleTestCase):
+    def test_toda_tabela_tem_inicial_maiuscula_em_cada_palavra(self):
+        fora = sorted(
+            tabela for tabela in tabelas_do_projeto()
+            if not em_maiuscula_por_palavra(tabela)
+        )
+
+        self.assertEqual(fora, [])
+
+    def test_nenhuma_coluna_tem_maiuscula(self):
+        """A maiuscula e so do nome da tabela: coluna maiuscula exige aspas."""
+        fora = [
+            f'{m._meta.db_table}.{campo.column}'
+            for m in modelos_do_projeto()
+            for campo in colunas(m)
+            if campo.column != campo.column.lower()
+        ]
+
+        self.assertEqual(fora, [])
+
     def test_toda_chave_primaria_comeca_com_id(self):
         fora = [
             f'{m._meta.db_table}.{m._meta.pk.column}'
@@ -107,7 +148,7 @@ class ListaFixaTravadaNoBancoTests(SimpleTestCase):
                 if not campo.choices or isinstance(campo, models.BooleanField):
                     continue
 
-                nome = f'ck_{modelo._meta.db_table}_{campo.column}'
+                nome = f'ck_{modelo._meta.db_table.lower()}_{campo.column}'
                 esperado = models.Q(
                     **{f'{campo.name}__in': [valor for valor, _ in campo.flatchoices]}
                 )

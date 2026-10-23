@@ -58,8 +58,7 @@ class RelatorioBaseTests(TestCase):
         )
 
         MembroRede.objects.create(
-            usuario=self.pesquisador, nome='Maria Ferreira',
-            email=self.pesquisador.email, papel_rede=PapelNaRede.PESQUISADOR,
+            usuario=self.pesquisador, papel_rede=PapelNaRede.PESQUISADOR,
             situacao=SituacaoMembro.ATIVO,
         )
 

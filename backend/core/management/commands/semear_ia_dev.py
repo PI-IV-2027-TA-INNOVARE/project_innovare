@@ -424,7 +424,7 @@ class Command(BaseCommand):
     def _membro(self, perfil, instituicao, supervisor):
         email = email_do_membro(perfil['nome'])
 
-        if MembroRede.objects.filter(email=email).exists():
+        if MembroRede.objects.com_email(email).exists():
             return 0
 
         membro = CadastrarMembroService().execute(

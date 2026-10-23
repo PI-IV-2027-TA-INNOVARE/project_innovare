@@ -74,8 +74,13 @@ class MembroRedeSerializer(serializers.ModelSerializer):
     As tres listas aparecem separadas na tela e moram numa tabela so.
 
     O `tipo` da competencia e o discriminador; o serializer faz a traducao nos
-    dois sentidos para a tela nao precisar conhecer a juncao.
+    dois sentidos para a tela nao precisar conhecer a juncao. `nome` e
+    `email` tambem sao traducao: moram no membro ou na conta dele, e o
+    servico grava cada um no lugar certo.
     """
+
+    nome = serializers.CharField(max_length=160)
+    email = serializers.EmailField()
 
     titulacao_codigo = serializers.SlugRelatedField(
         source='titulacao',
@@ -149,9 +154,12 @@ class PerfilProprioSerializer(MembroRedeSerializer):
     mexer neles e cadastro, e cadastro e do Supervisor (RN-A04).
     """
 
+    nome = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+
     class Meta(MembroRedeSerializer.Meta):
         read_only_fields = [
-            'id_membro', 'nome', 'email', 'papel_rede', 'organizacao',
+            'id_membro', 'papel_rede', 'organizacao',
             'situacao', 'criado_em', 'atualizado_em',
         ]
 

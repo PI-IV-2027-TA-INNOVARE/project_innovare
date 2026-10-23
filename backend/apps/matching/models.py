@@ -67,7 +67,7 @@ class ExecucaoMatching(models.Model):
     )
 
     class Meta:
-        db_table = 'execucao_matching'
+        db_table = 'Execucao_Matching'
         constraints = [
             lista_fixa('execucao_matching', 'status', StatusExecucao),
         ]
@@ -104,7 +104,7 @@ class EquipePotencial(models.Model):
     data_geracao = models.DateTimeField(auto_now_add=True, db_column='data_geracao')
 
     class Meta:
-        db_table = 'equipe_potencial'
+        db_table = 'Equipe_Potencial'
         verbose_name = 'equipe potencial'
         verbose_name_plural = 'equipes potenciais'
         ordering = ['-data_geracao']
@@ -170,7 +170,7 @@ class MembroEquipe(models.Model):
     atualizado_em = models.DateTimeField(auto_now=True, db_column='atualizado_em')
 
     class Meta:
-        db_table = 'membro_equipe'
+        db_table = 'Membro_Equipe'
         verbose_name = 'membro da equipe potencial'
         verbose_name_plural = 'membros da equipe potencial'
         ordering = ['-score_compatibilidade']
@@ -221,7 +221,7 @@ class LacunaCompetenciaEquipe(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'lacuna_competencia_equipe'
+        db_table = 'Lacuna_Competencia_Equipe'
         verbose_name = 'lacuna de competencia da equipe'
         verbose_name_plural = 'lacunas de competencia da equipe'
 

@@ -41,11 +41,11 @@ class StatusEvento(models.TextChoices):
 
 class EventoAuditoria(models.Model):
     id_evento = models.BigAutoField(primary_key=True, db_column='id_evento')
-    ocorrido_em = models.DateTimeField(db_column='ocorrido_em')
+    ocorrido_em = models.DateTimeField(db_column='data_hora')
     categoria = models.CharField(
         max_length=16, choices=CategoriaEvento.choices, db_column='categoria'
     )
-    tipo = models.CharField(max_length=60, db_column='tipo')
+    tipo = models.CharField(max_length=60, db_column='tipo_evento')
     ator = models.CharField(max_length=160, db_column='ator')
     entidade = models.CharField(max_length=60, db_column='entidade')
     entidade_id = models.CharField(max_length=60, db_column='id_entidade')
@@ -55,7 +55,7 @@ class EventoAuditoria(models.Model):
         default=StatusEvento.OK,
         db_column='status',
     )
-    motivo = models.TextField(blank=True, default='', db_column='motivo')
+    motivo = models.TextField(blank=True, default='', db_column='descricao')
     correlation_id = models.UUIDField(
         default=uuid.uuid4, db_column='id_correlacao'
     )
@@ -79,7 +79,7 @@ class EventoAuditoria(models.Model):
     registrado_em = models.DateTimeField(auto_now_add=True, db_column='registrado_em')
 
     class Meta:
-        db_table = 'historico_evento'
+        db_table = 'Historico_Evento'
         constraints = [
             lista_fixa('historico_evento', 'categoria', CategoriaEvento),
             lista_fixa('historico_evento', 'status', StatusEvento),

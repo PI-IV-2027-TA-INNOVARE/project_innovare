@@ -65,7 +65,7 @@ class CompetenciaNecessaria(models.Model):
     atualizado_em = models.DateTimeField(auto_now=True, db_column='atualizado_em')
 
     class Meta:
-        db_table = 'competencia_necessaria'
+        db_table = 'Competencia_Necessaria'
         verbose_name = 'competencia necessaria'
         verbose_name_plural = 'competencias necessarias'
         constraints = [

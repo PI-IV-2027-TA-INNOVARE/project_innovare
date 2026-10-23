@@ -83,7 +83,7 @@ class ExecucaoIA(models.Model):
     )
 
     class Meta:
-        db_table = 'execucao_ia'
+        db_table = 'Execucao_Ia'
         constraints = [
             lista_fixa('execucao_ia', 'tipo', TipoExecucaoIA),
             lista_fixa('execucao_ia', 'status', StatusExecucao),

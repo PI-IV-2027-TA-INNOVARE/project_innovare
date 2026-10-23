@@ -406,13 +406,12 @@ class EstruturarPropostaService:
         Fechar importa tanto quanto abrir: lacuna resolvida que continua na tela
         ensina o Supervisor a ignorar a lista.
         """
-        oportunidade = proposta.oportunidade
         vazios = set(elementos_vazios(proposta))
         base = base_conhecimento()
 
         abertas = {
             lacuna.campo_afetado: lacuna
-            for lacuna in oportunidade.lacunas.filter(
+            for lacuna in proposta.lacunas.filter(
                 tipo=TipoLacuna.PROPOSTA, resolvida=False
             )
         }
@@ -444,7 +443,7 @@ class EstruturarPropostaService:
 
             atuais.append(
                 Lacuna.objects.create(
-                    oportunidade=oportunidade,
+                    proposta=proposta,
                     tipo=TipoLacuna.PROPOSTA,
                     campo_afetado=elemento,
                     descricao=f'A proposta não descreve {ROTULOS[elemento]}.',

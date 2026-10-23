@@ -42,6 +42,7 @@ from apps.maturity.models import (
     PreAnalise,
     PreAnaliseDimensao,
     Recomendacao,
+    VersaoCriterio,
 )
 from apps.ai.models import StatusExecucao
 from apps.opportunities.models import Oportunidade
@@ -95,13 +96,15 @@ SEM_EQUIPE = 'Equipe potencial ainda não gerada para esta oportunidade.'
 
 
 def criterios_vigentes():
-    """Os criterios sem data de encerramento - a versao em uso hoje."""
-    return CriterioPreAnalise.objects.filter(vigente_ate__isnull=True).order_by(
-        'dimensao', 'codigo'
+    """Os criterios da versao sem data de encerramento - a em uso hoje."""
+    return (
+        CriterioPreAnalise.objects.filter(versao_criterio__vigente_ate__isnull=True)
+        .select_related('versao_criterio')
+        .order_by('dimensao', 'codigo')
     )
 
 
-def versao_vigente() -> str:
+def versao_vigente() -> VersaoCriterio:
     """
     A versao de criterios que a pre-analise vai citar.
 
@@ -117,16 +120,16 @@ def versao_vigente() -> str:
             'criterios_ausentes',
         )
 
-    return primeiro.versao
+    return primeiro.versao_criterio
 
 
 def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
     """A ultima pre-analise da proposta, ou o 404 que a tela usa para oferecer a 1a."""
     proposta = proposta_de(oportunidade)
     analise = (
-        proposta.pre_analises.prefetch_related(
-            'dimensoes', 'lacunas', 'recomendacoes'
-        ).first()
+        proposta.pre_analises.select_related('versao_criterio')
+        .prefetch_related('dimensoes', 'lacunas', 'recomendacoes')
+        .first()
     )
 
     if analise is None:
@@ -177,6 +180,7 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
             status=StatusExecucao.OK,
             executada_em__lt=analise.executada_em,
         )
+        .select_related('versao_criterio')
         .prefetch_related('dimensoes', 'lacunas')
         .first()
     )
@@ -208,7 +212,7 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
             'versao_proposta': anterior.versao_proposta,
             'versao_criterios': anterior.versao_criterios,
         },
-        'mesmos_criterios': anterior.versao_criterios == analise.versao_criterios,
+        'mesmos_criterios': anterior.versao_criterio_id == analise.versao_criterio_id,
         'dimensoes': dimensoes,
         'lacunas': {
             'anterior': len(anterior.lacunas.all()),
@@ -219,7 +223,7 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
 
 def _texto_da_equipe(oportunidade: Oportunidade) -> str:
     equipe = oportunidade.equipes_potenciais.prefetch_related(
-        'membros__membro__titulacao'
+        'membros__membro__titulacao', 'membros__membro__usuario'
     ).first()
 
     if equipe is None:
@@ -248,9 +252,10 @@ class ImportarCriteriosService:
     Carrega os criterios da Base de Conhecimento PIPE para o banco.
 
     E o unico caminho de entrada de criterio no sistema: ninguem digita
-    criterio de fomento a mao numa tela. O conteudo e da baseline de IA, e o
-    `baseline_id` completo fica no evento - a coluna `versao` cabe 12
-    caracteres e guarda o rotulo curto (`V2`).
+    criterio de fomento a mao numa tela. O conteudo e da baseline de IA. A
+    versao (`V2`) nasce na primeira importacao e guarda o `baseline_id`
+    completo; reimportar a mesma versao a reabre, e importar outra encerra a
+    vigencia das demais.
     """
 
     @transaction.atomic
@@ -271,8 +276,15 @@ class ImportarCriteriosService:
                 'base_sem_criterios',
             )
 
-        versao = base.versao
         hoje = timezone.now().date()
+        versao_criterio, _ = VersaoCriterio.objects.get_or_create(
+            versao=base.versao,
+            defaults={'baseline': base.baseline_id or '', 'vigente_de': hoje},
+        )
+        versao_criterio.baseline = base.baseline_id or versao_criterio.baseline
+        versao_criterio.vigente_ate = None
+        versao_criterio.save(update_fields=['baseline', 'vigente_ate'])
+        versao = versao_criterio.versao
         criados = 0
         atualizados = 0
         sem_dimensao = []
@@ -295,20 +307,18 @@ class ImportarCriteriosService:
             )
 
             registro, nasceu = CriterioPreAnalise.objects.update_or_create(
-                versao=versao,
+                versao_criterio=versao_criterio,
                 codigo=codigo,
                 defaults={
                     'dimensao': dimensao,
                     'descricao': descricao,
-                    'vigente_de': hoje,
-                    'vigente_ate': None,
                 },
             )
 
             criados += 1 if nasceu else 0
             atualizados += 0 if nasceu else 1
 
-        CriterioPreAnalise.objects.exclude(versao=versao).filter(
+        VersaoCriterio.objects.exclude(pk=versao_criterio.pk).filter(
             vigente_ate__isnull=True
         ).update(vigente_ate=hoje)
 
@@ -387,7 +397,7 @@ class PreAnalisarService:
         with transaction.atomic():
             analise = PreAnalise.objects.create(
                 proposta=proposta,
-                versao_criterios=versao,
+                versao_criterio=versao,
                 versao_proposta=proposta.versao,
                 sintese=dados.get('sintese', ''),
                 executada_por=ator.email,
@@ -399,7 +409,6 @@ class PreAnalisarService:
             self._gravar_dimensoes(analise, dimensoes)
             lacunas = self._gravar_lacunas(
                 analise=analise,
-                oportunidade=oportunidade,
                 itens=dados.get('lacunas', []),
                 execucao_ia=execucao_ia,
             )
@@ -420,7 +429,7 @@ class PreAnalisarService:
                 correlation_id=correlation_id,
                 execucao_ia=execucao_ia,
                 detalhe={
-                    'versao_criterios': versao,
+                    'versao_criterios': versao.versao,
                     'versao_proposta': proposta.versao,
                     'dimensoes': len(dimensoes),
                     'lacunas': len(lacunas),
@@ -467,7 +476,6 @@ class PreAnalisarService:
         self,
         *,
         analise: PreAnalise,
-        oportunidade: Oportunidade,
         itens: list[dict[str, Any]],
         execucao_ia,
     ) -> list[Lacuna]:
@@ -482,7 +490,7 @@ class PreAnalisarService:
         for item in itens:
             lacunas.append(
                 Lacuna.objects.create(
-                    oportunidade=oportunidade,
+                    proposta_id=analise.proposta_id,
                     tipo=TipoLacuna.PRE_ANALISE,
                     campo_afetado=item.get('dimensao', ''),
                     descricao=item['descricao'],

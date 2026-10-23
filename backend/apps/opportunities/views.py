@@ -535,8 +535,8 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             'mensagens': list(sessao.mensagens.all()) if sessao else [],
             'perguntas': perguntas_orientadoras(transitoria),
             'lacunas': list(
-                oportunidade.lacunas.filter(tipo='proposta', resolvida=False)
-            ),
+                proposta.lacunas.filter(tipo='proposta', resolvida=False)
+            ) if proposta is not None else [],
             'elementos_vazios': elementos_vazios(transitoria),
             'proposta_iniciada': proposta is not None,
             'base_disponivel': base.disponivel,

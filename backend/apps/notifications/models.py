@@ -32,7 +32,7 @@ class Notificacao(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'notificacao'
+        db_table = 'Notificacao'
         verbose_name_plural = 'notificacoes'
         ordering = ['-criado_em']
         indexes = [

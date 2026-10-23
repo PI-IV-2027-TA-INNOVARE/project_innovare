@@ -145,7 +145,9 @@ class FluxoDaOportunidade:
     def _equipe(self) -> EquipePotencial | None:
         return (
             self._oportunidade.equipes_potenciais.select_related('execucao')
-            .prefetch_related('membros__membro__titulacao', 'lacunas')
+            .prefetch_related(
+                'membros__membro__titulacao', 'membros__membro__usuario', 'lacunas'
+            )
             .first()
         )
 
@@ -254,8 +256,10 @@ class PreAnaliseDaOportunidade:
             pre_analise=analise,
             criterios=tuple(
                 CriterioPreAnalise.objects.filter(
-                    versao=analise.versao_criterios
-                ).order_by('dimensao', 'codigo')
+                    versao_criterio_id=analise.versao_criterio_id
+                )
+                .select_related('versao_criterio')
+                .order_by('dimensao', 'codigo')
             ),
             equipe=self._equipe(),
             gerado_em=timezone.now(),
@@ -264,7 +268,7 @@ class PreAnaliseDaOportunidade:
     def _equipe(self) -> EquipePotencial | None:
         return (
             self._oportunidade.equipes_potenciais.prefetch_related(
-                'membros__membro__titulacao'
+                'membros__membro__titulacao', 'membros__membro__usuario'
             ).first()
         )
 

@@ -76,13 +76,11 @@ class OportunidadeBaseTests(TestCase):
         )
 
         self.membro_supervisor = MembroRede.objects.create(
-            usuario=self.supervisor, nome='Rafael Antunes',
-            email=self.supervisor.email, papel_rede=PapelNaRede.SUPERVISOR,
+            usuario=self.supervisor, papel_rede=PapelNaRede.SUPERVISOR,
             situacao=SituacaoMembro.ATIVO,
         )
         self.membro_pesquisador = MembroRede.objects.create(
-            usuario=self.pesquisador, nome='Maria Ferreira',
-            email=self.pesquisador.email, papel_rede=PapelNaRede.PESQUISADOR,
+            usuario=self.pesquisador, papel_rede=PapelNaRede.PESQUISADOR,
             situacao=SituacaoMembro.ATIVO,
         )
 
@@ -338,7 +336,7 @@ class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
             papel=Papel.SUPERVISOR, password=SENHA,
         )
         membro = MembroRede.objects.create(
-            usuario=outro, nome='Outra Supervisora', email=outro.email,
+            usuario=outro,
             papel_rede=PapelNaRede.SUPERVISOR, situacao=SituacaoMembro.ATIVO,
         )
         self.mudar(responsavel=membro)

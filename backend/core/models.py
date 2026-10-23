@@ -24,12 +24,17 @@ class CoerenteComAPreAnalise:
     Quem aponta para a oportunidade e para a pre-analise aponta para a mesma.
 
     `id_oportunidade` e obrigatoria porque ha registro sem pre-analise (a
-    lacuna do Copiloto); `id_pre_analise` ja leva a oportunidade, pela
+    recomendacao manual); `id_pre_analise` ja leva a oportunidade, pela
     proposta. Duas estradas para o mesmo lugar so sao seguras se nao puderem
     divergir, e o Postgres nao compara colunas de tabelas diferentes num
     CHECK - por isso a trava e aqui, e vale para qualquer caminho de escrita,
     admin do Django incluido.
+
+    `pende_da_proposta` vale para quem aponta para a proposta em vez da
+    oportunidade (a lacuna): a trava compara a proposta da pre-analise.
     """
+
+    pende_da_proposta = False
 
     def save(self, *args, **kwargs):
         self.garantir_mesma_oportunidade()
@@ -39,23 +44,28 @@ class CoerenteComAPreAnalise:
         if self.pre_analise_id is None:
             return
 
-        da_analise = self.pre_analise.proposta.oportunidade_id
+        if self.pende_da_proposta:
+            divergem = self.pre_analise.proposta_id != self.proposta_id
+        else:
+            divergem = self.pre_analise.proposta.oportunidade_id != self.oportunidade_id
 
-        if da_analise != self.oportunidade_id:
+        if divergem:
             raise ErroDeDominio(
                 'A pre-analise informada pertence a outra oportunidade.',
                 codigo='referencias_divergentes',
             )
 
 
-def lista_fixa(tabela, campo, escolhas):
+def lista_fixa(tabela, campo, escolhas, coluna=None):
     """
-    `CHECK` que trava a coluna nos valores da lista (`ck_<tabela>_<campo>`).
+    `CHECK` que trava a coluna nos valores da lista (`ck_<tabela>_<coluna>`).
 
     O `choices` do Django so valida o que passa pela aplicacao. O `INSERT`
-    escrito a mao e o script de carga chegam ao banco direto.
+    escrito a mao e o script de carga chegam ao banco direto. `coluna` e o
+    `db_column` quando ele difere do nome do campo: o nome da restricao segue
+    o banco, que e onde ela e lida.
     """
     return models.CheckConstraint(
         condition=models.Q(**{f'{campo}__in': escolhas.values}),
-        name=f'ck_{tabela}_{campo}',
+        name=f'ck_{tabela}_{coluna or campo}',
     )

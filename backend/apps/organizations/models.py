@@ -33,7 +33,7 @@ class Organizacao(ModeloComCarimbo):
     ativo = models.BooleanField(default=True, db_column='ativo')
 
     class Meta:
-        db_table = 'organizacao'
+        db_table = 'Organizacao'
         verbose_name = 'organizacao'
         verbose_name_plural = 'organizacoes'
         constraints = [

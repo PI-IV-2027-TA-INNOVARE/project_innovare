@@ -4,9 +4,19 @@ Excecoes de dominio e tratador de erro padronizado da API.
 Regra de camada: um `service` levanta `ErroDeDominio`; a `view` nao traduz nada
 a mao - o tratador abaixo converte para a resposta HTTP.
 """
+import logging
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
+from rest_framework.views import set_rollback
+
+logger = logging.getLogger(__name__)
+
+MENSAGEM_ERRO_INTERNO = (
+    'O servidor encontrou um erro inesperado. Tente novamente em instantes; '
+    'se continuar, avise o suporte.'
+)
 
 
 class ErroDeDominio(Exception):
@@ -37,11 +47,35 @@ class ConflitoDeEstado(ErroDeDominio):
 
 
 def tratador_de_erro(exc, context):
-    """Handler do DRF: `ErroDeDominio` vira resposta; o resto segue o padrao."""
+    """
+    Handler do DRF: toda falha sai no contrato de erro da API.
+
+    `ErroDeDominio` vira a resposta do status dele; o que o DRF conhece segue
+    o padrao dele. O resto e erro inesperado: vira 500 com mensagem generica, e
+    o detalhe tecnico vai para o log. Sem isso, com `DEBUG=True` o Django
+    respondia com a pagina HTML de debug - SQL e settings inclusos.
+    """
     if isinstance(exc, ErroDeDominio):
         return Response(
             {'detail': exc.detalhe, 'codigo': exc.codigo},
             status=exc.status_code,
         )
 
-    return drf_exception_handler(exc, context)
+    resposta = drf_exception_handler(exc, context)
+
+    if resposta is not None:
+        return resposta
+
+    requisicao = context.get('request')
+    logger.exception(
+        'Erro inesperado em %s %s',
+        getattr(requisicao, 'method', '?'),
+        getattr(requisicao, 'path', '?'),
+        exc_info=exc,
+    )
+    set_rollback()
+
+    return Response(
+        {'detail': MENSAGEM_ERRO_INTERNO, 'codigo': 'erro_interno'},
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )

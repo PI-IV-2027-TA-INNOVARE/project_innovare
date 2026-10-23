@@ -114,10 +114,10 @@ class Command(BaseCommand):
                 continue
 
             MembroRede.objects.update_or_create(
-                email=usuario.email,
+                usuario=usuario,
                 defaults={
-                    'usuario': usuario,
-                    'nome': usuario.nome,
+                    'nome_sem_conta': None,
+                    'email_sem_conta': None,
                     'papel_rede': (
                         PapelNaRede.SUPERVISOR
                         if usuario.papel == Papel.SUPERVISOR

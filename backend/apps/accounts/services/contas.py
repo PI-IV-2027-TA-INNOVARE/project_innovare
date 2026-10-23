@@ -40,20 +40,17 @@ def _criar_membro_rede_para_supervisor(
     if usuario.papel != Papel.SUPERVISOR:
         return None
 
-    if MembroRede.objects.filter(email=usuario.email).exists():
+    if MembroRede.objects.com_email(usuario.email).exists():
         return None
 
     membro = MembroRede.objects.create(
-        nome=usuario.nome,
-        email=usuario.email,
+        usuario=usuario,
         papel_rede=PapelNaRede.SUPERVISOR,
         organizacao=organizacao,
         experiencia='',
         situacao=SituacaoMembro.ATIVO,
         cadastrado_por=ator,
     )
-    membro.usuario = usuario
-    membro.save(update_fields=['usuario', 'atualizado_em'])
 
     registrar_evento(
         categoria=CategoriaEvento.REDE,
@@ -122,14 +119,13 @@ def garantir_email_livre(
     """
     Recusa o e-mail que ja pertence a outra pessoa - conta ou membro da rede.
 
-    Conta e membro repetem o e-mail porque o membro nasce antes da conta
-    (RN-A04); depois do acesso liberado sao a mesma pessoa. A unicidade de
-    cada tabela sozinha nao basta: o e-mail livre em `usuario` pode estar em
-    uso por outro membro, e o `UPDATE` que propaga a troca quebraria no
-    banco com erro 500 em vez de conflito explicado.
+    O membro sem conta guarda o proprio e-mail, porque nasce antes da conta
+    (RN-A04); com conta, o e-mail e o da conta. A unicidade de cada tabela
+    sozinha nao basta: o e-mail livre em `Usuario` pode estar em uso por um
+    membro ainda sem acesso, e liberar o acesso dele quebraria depois.
     """
     contas = Usuario.objects.filter(email=email)
-    membros = MembroRede.objects.filter(email=email)
+    membros = MembroRede.objects.filter(email_sem_conta=email)
 
     if usuario is not None:
         contas = contas.exclude(pk=usuario.pk)
@@ -147,9 +143,9 @@ class AtualizarContaService:
     """
     Edicao da conta pelo Administrador.
 
-    Se a conta tem membro na rede, nome e e-mail seguem para ele: os dois
-    registros sao a mesma pessoa, e o e-mail e o login. Situacao nao passa
-    por aqui - tem rota propria, que audita a transicao.
+    Se a conta tem membro na rede, nome e e-mail sao os dela: o membro nao
+    guarda copia, entao nao ha o que propagar. Situacao nao passa por aqui -
+    tem rota propria, que audita a transicao.
     """
 
     @transaction.atomic
@@ -169,11 +165,6 @@ class AtualizarContaService:
         for campo, valor in dados.items():
             setattr(usuario, campo, valor)
         usuario.save()
-
-        if membro is not None and {'nome', 'email'} & set(mudou):
-            membro.nome = usuario.nome
-            membro.email = usuario.email
-            membro.save(update_fields=['nome', 'email', 'atualizado_em'])
 
         registrar_evento(
             categoria=CategoriaEvento.CONTA,

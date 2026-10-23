@@ -13,16 +13,23 @@ from apps.copilot.models import Lacuna, PropostaEstruturada, TipoLacuna
 from apps.decisions.models import Decisao, TipoDecisao
 from apps.maturity.models import OrigemRecomendacao, PreAnalise, Recomendacao
 from core.exceptions import ErroDeDominio
-from core.tests.builders import OportunidadeBuilder, UsuarioBuilder
+from core.tests.builders import OportunidadeBuilder, UsuarioBuilder, versao_criterio
 
 
 class ReferenciasCoerentesTests(TestCase):
     def setUp(self):
         self.oportunidade = OportunidadeBuilder().build()
         self.outra = OportunidadeBuilder().build()
-        proposta = PropostaEstruturada.objects.create(oportunidade=self.oportunidade)
+        self.proposta = PropostaEstruturada.objects.create(
+            oportunidade=self.oportunidade
+        )
+        self.outra_proposta = PropostaEstruturada.objects.create(
+            oportunidade=self.outra
+        )
         self.analise = PreAnalise.objects.create(
-            proposta=proposta, versao_criterios='V1', versao_proposta=1
+            proposta=self.proposta,
+            versao_criterio=versao_criterio('V1'),
+            versao_proposta=1,
         )
         self.supervisor = UsuarioBuilder().supervisor().build()
 
@@ -40,9 +47,9 @@ class ReferenciasCoerentesTests(TestCase):
             texto='Detalhar a metodologia.',
         ))
 
-    def test_lacuna_de_outra_oportunidade_e_recusada(self):
+    def test_lacuna_de_outra_proposta_e_recusada(self):
         self.assertDivergente(lambda: Lacuna.objects.create(
-            oportunidade=self.outra,
+            proposta=self.outra_proposta,
             tipo=TipoLacuna.PRE_ANALISE,
             descricao='Falta o mercado-alvo.',
             pre_analise=self.analise,
@@ -68,9 +75,9 @@ class ReferenciasCoerentesTests(TestCase):
         self.assertIsNotNone(recomendacao.pk)
 
     def test_sem_pre_analise_nao_ha_o_que_conferir(self):
-        """A lacuna do Copiloto nasce so com a oportunidade."""
+        """A lacuna do Copiloto nasce so com a proposta."""
         lacuna = Lacuna.objects.create(
-            oportunidade=self.outra,
+            proposta=self.outra_proposta,
             tipo=TipoLacuna.PROPOSTA,
             descricao='A proposta nao descreve a hipotese.',
         )

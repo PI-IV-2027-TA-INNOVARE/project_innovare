@@ -9,6 +9,7 @@ from django.contrib import admin
 from apps.copilot.models import (
     Lacuna,
     MensagemCopiloto,
+    ObjetivoEspecifico,
     PropostaEstruturada,
     SessaoCopiloto,
 )
@@ -17,6 +18,10 @@ from core.admin import AdminSomenteLeitura, InlineSomenteLeitura
 
 class MensagemInline(InlineSomenteLeitura):
     model = MensagemCopiloto
+
+
+class ObjetivoInline(InlineSomenteLeitura):
+    model = ObjetivoEspecifico
 
 
 @admin.register(PropostaEstruturada)
@@ -30,6 +35,13 @@ class PropostaEstruturadaAdmin(AdminSomenteLeitura):
     ]
     list_filter = ['revisada_por_humano']
     search_fields = ['oportunidade__codigo']
+    inlines = [ObjetivoInline]
+
+
+@admin.register(ObjetivoEspecifico)
+class ObjetivoEspecificoAdmin(AdminSomenteLeitura):
+    list_display = ['proposta', 'ordem', 'descricao']
+    search_fields = ['descricao', 'proposta__oportunidade__codigo']
 
 
 @admin.register(SessaoCopiloto)
@@ -50,6 +62,6 @@ class MensagemCopilotoAdmin(AdminSomenteLeitura):
 
 @admin.register(Lacuna)
 class LacunaAdmin(AdminSomenteLeitura):
-    list_display = ['oportunidade', 'tipo', 'severidade', 'resolvida', 'criado_em']
+    list_display = ['proposta', 'tipo', 'severidade', 'resolvida', 'criado_em']
     list_filter = ['tipo', 'severidade', 'resolvida']
-    search_fields = ['descricao', 'oportunidade__codigo']
+    search_fields = ['descricao', 'proposta__oportunidade__codigo']

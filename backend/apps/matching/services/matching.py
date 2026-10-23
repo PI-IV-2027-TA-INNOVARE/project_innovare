@@ -53,10 +53,11 @@ def candidatos_da_rede():
     excluiria justamente o cadastro novo.
     """
     return (
-        MembroRede.objects.exclude(situacao=SituacaoMembro.INATIVO)
+        MembroRede.objects.com_identificacao()
+        .exclude(situacao=SituacaoMembro.INATIVO)
         .select_related('titulacao')
         .prefetch_related('vinculos_competencia__competencia')
-        .order_by('nome')
+        .order_by('nome_atual')
     )
 
 
@@ -64,7 +65,9 @@ def equipe_atual_de(oportunidade: Oportunidade) -> EquipePotencial:
     """A ultima equipe gerada, ou o 404 que a tela usa para oferecer o matching."""
     equipe = (
         oportunidade.equipes_potenciais.select_related('execucao')
-        .prefetch_related('membros__membro__titulacao', 'lacunas')
+        .prefetch_related(
+            'membros__membro__titulacao', 'membros__membro__usuario', 'lacunas'
+        )
         .first()
     )
 

@@ -46,10 +46,12 @@ class Decisao(CoerenteComAPreAnalise, models.Model):
         related_name='decisoes',
         db_column='id_pre_analise',
     )
-    registrada_em = models.DateTimeField(auto_now_add=True, db_column='registrada_em')
+    registrada_em = models.DateTimeField(
+        auto_now_add=True, db_column='data_decisao'
+    )
 
     class Meta:
-        db_table = 'decisao_oportunidade'
+        db_table = 'Decisao_Oportunidade'
         constraints = [
             lista_fixa('decisao_oportunidade', 'tipo_decisao', TipoDecisao),
         ]

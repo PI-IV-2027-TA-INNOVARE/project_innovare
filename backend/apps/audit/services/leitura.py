@@ -66,7 +66,9 @@ def _usuarios(ids):
 def _membros_rede(ids):
     from apps.network.models import MembroRede
 
-    return _por_chave(MembroRede.objects.filter(pk__in=_inteiros(ids)))
+    return _por_chave(
+        MembroRede.objects.filter(pk__in=_inteiros(ids)).select_related('usuario')
+    )
 
 
 def _oportunidades(ids):
@@ -113,7 +115,7 @@ def _membros_equipe(ids):
 
     return _por_chave(
         MembroEquipe.objects.filter(pk__in=_inteiros(ids)).select_related(
-            'membro', 'equipe__oportunidade'
+            'membro__usuario', 'equipe__oportunidade'
         )
     )
 

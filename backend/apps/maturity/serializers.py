@@ -28,6 +28,13 @@ class CriterioPreAnaliseSerializer(serializers.ModelSerializer):
     dimensao_rotulo = serializers.CharField(
         source='get_dimensao_display', read_only=True
     )
+    versao = serializers.CharField(source='versao_criterio.versao', read_only=True)
+    vigente_de = serializers.DateField(
+        source='versao_criterio.vigente_de', read_only=True
+    )
+    vigente_ate = serializers.DateField(
+        source='versao_criterio.vigente_ate', read_only=True
+    )
 
     class Meta:
         model = CriterioPreAnalise
@@ -124,6 +131,9 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
     dimensoes = PreAnaliseDimensaoSerializer(many=True, read_only=True)
     lacunas = LacunaSerializer(many=True, read_only=True)
     recomendacoes = RecomendacaoSerializer(many=True, read_only=True)
+    versao_criterios = serializers.CharField(
+        source='versao_criterio.versao', read_only=True
+    )
     status_rotulo = serializers.CharField(source='get_status_display', read_only=True)
     ai_run_id = serializers.UUIDField(
         source='execucao_ia_id', read_only=True, default=None

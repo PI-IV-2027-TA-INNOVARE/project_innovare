@@ -5,6 +5,7 @@ Nenhum toca banco remoto, SMTP real ou provedor de IA (AGENTS.md 0.1).
 """
 from django.core import mail
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
@@ -77,7 +78,7 @@ class CadastroDeMembroTests(RedeBaseTests):
         self.assertEqual(resposta.data['situacao'], SituacaoMembro.SEM_ACESSO)
         self.assertFalse(resposta.data['tem_acesso'])
 
-        membro = MembroRede.objects.get(email='helena.torres@ac2microbiologia.com.br')
+        membro = MembroRede.objects.get(email_sem_conta='helena.torres@ac2microbiologia.com.br')
         self.assertIsNone(membro.usuario_id)
         self.assertEqual(membro.cadastrado_por, self.supervisor)
 
@@ -89,7 +90,7 @@ class CadastroDeMembroTests(RedeBaseTests):
         self.assertEqual(resposta.data['tecnicas'], ['PCR em tempo real'])
         self.assertEqual(resposta.data['linhas'], ['Bioinsumos agrícolas'])
 
-        membro = MembroRede.objects.get(email='helena.torres@ac2microbiologia.com.br')
+        membro = MembroRede.objects.get(email_sem_conta='helena.torres@ac2microbiologia.com.br')
         tipos = {
             v.competencia.tipo for v in membro.vinculos_competencia.all()
         }
@@ -221,8 +222,6 @@ class PerfilProprioTests(RedeBaseTests):
         super().setUp()
         self.membro = MembroRede.objects.create(
             usuario=self.pesquisador,
-            nome='Maria Ferreira',
-            email=self.pesquisador.email,
             papel_rede=PapelNaRede.PESQUISADOR,
             situacao=SituacaoMembro.ATIVO,
         )
@@ -310,7 +309,9 @@ class VocabularioDePapelNaRedeTests(TestCase):
         )
 
     def test_papel_fora_do_vocabulario_nao_passa_na_validacao_do_modelo(self):
-        membro = MembroRede(nome='Fora do vocabulario', papel_rede='colaborador')
+        membro = MembroRede(
+            nome_sem_conta='Fora do vocabulario', papel_rede='colaborador'
+        )
 
         with self.assertRaises(ValidationError) as erro:
             membro.full_clean()
@@ -337,8 +338,8 @@ class RespostaDoSalvamentoDoCadastroTests(RedeBaseTests):
         super().setUp()
         self.como(self.supervisor)
         self.membro = MembroRede.objects.create(
-            nome='Helena Torres',
-            email='helena.torres@ac2microbiologia.com.br',
+            nome_sem_conta='Helena Torres',
+            email_sem_conta='helena.torres@ac2microbiologia.com.br',
             papel_rede=PapelNaRede.PESQUISADOR,
             situacao=SituacaoMembro.SEM_ACESSO,
         )
@@ -381,9 +382,9 @@ class RespostaDoSalvamentoDoCadastroTests(RedeBaseTests):
 
 class IdentidadeDoMembroComAcessoTests(RedeBaseTests):
     """
-    `membro_rede` repete nome e e-mail da conta porque o membro nasce antes
-    dela (RN-A04). Depois de liberado o acesso, os dois sao a mesma pessoa: o
-    e-mail do membro e o login da conta nao podem divergir.
+    O membro nasce antes da conta (RN-A04) e, ate la, guarda o proprio nome e
+    e-mail. Liberado o acesso, nome e e-mail passam a morar so na conta - o
+    e-mail e o login - e o membro deixa de ter copia que possa divergir (3FN).
     """
 
     def setUp(self):
@@ -429,6 +430,27 @@ class IdentidadeDoMembroComAcessoTests(RedeBaseTests):
         self.assertEqual(self.conta.email, 'helena.torres@ac2microbiologia.com.br')
         self.assertEqual(membro.email, 'helena.torres@ac2microbiologia.com.br')
 
+    def test_com_acesso_o_membro_nao_guarda_copia(self):
+        membro = MembroRede.objects.get(id_membro=self.membro_id)
+
+        self.assertIsNone(membro.nome_sem_conta)
+        self.assertIsNone(membro.email_sem_conta)
+        self.assertEqual(membro.nome, self.conta.nome)
+        self.assertEqual(membro.email, self.conta.email)
+
+    def test_banco_recusa_copia_ao_lado_da_conta(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MembroRede.objects.filter(id_membro=self.membro_id).update(
+                nome_sem_conta='Copia que divergiria'
+            )
+
+    def test_banco_recusa_membro_sem_conta_e_sem_nome(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MembroRede.objects.create(
+                email_sem_conta='sem.nome@ac2microbiologia.com.br',
+                papel_rede=PapelNaRede.PESQUISADOR,
+            )
+
     def test_membro_sem_acesso_edita_sem_procurar_conta(self):
         outro = self.cadastrar(nome='Ana Lima', email='ana.lima@ac2microbiologia.com.br')
 
@@ -463,8 +485,6 @@ class FormacaoAcademicaTests(RedeBaseTests):
         super().setUp()
         self.membro = MembroRede.objects.create(
             usuario=self.pesquisador,
-            nome='Maria Ferreira',
-            email=self.pesquisador.email,
             papel_rede=PapelNaRede.PESQUISADOR,
             situacao=SituacaoMembro.ATIVO,
         )

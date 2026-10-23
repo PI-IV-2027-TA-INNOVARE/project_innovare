@@ -41,7 +41,7 @@ class SemearIaDevTests(TestCase):
     def test_monta_uma_rede_variada_para_o_ranking_ter_o_que_ordenar(self):
         semear()
 
-        rede = MembroRede.objects.filter(email__endswith=DOMINIO_FICTICIO)
+        rede = MembroRede.objects.filter(email_sem_conta__endswith=DOMINIO_FICTICIO)
 
         self.assertGreaterEqual(rede.count(), 15)
         self.assertTrue(rede.filter(situacao=SituacaoMembro.INATIVO).exists())

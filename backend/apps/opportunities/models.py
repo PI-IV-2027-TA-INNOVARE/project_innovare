@@ -56,7 +56,7 @@ class SequenciaCodigo(models.Model):
     ultimo_numero = models.PositiveIntegerField(default=0, db_column='ultimo_numero')
 
     class Meta:
-        db_table = 'sequencia_codigo'
+        db_table = 'Sequencia_Codigo'
         verbose_name = 'sequencia de codigo'
         verbose_name_plural = 'sequencias de codigo'
 
@@ -107,18 +107,18 @@ class Oportunidade(models.Model):
         max_length=20,
         choices=SituacaoOportunidade.choices,
         default=SituacaoOportunidade.ENTRADA,
-        db_column='situacao',
+        db_column='status',
     )
-    criada_em = models.DateTimeField(auto_now_add=True, db_column='criada_em')
+    criada_em = models.DateTimeField(auto_now_add=True, db_column='data_criacao')
     atualizada_em = models.DateTimeField(auto_now=True, db_column='atualizada_em')
 
     class Meta:
-        db_table = 'oportunidade'
+        db_table = 'Oportunidade'
         verbose_name_plural = 'oportunidades'
         ordering = ['-atualizada_em']
         constraints = [
             lista_fixa('oportunidade', 'origem', OrigemOportunidade),
-            lista_fixa('oportunidade', 'situacao', SituacaoOportunidade),
+            lista_fixa('oportunidade', 'situacao', SituacaoOportunidade, coluna='status'),
             models.CheckConstraint(
                 condition=(
                     models.Q(origem='interna', demandante__isnull=True)
@@ -162,7 +162,7 @@ class AnexoOportunidade(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'anexo_oportunidade'
+        db_table = 'Anexo_Oportunidade'
         verbose_name = 'anexo da oportunidade'
         verbose_name_plural = 'anexos da oportunidade'
 

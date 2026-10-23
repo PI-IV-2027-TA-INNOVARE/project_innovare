@@ -239,7 +239,7 @@ class OrcamentoDaSincronizacaoDeCompetenciasTests(TestCase):
         )
 
     def test_competencia_ja_existente_e_reaproveitada_e_nao_duplicada(self):
-        """`uq_competencia_nome_tipo` recusaria a segunda - o lote nao pode tentar."""
+        """`uq_competencia_nome_categoria` recusaria a segunda - o lote nao pode tentar."""
         self.client.patch(
             self.url, {'competencias': ['Microbiologia']}, format='json'
         )
@@ -356,7 +356,7 @@ class LeituraUnicaDoRegistroTests(TestCase):
             consulta['sql']
             for consulta in capturadas.captured_queries
             if consulta['sql'].startswith('SELECT')
-            and 'FROM "oportunidade"' in consulta['sql']
+            and 'FROM "Oportunidade"' in consulta['sql']
         ]
 
     def test_editar_o_contexto_le_a_oportunidade_uma_vez(self):

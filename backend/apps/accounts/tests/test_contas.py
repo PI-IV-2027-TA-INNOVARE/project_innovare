@@ -95,7 +95,7 @@ class ProvisionamentoTests(BaseContas):
             format='json',
         )
 
-        membro = MembroRede.objects.get(email='rafael.antunes@ac2microbiologia.com.br')
+        membro = MembroRede.objects.get(usuario__email='rafael.antunes@ac2microbiologia.com.br')
         self.assertEqual(membro.disponibilidade, Disponibilidade.PARCIAL)
         self.assertEqual(membro.situacao, SituacaoMembro.ATIVO)
 

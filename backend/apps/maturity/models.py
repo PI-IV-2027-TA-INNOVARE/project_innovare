@@ -39,6 +39,45 @@ class OrigemRecomendacao(models.TextChoices):
     MANUAL = 'manual', 'Manual'
 
 
+class VersaoCriterio(models.Model):
+    """
+    Uma versao dos criterios da Base de Conhecimento PIPE (`V2`).
+
+    A vigencia e da versao, nao de cada criterio: guardada nas 23 linhas de
+    uma versao, ela se repetia e podia divergir entre elas (3FN). E a
+    pre-analise aponta para ca por chave, e nao pelo rotulo em texto, para que
+    nao exista analise citando versao que nunca foi cadastrada.
+    """
+
+    id_versao_criterio = models.BigAutoField(
+        primary_key=True, db_column='id_versao_criterio'
+    )
+    versao = models.CharField(max_length=12, unique=True, db_column='versao')
+    baseline = models.CharField(
+        max_length=60, blank=True, default='', db_column='baseline'
+    )
+    vigente_de = models.DateField(db_column='vigente_de')
+    vigente_ate = models.DateField(null=True, blank=True, db_column='vigente_ate')
+
+    class Meta:
+        db_table = 'Versao_Criterio_Pipe'
+        verbose_name = 'versao dos criterios de pre-analise'
+        verbose_name_plural = 'versoes dos criterios de pre-analise'
+        ordering = ['-vigente_de', 'versao']
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(vigente_ate__isnull=True)
+                    | models.Q(vigente_ate__gte=models.F('vigente_de'))
+                ),
+                name='ck_versao_criterio_pipe_vigencia',
+            ),
+        ]
+
+    def __str__(self):
+        return self.versao
+
+
 class CriterioPreAnalise(models.Model):
     """
     Criterios *versionados*.
@@ -48,7 +87,12 @@ class CriterioPreAnalise(models.Model):
     """
 
     id_criterio = models.BigAutoField(primary_key=True, db_column='id_criterio')
-    versao = models.CharField(max_length=12, db_column='versao')
+    versao_criterio = models.ForeignKey(
+        VersaoCriterio,
+        on_delete=models.PROTECT,
+        related_name='criterios',
+        db_column='id_versao_criterio',
+    )
     dimensao = models.CharField(
         max_length=24, choices=DimensaoMaturidade.choices, db_column='dimensao'
     )
@@ -57,20 +101,23 @@ class CriterioPreAnalise(models.Model):
     peso = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True, db_column='peso'
     )
-    vigente_de = models.DateField(db_column='vigente_de')
-    vigente_ate = models.DateField(null=True, blank=True, db_column='vigente_ate')
 
     class Meta:
-        db_table = 'criterio_referencia_pipe'
+        db_table = 'Criterio_Referencia_Pipe'
         verbose_name = 'criterio de pre-analise'
         verbose_name_plural = 'criterios de pre-analise'
-        ordering = ['versao', 'dimensao', 'codigo']
+        ordering = ['versao_criterio', 'dimensao', 'codigo']
         constraints = [
             lista_fixa('criterio_referencia_pipe', 'dimensao', DimensaoMaturidade),
             models.UniqueConstraint(
-                fields=['versao', 'codigo'], name='uq_criterio_versao_codigo'
+                fields=['versao_criterio', 'codigo'],
+                name='uq_criterio_versao_codigo',
             ),
         ]
+
+    @property
+    def versao(self):
+        return self.versao_criterio.versao
 
 
 class PreAnalise(models.Model):
@@ -90,10 +137,17 @@ class PreAnalise(models.Model):
         related_name='pre_analises',
         db_column='id_proposta',
     )
-    versao_criterios = models.CharField(max_length=12, db_column='versao_criterios')
+    versao_criterio = models.ForeignKey(
+        VersaoCriterio,
+        on_delete=models.PROTECT,
+        related_name='pre_analises',
+        db_column='id_versao_criterio',
+    )
     versao_proposta = models.PositiveIntegerField(db_column='versao_proposta')
     sintese = models.TextField(blank=True, default='', db_column='sintese')
-    executada_em = models.DateTimeField(auto_now_add=True, db_column='executada_em')
+    executada_em = models.DateTimeField(
+        auto_now_add=True, db_column='data_execucao'
+    )
     executada_por = models.CharField(
         max_length=160, default='__sistema__', db_column='executada_por'
     )
@@ -114,13 +168,18 @@ class PreAnalise(models.Model):
     erro = models.TextField(blank=True, default='', db_column='erro')
 
     class Meta:
-        db_table = 'pre_analise_maturidade'
+        db_table = 'Pre_Analise_Maturidade'
         constraints = [
             lista_fixa('pre_analise_maturidade', 'status', StatusExecucao),
         ]
         verbose_name = 'pre-analise'
         verbose_name_plural = 'pre-analises'
         ordering = ['-executada_em']
+
+    @property
+    def versao_criterios(self):
+        """O rotulo (`V2`) que o relatorio e a API mostram."""
+        return self.versao_criterio.versao
 
 
 class PreAnaliseDimensao(models.Model):
@@ -134,23 +193,31 @@ class PreAnaliseDimensao(models.Model):
         db_column='id_pre_analise',
     )
     dimensao = models.CharField(
-        max_length=24, choices=DimensaoMaturidade.choices, db_column='dimensao'
+        max_length=24,
+        choices=DimensaoMaturidade.choices,
+        db_column='nome_dimensao',
     )
-    avaliacao = models.TextField(db_column='avaliacao')
+    avaliacao = models.TextField(db_column='observacoes')
     nivel = models.CharField(
-        max_length=20, choices=NivelDimensao.choices, db_column='nivel'
+        max_length=20, choices=NivelDimensao.choices, db_column='nivel_maturidade'
     )
     evidencias = models.JSONField(default=list, db_column='evidencias')
     ordem = models.PositiveSmallIntegerField(default=0, db_column='ordem')
 
     class Meta:
-        db_table = 'dimensao_analise'
+        db_table = 'Dimensao_Analise'
         verbose_name = 'dimensao da pre-analise'
         verbose_name_plural = 'dimensoes da pre-analise'
         ordering = ['pre_analise', 'ordem']
         constraints = [
-            lista_fixa('dimensao_analise', 'dimensao', DimensaoMaturidade),
-            lista_fixa('dimensao_analise', 'nivel', NivelDimensao),
+            lista_fixa(
+                'dimensao_analise', 'dimensao', DimensaoMaturidade,
+                coluna='nome_dimensao',
+            ),
+            lista_fixa(
+                'dimensao_analise', 'nivel', NivelDimensao,
+                coluna='nivel_maturidade',
+            ),
             models.UniqueConstraint(
                 fields=['pre_analise', 'dimensao'],
                 name='uq_pre_analise_dimensao',
@@ -189,7 +256,7 @@ class Recomendacao(CoerenteComAPreAnalise, models.Model):
         related_name='recomendacoes',
         db_column='id_lacuna',
     )
-    texto = models.TextField(db_column='texto')
+    texto = models.TextField(db_column='descricao')
     acatada = models.BooleanField(default=False, db_column='acatada')
     acatada_em = models.DateTimeField(null=True, blank=True, db_column='acatada_em')
     execucao_ia = models.ForeignKey(
@@ -203,7 +270,7 @@ class Recomendacao(CoerenteComAPreAnalise, models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'recomendacao_adequacao'
+        db_table = 'Recomendacao_Adequacao'
         constraints = [
             lista_fixa('recomendacao_adequacao', 'origem', OrigemRecomendacao),
         ]

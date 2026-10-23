@@ -54,7 +54,7 @@ def sincronizar_competencias(
     um RTT, e salvar um perfil levava segundos. O custo agora nao depende da
     quantidade de nomes - ver `core/tests/test_orcamento_de_queries.py`.
 
-    O `ignore_conflicts` cobre a corrida com `uq_competencia_nome_tipo`: dois
+    O `ignore_conflicts` cobre a corrida com `uq_competencia_nome_categoria`: dois
     Supervisores digitando o mesmo nome novo ao mesmo tempo. Ele nao devolve as
     PKs das linhas que ja existiam, e por isso a releitura vem depois dele, e
     nao antes.
@@ -190,16 +190,20 @@ class CadastrarMembroService:
         ator: Usuario,
         formacoes: list[dict[str, Any]] | None = None,
     ) -> MembroRede:
-        email = dados['email'].strip().lower()
+        dados = dict(dados)
+        nome = dados.pop('nome')
+        email = dados.pop('email').strip().lower()
 
-        if MembroRede.objects.filter(email=email).exists():
+        if MembroRede.objects.com_email(email).exists():
             raise ConflitoDeEstado(
                 'Ja existe alguem na rede com este e-mail.',
                 codigo='email_duplicado',
             )
 
         membro = MembroRede.objects.create(
-            **{**dados, 'email': email},
+            **dados,
+            nome_sem_conta=nome,
+            email_sem_conta=email,
             situacao=SituacaoMembro.SEM_ACESSO,
             cadastrado_por=ator if isinstance(ator, Usuario) else None,
         )
@@ -222,8 +226,8 @@ class AtualizarMembroService:
     """
     Edicao do cadastro pelo Supervisor (PB16).
 
-    Com acesso liberado, nome e e-mail seguem para a conta: o e-mail do membro
-    e o login dela, e os dois nao podem divergir.
+    Nome e e-mail sao gravados onde moram: no membro, enquanto ele nao tem
+    conta; na conta, depois do acesso liberado - o e-mail e o login dela.
     """
 
     @transaction.atomic
@@ -238,21 +242,35 @@ class AtualizarMembroService:
     ) -> MembroRede:
         antes = {campo: getattr(membro, campo) for campo in dados}
         conta = membro.usuario
+        identificacao = {
+            campo: dados[campo] for campo in ('nome', 'email') if campo in dados
+        }
 
-        if conta is not None and 'email' in dados and dados['email'] != membro.email:
-            garantir_email_livre(dados['email'], usuario=conta, membro=membro)
+        if 'email' in identificacao and identificacao['email'] != membro.email:
+            garantir_email_livre(identificacao['email'], usuario=conta, membro=membro)
+
+        if conta is not None:
+            mudou_na_conta = [
+                campo for campo, valor in identificacao.items()
+                if getattr(conta, campo) != valor
+            ]
+
+            for campo in mudou_na_conta:
+                setattr(conta, campo, identificacao[campo])
+
+            if mudou_na_conta:
+                conta.save(update_fields=[*mudou_na_conta, 'atualizado_em'])
+        else:
+            for campo, valor in identificacao.items():
+                setattr(membro, f'{campo}_sem_conta', valor)
 
         for campo, valor in dados.items():
-            setattr(membro, campo, valor)
+            if campo not in identificacao:
+                setattr(membro, campo, valor)
 
         membro.save()
         sincronizar_competencias(membro, listas)
         sincronizar_formacoes(membro, formacoes)
-
-        if conta is not None and (conta.nome, conta.email) != (membro.nome, membro.email):
-            conta.nome = membro.nome
-            conta.email = membro.email
-            conta.save(update_fields=['nome', 'email', 'atualizado_em'])
 
         mudou = {
             campo: {'de': str(antes[campo]), 'para': str(getattr(membro, campo))}
@@ -316,9 +334,14 @@ class LiberarAcessoMembroService:
         usuario.situacao = SituacaoConta.ATIVO
         usuario.save(update_fields=['situacao'])
 
-        membro.usuario = usuario
+        membro.ligar_a_conta(usuario)
         membro.situacao = SituacaoMembro.ATIVO
-        membro.save(update_fields=['usuario', 'situacao', 'atualizado_em'])
+        membro.save(
+            update_fields=[
+                'usuario', 'nome_sem_conta', 'email_sem_conta', 'situacao',
+                'atualizado_em',
+            ]
+        )
 
         token = TokenAcesso.emitir(usuario, FinalidadeToken.CONVITE)
         self._email.convite_acesso(usuario, token)

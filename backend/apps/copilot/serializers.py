@@ -22,6 +22,9 @@ class PropostaEstruturadaSerializer(serializers.ModelSerializer):
     revisor_nome = serializers.CharField(
         source='revisor.nome', read_only=True, default=None
     )
+    objetivos_especificos = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False
+    )
 
     class Meta:
         model = PropostaEstruturada
@@ -51,14 +54,14 @@ class PropostaEstruturadaSerializer(serializers.ModelSerializer):
             'atualizado_em',
         ]
 
-    def validate_objetivos_especificos(self, value):
-        if not isinstance(value, list):
-            raise serializers.ValidationError('Deve ser uma lista.')
-        return value
 
 
 class PropostaEstruturadaWriteSerializer(serializers.ModelSerializer):
     """Escrita dos oito elementos — Supervisor apenas."""
+
+    objetivos_especificos = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False
+    )
 
     class Meta:
         model = PropostaEstruturada
@@ -73,10 +76,6 @@ class PropostaEstruturadaWriteSerializer(serializers.ModelSerializer):
             'infraestrutura_recursos',
         ]
 
-    def validate_objetivos_especificos(self, value):
-        if not isinstance(value, list):
-            raise serializers.ValidationError('Deve ser uma lista.')
-        return value
 
 
 class SessaoCopilotoSerializer(serializers.ModelSerializer):

@@ -26,6 +26,7 @@ from apps.copilot.models import (
     AutorMensagem,
     EstadoSessao,
     Lacuna,
+    ObjetivoEspecifico,
     PropostaEstruturada,
     Severidade,
     TipoLacuna,
@@ -358,3 +359,58 @@ class ChamadaForaDaTransacaoTests(CopilotoBaseTests):
         self.assertEqual(
             proposta.problema_pesquisa, PROPOSTA_PADRAO['problema_pesquisa']
         )
+
+
+class ObjetivosEspecificosTests(TestCase):
+    """
+    Caso 6: um objetivo por linha em `Objetivo_Especifico`, na ordem da lista.
+
+    A proposta continua lendo e gravando a lista - quem usa
+    `objetivos_especificos` nao precisa saber que ela virou tabela.
+    """
+
+    def setUp(self):
+        self.proposta = PropostaEstruturada.objects.create(
+            oportunidade=OportunidadeBuilder().build()
+        )
+
+    def linhas(self):
+        return list(
+            ObjetivoEspecifico.objects.filter(proposta=self.proposta).values_list(
+                'ordem', 'descricao'
+            )
+        )
+
+    def test_a_lista_vira_uma_linha_por_objetivo_na_ordem(self):
+        self.proposta.objetivos_especificos = ['Isolar cepas', 'Validar o metodo']
+        self.proposta.save()
+
+        self.assertEqual(
+            self.linhas(), [(1, 'Isolar cepas'), (2, 'Validar o metodo')]
+        )
+
+    def test_regravar_substitui_a_lista_inteira(self):
+        self.proposta.objetivos_especificos = ['Isolar cepas', 'Validar o metodo']
+        self.proposta.save()
+        self.proposta.objetivos_especificos = ['Escalonar o processo']
+        self.proposta.save()
+
+        recarregada = PropostaEstruturada.objects.get(pk=self.proposta.pk)
+
+        self.assertEqual(recarregada.objetivos_especificos, ['Escalonar o processo'])
+        self.assertEqual(self.linhas(), [(1, 'Escalonar o processo')])
+
+    def test_gravar_outro_campo_nao_mexe_nos_objetivos(self):
+        self.proposta.objetivos_especificos = ['Isolar cepas']
+        self.proposta.save()
+
+        recarregada = PropostaEstruturada.objects.get(pk=self.proposta.pk)
+        recarregada.metodologia = 'Ensaios em bancada.'
+        recarregada.save()
+
+        self.assertEqual(self.linhas(), [(1, 'Isolar cepas')])
+
+    def test_proposta_ainda_nao_gravada_nao_tem_objetivos(self):
+        transitoria = PropostaEstruturada(oportunidade=OportunidadeBuilder().build())
+
+        self.assertEqual(transitoria.objetivos_especificos, [])

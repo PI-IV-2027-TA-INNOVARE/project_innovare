@@ -30,6 +30,7 @@ from apps.maturity.models import (
     DimensaoMaturidade,
     PreAnalise,
     Recomendacao,
+    VersaoCriterio,
 )
 from apps.maturity.serializers import AVISO_ORIENTATIVO
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
@@ -134,12 +135,30 @@ class CriteriosTests(PreAnaliseBaseTests):
 
         self.assertEqual(evento.detalhe['baseline_id'], 'PIPE_TESTE_V9')
 
+    def test_a_versao_guarda_baseline_e_vigencia_uma_vez_so(self):
+        """
+        Desvio 1 da 3FN: a vigencia e da versao, e nao se repete em cada
+        criterio dela.
+        """
+        self.importar_criterios()
+
+        versao = VersaoCriterio.objects.get()
+
+        self.assertEqual(versao.versao, 'V9')
+        self.assertEqual(versao.baseline, 'PIPE_TESTE_V9')
+        self.assertIsNone(versao.vigente_ate)
+        self.assertEqual(
+            set(CriterioPreAnalise.objects.values_list('versao_criterio', flat=True)),
+            {versao.pk},
+        )
+
     def test_segunda_importacao_atualiza_em_vez_de_duplicar(self):
         self.importar_criterios()
         resultado = self.importar_criterios()
 
         self.assertEqual(resultado['atualizados'], 2)
         self.assertEqual(CriterioPreAnalise.objects.count(), 2)
+        self.assertEqual(VersaoCriterio.objects.count(), 1)
 
     def test_base_ausente_e_conflito_explicado(self):
         with override_settings(
@@ -208,6 +227,7 @@ class ExecucaoDaPreAnaliseTests(PreAnaliseBaseTests):
         analise = self.analisar()
 
         self.assertEqual(analise.versao_criterios, 'V9')
+        self.assertEqual(analise.versao_criterio, VersaoCriterio.objects.get(versao='V9'))
         self.assertEqual(analise.versao_proposta, self.proposta.versao)
 
     def test_lacuna_da_pre_analise_nasce_sem_severidade(self):

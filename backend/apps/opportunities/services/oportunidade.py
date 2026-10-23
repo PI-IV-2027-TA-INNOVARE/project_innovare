@@ -64,7 +64,7 @@ def escopo_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     `incluido` (RN-A06).
     """
     base = Oportunidade.objects.select_related(
-        'demandante', 'responsavel', 'criado_por'
+        'demandante', 'responsavel__usuario', 'criado_por'
     )
 
     if usuario.papel == Papel.SUPERVISOR:

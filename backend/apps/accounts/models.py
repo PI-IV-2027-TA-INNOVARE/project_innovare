@@ -70,6 +70,22 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
     last_login = models.DateTimeField(
         null=True, blank=True, db_column='ultima_entrada_admin'
     )
+    groups = models.ManyToManyField(
+        'auth.Group',
+        blank=True,
+        help_text='Grupos do admin do Django; a conta recebe as permissoes de cada um.',
+        related_name='user_set',
+        related_query_name='user',
+        db_table='Usuario_Grupo',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        blank=True,
+        help_text='Permissoes do admin do Django atribuidas direto a conta.',
+        related_name='user_set',
+        related_query_name='user',
+        db_table='Usuario_Permissao',
+    )
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['nome', 'papel']
@@ -77,7 +93,7 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
     objects = UsuarioManager()
 
     class Meta:
-        db_table = 'usuario'
+        db_table = 'Usuario'
         constraints = [
             lista_fixa('usuario', 'papel', Papel),
             lista_fixa('usuario', 'situacao', SituacaoConta),
@@ -142,7 +158,7 @@ class DemandanteExterno(models.Model):
     )
 
     class Meta:
-        db_table = 'demandante_externo'
+        db_table = 'Demandante_Externo'
         verbose_name = 'demandante externo'
         verbose_name_plural = 'demandantes externos'
 
@@ -184,7 +200,7 @@ class TokenAcesso(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'token_acesso'
+        db_table = 'Token_Acesso'
         constraints = [
             lista_fixa('token_acesso', 'finalidade', FinalidadeToken),
         ]

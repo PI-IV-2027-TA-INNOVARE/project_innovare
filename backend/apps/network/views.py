@@ -61,10 +61,10 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = (
-            MembroRede.objects
-            .select_related('titulacao', 'organizacao', 'usuario')
+            MembroRede.objects.com_identificacao()
+            .select_related('titulacao', 'organizacao')
             .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
-            .order_by('nome')
+            .order_by('nome_atual')
         )
 
         papel = self.request.query_params.get('papel_rede')
@@ -82,8 +82,8 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
         busca = self.request.query_params.get('busca')
         if busca:
             queryset = queryset.filter(
-                Q(nome__icontains=busca)
-                | Q(email__icontains=busca)
+                Q(nome_atual__icontains=busca)
+                | Q(email_atual__icontains=busca)
                 | Q(vinculos_competencia__competencia__nome__icontains=busca)
             ).distinct()
 
@@ -147,7 +147,7 @@ class PerfilProprioView(views.APIView):
     def _membro(self, request):
         membro = (
             MembroRede.objects
-            .select_related('titulacao', 'organizacao')
+            .select_related('usuario', 'titulacao', 'organizacao')
             .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
             .filter(usuario=request.user)
             .first()

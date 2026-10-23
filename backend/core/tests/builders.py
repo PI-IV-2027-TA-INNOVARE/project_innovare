@@ -16,11 +16,13 @@ contra o banco de teste.
 """
 from __future__ import annotations
 
+from datetime import date
 from itertools import count
 
 from django.utils import timezone
 
 from apps.accounts.models import Papel, SituacaoConta, Usuario
+from apps.maturity.models import VersaoCriterio
 from apps.network.models import (
     Competencia,
     DeclaradoPor,
@@ -63,6 +65,14 @@ def titulacao(codigo: str = 'doutorado') -> Titulacao:
     rotulo, nivel = TITULACOES_PADRAO.get(codigo, (codigo.capitalize(), 1))
     registro, _ = Titulacao.objects.get_or_create(
         codigo=codigo, defaults={'rotulo': rotulo, 'nivel': nivel}
+    )
+    return registro
+
+
+def versao_criterio(rotulo: str = 'V1') -> VersaoCriterio:
+    """A versao dos criterios PIPE que a pre-analise cita, criada sob demanda."""
+    registro, _ = VersaoCriterio.objects.get_or_create(
+        versao=rotulo, defaults={'vigente_de': date(2026, 1, 1)}
     )
     return registro
 
@@ -295,8 +305,8 @@ class MembroRedeBuilder:
             usuario = conta.build()
 
         membro = MembroRede.objects.create(
-            nome=self._nome,
-            email=email,
+            nome_sem_conta=None if usuario else self._nome,
+            email_sem_conta=None if usuario else email,
             papel_rede=self._papel_rede,
             titulacao=self._titulacao,
             organizacao=self._organizacao,

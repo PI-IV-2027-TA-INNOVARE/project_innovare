@@ -59,9 +59,9 @@ class BaseConhecimentoPIPE:
         """
         A versao ATIVA da secao `versioning`.
 
-        `CriterioPreAnalise.versao` tem 12 caracteres e o `baseline_id` tem 21:
-        o rotulo curto (`V2`) e o que cabe na coluna, e o `baseline_id` completo
-        fica no evento de importacao.
+        `VersaoCriterio.versao` tem 12 caracteres e o `baseline_id` tem 21: o
+        rotulo curto (`V2`) e o que identifica a versao, e o `baseline_id`
+        completo fica ao lado, em `VersaoCriterio.baseline`.
         """
         for registro in self._dados.get('versioning', []):
             if str(registro.get('status', '')).upper().startswith('ATIVA'):

@@ -194,7 +194,7 @@ def indicadores_de_maturidade(usuario: Usuario) -> dict[str, Any]:
     ).aggregate(**_apelidos('dim', 'dimensao', DimensaoMaturidade.choices))
 
     lacunas = Lacuna.objects.filter(
-        oportunidade__in=oportunidades, tipo=TipoLacuna.PRE_ANALISE
+        proposta__oportunidade__in=oportunidades, tipo=TipoLacuna.PRE_ANALISE
     ).aggregate(
         total=Count('pk'),
         abertas=Count('pk', filter=Q(resolvida=False)),
