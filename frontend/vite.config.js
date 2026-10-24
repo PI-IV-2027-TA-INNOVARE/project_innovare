@@ -12,7 +12,6 @@ export default defineConfig({
     css: false,
 
     env: {
-      VITE_AUTH_MOCK: 'false',
       VITE_API_BASE_URL: 'http://localhost/api',
     },
 

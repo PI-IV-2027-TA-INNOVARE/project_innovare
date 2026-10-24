@@ -6,6 +6,7 @@ import {
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { useAuth } from '../../../context/AuthContext'
+import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { listOportunidades } from '../../../services/pdConnectApi'
@@ -67,6 +68,8 @@ export default function ProblemasPage() {
   useEffect(() => {
     carregar()
   }, [carregar])
+
+  useAtualizarAoFocar(carregar)
 
   const indicadores = useMemo(() => resumoDoDemandante(meus), [meus])
 

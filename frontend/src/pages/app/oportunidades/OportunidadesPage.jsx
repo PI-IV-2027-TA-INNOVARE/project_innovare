@@ -6,6 +6,7 @@ import {
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { useAuth } from '../../../context/AuthContext'
+import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
@@ -27,6 +28,13 @@ const COLUNAS = [
   { id: 'equipe', label: 'Equipe potencial', ordenavel: false },
   { id: 'atualizadaEm', label: 'Atualizada', ordenavel: true },
 ]
+
+function diaLocal(instante) {
+  const data = new Date(instante)
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const dia = String(data.getDate()).padStart(2, '0')
+  return `${data.getFullYear()}-${mes}-${dia}`
+}
 
 function comparar(a, b, campo) {
   if (campo === 'atualizadaEm') return a.atualizadaEm - b.atualizadaEm
@@ -57,6 +65,9 @@ export default function OportunidadesPage() {
     () => parametros.get('situacao') || 'todas'
   )
   const [origemFiltro, setOrigemFiltro] = useState('todas')
+  const [cadastradaDe, setCadastradaDe] = useState('')
+  const [cadastradaAte, setCadastradaAte] = useState('')
+  const [soMinhaAtuacao, setSoMinhaAtuacao] = useState(false)
   const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
 
   const acompanhaFila = ehSupervisor || ehPesquisador
@@ -86,6 +97,8 @@ export default function OportunidadesPage() {
     carregar()
   }, [carregar])
 
+  useAtualizarAoFocar(carregar, { ativo: acompanhaFila })
+
   const indicadores = useMemo(() => resumoPorSituacao(oportunidades), [oportunidades])
 
   const filtradas = useMemo(() => {
@@ -99,17 +112,41 @@ export default function OportunidadesPage() {
         item.titulo.toLowerCase().includes(termo) ||
         item.id.toLowerCase().includes(termo) ||
         item.demandante.toLowerCase().includes(termo)
+      const dia = diaLocal(item.criadaEm)
+      const dataOk =
+        (!cadastradaDe || dia >= cadastradaDe) && (!cadastradaAte || dia <= cadastradaAte)
 
-      return situacaoOk && origemOk && buscaOk
+      const atuacaoOk = !soMinhaAtuacao || item.aguardaMinhaAtuacao
+
+      return situacaoOk && origemOk && buscaOk && dataOk && atuacaoOk
     })
-  }, [busca, oportunidades, origemFiltro, situacaoFiltro])
+  }, [
+    busca,
+    cadastradaAte,
+    cadastradaDe,
+    oportunidades,
+    origemFiltro,
+    situacaoFiltro,
+    soMinhaAtuacao,
+  ])
+
+  const aguardandoMinhaAtuacao = useMemo(
+    () => oportunidades.filter((item) => item.aguardaMinhaAtuacao).length,
+    [oportunidades]
+  )
 
   const ordenadas = useMemo(() => {
     const fator = ordem.direcao === 'asc' ? 1 : -1
     return [...filtradas].sort((a, b) => comparar(a, b, ordem.campo) * fator)
   }, [filtradas, ordem])
 
-  const temFiltro = Boolean(busca) || situacaoFiltro !== 'todas' || origemFiltro !== 'todas'
+  const temFiltro =
+    Boolean(busca) ||
+    situacaoFiltro !== 'todas' ||
+    origemFiltro !== 'todas' ||
+    Boolean(cadastradaDe) ||
+    Boolean(cadastradaAte) ||
+    soMinhaAtuacao
 
   const ordenarPor = (campo) => {
     setOrdem((atual) => ({
@@ -127,6 +164,9 @@ export default function OportunidadesPage() {
     setBusca('')
     trocarSituacao('todas')
     setOrigemFiltro('todas')
+    setCadastradaDe('')
+    setCadastradaAte('')
+    setSoMinhaAtuacao(false)
   }
 
   return (
@@ -200,58 +240,96 @@ export default function OportunidadesPage() {
         </div>
       ) : null}
 
-      <div className="admin-toolbar">
-        <div className="admin-search">
-          <Icone icon={appIcons.search} className="admin-search__icon" />
-          <input
-            type="search"
-            className="admin-search__input"
-            value={busca}
-            onChange={(event) => setBusca(event.target.value)}
-            placeholder="Buscar por título, código ou demandante..."
-            aria-label="Buscar oportunidades"
-          />
-          {busca ? (
+      <section className="filtros-oportunidades" aria-label="Filtros da fila">
+        <div className="filtros-oportunidades__principal">
+          <div className="admin-search">
+            <Icone icon={appIcons.search} className="admin-search__icon" />
+            <input
+              type="search"
+              className="admin-search__input"
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Buscar por título, código ou demandante..."
+              aria-label="Buscar oportunidades"
+            />
+            {busca ? (
+              <button
+                type="button"
+                className="admin-search__clear"
+                onClick={() => setBusca('')}
+                title="Limpar pesquisa"
+                aria-label="Limpar pesquisa"
+              >
+                <Icone icon={appIcons.clear} />
+              </button>
+            ) : null}
+          </div>
+
+          {ehSupervisor ? (
             <button
               type="button"
-              className="admin-search__clear"
-              onClick={() => setBusca('')}
-              title="Limpar pesquisa"
-              aria-label="Limpar pesquisa"
+              className={`admin-btn admin-btn--outline${soMinhaAtuacao ? ' is-active' : ''}`}
+              aria-pressed={soMinhaAtuacao}
+              title="Sem responsável ou conduzidas por você, em Entrada, aguardando decisão ou com resposta do Demandante a um pedido de revisão."
+              onClick={() => setSoMinhaAtuacao((atual) => !atual)}
             >
-              <Icone icon={appIcons.clear} />
+              Aguardando minha atuação ({aguardandoMinhaAtuacao})
             </button>
           ) : null}
         </div>
 
-        <div className="admin-toolbar__actions">
-          <label className="sr-only" htmlFor="filtro-situacao">Filtrar por situação</label>
-          <select
-            id="filtro-situacao"
-            className="admin-input admin-input--select"
-            value={situacaoFiltro}
-            onChange={(event) => trocarSituacao(event.target.value)}
-          >
-            <option value="todas">Todas as situações</option>
-            {SITUACOES.map((situacao) => (
-              <option key={situacao.id} value={situacao.id}>{situacao.label}</option>
-            ))}
-          </select>
+        <div className="filtros-oportunidades__refino">
+          <label className="admin-field">
+            <span className="admin-field__label">Situação</span>
+            <select
+              className="admin-input admin-input--select"
+              value={situacaoFiltro}
+              onChange={(event) => trocarSituacao(event.target.value)}
+            >
+              <option value="todas">Todas as situações</option>
+              {SITUACOES.map((situacao) => (
+                <option key={situacao.id} value={situacao.id}>{situacao.label}</option>
+              ))}
+            </select>
+          </label>
 
-          <label className="sr-only" htmlFor="filtro-origem">Filtrar por origem</label>
-          <select
-            id="filtro-origem"
-            className="admin-input admin-input--select"
-            value={origemFiltro}
-            onChange={(event) => setOrigemFiltro(event.target.value)}
-          >
-            <option value="todas">Todas as origens</option>
-            {ORIGENS.map((origem) => (
-              <option key={origem.id} value={origem.id}>{origem.label}</option>
-            ))}
-          </select>
+          <label className="admin-field">
+            <span className="admin-field__label">Origem</span>
+            <select
+              className="admin-input admin-input--select"
+              value={origemFiltro}
+              onChange={(event) => setOrigemFiltro(event.target.value)}
+            >
+              <option value="todas">Todas as origens</option>
+              {ORIGENS.map((origem) => (
+                <option key={origem.id} value={origem.id}>{origem.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="admin-field">
+            <span className="admin-field__label">Cadastrada a partir de</span>
+            <input
+              type="date"
+              className="admin-input"
+              value={cadastradaDe}
+              max={cadastradaAte || undefined}
+              onChange={(event) => setCadastradaDe(event.target.value)}
+            />
+          </label>
+
+          <label className="admin-field">
+            <span className="admin-field__label">Cadastrada até</span>
+            <input
+              type="date"
+              className="admin-input"
+              value={cadastradaAte}
+              min={cadastradaDe || undefined}
+              onChange={(event) => setCadastradaAte(event.target.value)}
+            />
+          </label>
         </div>
-      </div>
+      </section>
 
       {temFiltro ? (
         <div className="active-filters">

@@ -9,9 +9,13 @@ from rest_framework import permissions, views
 from rest_framework.response import Response
 
 from apps.accounts.models import Papel
-from apps.dashboard.serializers import IndicadoresSerializer
+from apps.dashboard.serializers import (
+    IndicadoresDeIASerializer,
+    IndicadoresSerializer,
+)
 from apps.dashboard.services.indicadores import indicadores_de
-from core.permissions import TemPapel
+from apps.dashboard.services.indicadores_ia import indicadores_de_ia
+from core.permissions import EhSupervisor, TemPapel
 
 
 class AcompanhaOFluxo(TemPapel):
@@ -35,3 +39,22 @@ class IndicadoresView(views.APIView):
         dados = indicadores_de(request.user)
 
         return Response(IndicadoresSerializer(dados).data)
+
+
+class IndicadoresDeIAView(views.APIView):
+    """
+    `GET /api/indicadores/ia/` - matching e maturidade (PB74, PB75).
+
+    Rota propria, e nao mais um bloco de `/api/indicadores/`: o painel que abre
+    com a sessao tem orcamento de tres consultas, e estes dois blocos leem
+    cinco tabelas. A tela de Indicadores os busca depois de estar de pe.
+
+    Do Supervisor: as duas historias dizem "como Supervisor", e o PB71 mantem o
+    Demandante fora do resultado interno.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, EhSupervisor]
+
+    @extend_schema(responses=IndicadoresDeIASerializer)
+    def get(self, request):
+        return Response(IndicadoresDeIASerializer(indicadores_de_ia(request.user)).data)

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b7a1f0c2-5d64-4f3a-9c58-0f1a2b3c4d5e",
     "name": "P&D Connect API",
-    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular).\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: python manage.py runserver (127.0.0.1:8000).\n2. Semeie contas locais: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. No Postman o script de teste guarda access e refresh nas variaveis da colecao e todo o resto ja sai autenticado; no Insomnia o script nao roda - cole o access na variavel access_token.\n4. Ajuste usuario_id, membro_id e codigo para registros que existam no seu banco - os valores do arquivo sao placeholders.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos login, refresh e as duas rotas publicas de senha. O access vale 60 minutos e o refresh 7 dias; o refresh rotaciona a cada renovacao e o anterior cai na blacklist.\n\nEscopo por papel: Administrador so alcanca /usuarios/; Supervisor e Pesquisador alcancam /rede/ e /oportunidades/; Demandante so /oportunidades/ da propria organizacao. 403 fora disso, e 404 (nao 403) para registro de outra organizacao.",
+    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular).\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: python manage.py runserver (127.0.0.1:8000).\n2. Semeie contas locais: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. No Postman o script de teste guarda access e refresh nas variaveis da colecao e todo o resto ja sai autenticado; no Insomnia o script nao roda - cole o access na variavel access_token.\n4. Ajuste usuario_id, membro_id, codigo, competencia_id, membro_equipe_id, recomendacao_id e notificacao_id para registros que existam no seu banco - os valores do arquivo sao placeholders.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos login, refresh e as duas rotas publicas de senha. O access vale 60 minutos e o refresh 7 dias; o refresh rotaciona a cada renovacao e o anterior cai na blacklist.\n\nEscopo por papel: Administrador alcanca /usuarios/, /trilha/, /ia/saude/, a importacao de /ia/criterios/ e a edicao de /configuracoes/tema/; Supervisor e Pesquisador alcancam /rede/ e /oportunidades/; Demandante so /oportunidades/ da propria organizacao. 403 fora disso, e 404 (nao 403) para registro de outra organizacao.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -491,7 +491,7 @@
                 {
                   "key": "papel_rede",
                   "value": "",
-                  "description": "pesquisador | supervisor | colaborador",
+                  "description": "pesquisador | supervisor",
                   "disabled": true
                 },
                 {
@@ -549,10 +549,10 @@
                 ""
               ]
             },
-            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_create",
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\n`papel_rede` aceita so `pesquisador`: o Supervisor cadastra Pesquisadores\n(RN-A03 / RN-A04). `formacoes` e opcional; cada item exige `curso` e\n`instituicao`.\n\noperationId: rede_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel_rede\": \"supervisor\",\n  \"titulacao_codigo\": \"\",\n  \"organizacao\": 0,\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "raw": "{\n  \"nome\": \"Helena Torres\",\n  \"email\": \"helena.torres@ac2.com.br\",\n  \"papel_rede\": \"pesquisador\",\n  \"titulacao_codigo\": \"mestrado\",\n  \"organizacao\": null,\n  \"disponibilidade\": \"parcial\",\n  \"experiencia\": \"Seis anos em microbiologia de alimentos.\",\n  \"competencias\": [\n    \"Microbiologia de alimentos\"\n  ],\n  \"tecnicas\": [\n    \"PCR em tempo real\"\n  ],\n  \"linhas\": [\n    \"Seguranca de alimentos\"\n  ],\n  \"formacoes\": [\n    {\n      \"curso\": \"Ciencias Biologicas\",\n      \"instituicao\": \"Universidade Estadual de Campinas\",\n      \"titulacao_codigo\": \"mestrado\",\n      \"ano_conclusao\": 2019\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -601,10 +601,10 @@
                 ""
               ]
             },
-            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_partial_update",
+            "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\nPATCH parcial: so os campos enviados mudam. As listas (`competencias`,\n`tecnicas`, `linhas`, `formacoes`) trocam o conjunto inteiro; lista vazia\nremove tudo, campo ausente preserva.\n\noperationId: rede_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel_rede\": \"supervisor\",\n  \"titulacao_codigo\": \"\",\n  \"organizacao\": 0,\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "raw": "{\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"Oito anos em microbiologia de alimentos.\",\n  \"competencias\": [\n    \"Microbiologia de alimentos\",\n    \"Fermentacao\"\n  ],\n  \"formacoes\": [\n    {\n      \"curso\": \"Ciencias Biologicas\",\n      \"instituicao\": \"Universidade Estadual de Campinas\",\n      \"titulacao_codigo\": \"mestrado\",\n      \"ano_conclusao\": 2019\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -673,10 +673,10 @@
                 ""
               ]
             },
-            "description": "`/api/rede/meu-perfil/` - o perfil que o proprio membro mantem (RN-A05).\n\nNao aceita `id`: o alvo e sempre quem esta autenticado. Rota com id abriria\na porta para editar o perfil alheio por engano de permissao.\n\noperationId: rede_meu_perfil_partial_update",
+            "description": "`/api/rede/meu-perfil/` - o perfil que o proprio membro mantem (RN-A05).\n\nNao aceita `id`: o alvo e sempre quem esta autenticado. Rota com id abriria\na porta para editar o perfil alheio por engano de permissao.\n\nNome, e-mail, papel na rede e situacao sao cadastro (Supervisor) e sao\nignorados aqui. `formacoes` troca o conjunto inteiro, como as listas.\n\noperationId: rede_meu_perfil_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"titulacao_codigo\": \"\",\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"\",\n  \"competencias\": [],\n  \"tecnicas\": [],\n  \"linhas\": []\n}",
+              "raw": "{\n  \"titulacao_codigo\": \"mestrado\",\n  \"disponibilidade\": \"integral\",\n  \"experiencia\": \"Oito anos em microbiologia de alimentos.\",\n  \"competencias\": [\n    \"Microbiologia de alimentos\"\n  ],\n  \"tecnicas\": [\n    \"PCR em tempo real\"\n  ],\n  \"linhas\": [\n    \"Seguranca de alimentos\"\n  ],\n  \"formacoes\": [\n    {\n      \"curso\": \"Ciencias Biologicas\",\n      \"instituicao\": \"Universidade Estadual de Campinas\",\n      \"titulacao_codigo\": \"mestrado\",\n      \"ano_conclusao\": 2019\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -739,7 +739,19 @@
                 {
                   "key": "busca",
                   "value": "",
-                  "description": "codigo ou titulo",
+                  "description": "codigo, titulo ou nome do demandante",
+                  "disabled": true
+                },
+                {
+                  "key": "cadastrada_de",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo - dia do cadastro (PB28)",
+                  "disabled": true
+                },
+                {
+                  "key": "cadastrada_ate",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo; data malformada ou anterior a inicial devolve 400",
                   "disabled": true
                 },
                 {
@@ -756,7 +768,7 @@
                 }
               ]
             },
-            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_list"
+            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\nCada linha traz `aguarda_minha_atuacao`: para o Supervisor, verdadeiro na\noportunidade sem responsavel ou conduzida por ele que esta em Entrada,\nAguardando decisao ou Revisar com resposta do Demandante (PB61). Para os\noutros atores e sempre falso.\n\noperationId: oportunidades_list"
           }
         },
         {
@@ -1009,6 +1021,1037 @@
             },
             "description": "A trilha da oportunidade (RF12 / PB69, PB70).\n\nO Demandante nao ve as categorias internas: PB71 diz que ele acompanha\no andamento \"sem acessar informacoes internas restritas (ex.: resultados\nde matching, pre-analise detalhada)\". O recorte e aqui, no servidor, e\nnao na tela.\n\noperationId: oportunidades_historico_list"
           }
+        },
+        {
+          "name": "Obtem a proposta estruturada",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/proposta/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "proposta",
+                ""
+              ]
+            },
+            "description": "Proposta Estruturada da oportunidade (RF04).\n\nRetorna os oito elementos consolidados: problema de pesquisa, hipótese, objetivo geral, objetivos específicos, metodologia, resultados esperados, caracterização da inovação, infraestrutura e recursos.\n\noperationId: oportunidades_proposta_retrieve"
+          }
+        },
+        {
+          "name": "Atualiza a proposta estruturada (Supervisor)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oportunidades/{{codigo}}/proposta/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oportunidades",
+                "{{codigo}}",
+                "proposta",
+                ""
+              ]
+            },
+            "description": "Atualiza a Proposta Estruturada — apenas Supervisor (revisao humana obrigatoria).\n\nMarca `revisada_por_humano=true` e `revisor=usuario autenticado`.\n\noperationId: oportunidades_proposta_partial_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"problema_pesquisa\": \"\",\n  \"hipotese\": \"\",\n  \"objetivo_geral\": \"\",\n  \"objetivos_especificos\": [],\n  \"metodologia\": \"\",\n  \"resultados_esperados\": \"\",\n  \"caracterizacao_inovacao\": \"\",\n  \"infraestrutura_recursos\": \"\",\n  \"revisada_por_humano\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Avaliacao do Supervisor",
+          "item": [
+            {
+              "name": "Apagar oportunidade (sempre recusado)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    ""
+                  ]
+                },
+                "description": "Oportunidade nao se apaga.\n\nO `DELETE` existe na rota para o recurso aninhado da competencia\nnecessaria; no registro central ele e recusado de proposito: a saida do\nfluxo e **Arquivar**, com historico preservado (D03 / RF11).\n\noperationId: oportunidades_destroy"
+              }
+            },
+            {
+              "name": "Registra observacao do Supervisor",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/observacoes/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "observacoes",
+                    ""
+                  ]
+                },
+                "description": "Nota do Supervisor durante a avaliacao (PB65).\n\nSo escrita: a leitura e a aba Historico, porque a nota mora na trilha.\nDuas rotas para a mesma verdade divergem no primeiro mes.\n\noperationId: oportunidades_observacoes_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"texto\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Pede complemento ao Demandante",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/solicitar-complemento/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "solicitar-complemento",
+                    ""
+                  ]
+                },
+                "description": "Pedido de informacao complementar ao Demandante (PB26).\n\nSo escrita, como a observacao: o pedido mora na trilha, e a leitura e a\naba Historico. Duas rotas para a mesma verdade divergem no primeiro mes.\n\noperationId: oportunidades_solicitar_complemento_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mensagem\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Copiloto e proposta",
+          "item": [
+            {
+              "name": "Estado da sessao do Copiloto",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/copiloto/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "copiloto",
+                    ""
+                  ]
+                },
+                "description": "O Copiloto de Estruturacao (RF04): estado da sessao e abertura dela.\n\noperationId: oportunidades_copiloto_retrieve"
+              }
+            },
+            {
+              "name": "Abre a sessao do Copiloto",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/copiloto/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "copiloto",
+                    ""
+                  ]
+                },
+                "description": "O Copiloto de Estruturacao (RF04): estado da sessao e abertura dela.\n\noperationId: oportunidades_copiloto_create"
+              }
+            },
+            {
+              "name": "Conclui a sessao do Copiloto",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/copiloto/concluir/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "copiloto",
+                    "concluir",
+                    ""
+                  ]
+                },
+                "description": "Encerra a sessao. A proposta segue editavel na aba Proposta.\n\noperationId: oportunidades_copiloto_concluir_create"
+              }
+            },
+            {
+              "name": "Roda uma rodada de estruturacao",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/copiloto/estruturar/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "copiloto",
+                    "estruturar",
+                    ""
+                  ]
+                },
+                "description": "Uma rodada de estruturacao (RF04). Saida sempre revisavel (RN-A07).\n\noperationId: oportunidades_copiloto_estruturar_create"
+              }
+            },
+            {
+              "name": "Responde as perguntas orientadoras",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/copiloto/responder/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "copiloto",
+                    "responder",
+                    ""
+                  ]
+                },
+                "description": "A resposta humana as perguntas orientadoras (PB39).\n\noperationId: oportunidades_copiloto_responder_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"texto\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Inicia a proposta estruturada",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/proposta/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "proposta",
+                    ""
+                  ]
+                },
+                "description": "A Proposta Estruturada da oportunidade (RF04).\n\nOs tres metodos moram numa action so de proposito: o router cria uma\nrota por action, e duas actions no mesmo `url_path` deixam a primeira\nregistrada respondendo 405 as demais. Quem pode o que esta em\n`get_permissions`, que aqui ramifica pelo metodo.\n\noperationId: oportunidades_proposta_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"problema_pesquisa\": \"\",\n  \"hipotese\": \"\",\n  \"objetivo_geral\": \"\",\n  \"objetivos_especificos\": \"\",\n  \"metodologia\": \"\",\n  \"resultados_esperados\": \"\",\n  \"caracterizacao_inovacao\": \"\",\n  \"infraestrutura_recursos\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Competencias",
+          "item": [
+            {
+              "name": "Lista as competencias necessarias",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/competencias/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "competencias",
+                    ""
+                  ]
+                },
+                "description": "As Competencias Necessarias da proposta (RF05).\n\noperationId: oportunidades_competencias_list"
+              }
+            },
+            {
+              "name": "Adiciona competencia necessaria",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/competencias/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "competencias",
+                    ""
+                  ]
+                },
+                "description": "As Competencias Necessarias da proposta (RF05).\n\noperationId: oportunidades_competencias_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"descricao\": \"\",\n  \"nivel_importancia\": \"essencial\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Deriva competencias da proposta (IA)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/competencias/derivar/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "competencias",
+                    "derivar",
+                    ""
+                  ]
+                },
+                "description": "Deriva as competencias da proposta (RF05 / PB42).\n\noperationId: oportunidades_competencias_derivar_create"
+              }
+            },
+            {
+              "name": "Revisa uma competencia",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/competencias/{{competencia_id}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "competencias",
+                    "{{competencia_id}}",
+                    ""
+                  ]
+                },
+                "description": "A revisao humana de uma competencia derivada (PB42).\n\noperationId: oportunidades_competencias_partial_update",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"descricao\": \"\",\n  \"nivel_importancia\": \"essencial\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Remove uma competencia",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/competencias/{{competencia_id}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "competencias",
+                    "{{competencia_id}}",
+                    ""
+                  ]
+                },
+                "description": "A revisao humana de uma competencia derivada (PB42).\n\noperationId: oportunidades_competencias_destroy"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Equipe potencial",
+          "item": [
+            {
+              "name": "Equipe potencial atual",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/equipe/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "equipe",
+                    ""
+                  ]
+                },
+                "description": "A Equipe Potencial (RF06-RF08). `POST` roda um novo matching.\n\noperationId: oportunidades_equipe_retrieve"
+              }
+            },
+            {
+              "name": "Roda um novo matching",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/equipe/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "equipe",
+                    ""
+                  ]
+                },
+                "description": "A Equipe Potencial (RF06-RF08). `POST` roda um novo matching.\n\noperationId: oportunidades_equipe_create"
+              }
+            },
+            {
+              "name": "Inclui pessoa da rede na equipe",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/equipe/membros/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "equipe",
+                    "membros",
+                    ""
+                  ]
+                },
+                "description": "A inclusao manual do Supervisor (RF08 / PB47).\n\noperationId: oportunidades_equipe_membros_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id_membro\": 1,\n  \"papel\": \"supervisor\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Ajusta um membro da equipe",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/equipe/membros/{{membro_equipe_id}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "equipe",
+                    "membros",
+                    "{{membro_equipe_id}}",
+                    ""
+                  ]
+                },
+                "description": "Inclui ou tira alguem da composicao sugerida (RF08).\n\noperationId: oportunidades_equipe_membros_partial_update",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"incluido\": false,\n  \"papel\": \"supervisor\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Valida a composicao da equipe",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/equipe/validar/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "equipe",
+                    "validar",
+                    ""
+                  ]
+                },
+                "description": "O Supervisor valida a composicao (RF08 / D07). Nao convoca ninguem.\n\noperationId: oportunidades_equipe_validar_create"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pre-analise",
+          "item": [
+            {
+              "name": "Ultima pre-analise de maturidade",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/pre-analise/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "pre-analise",
+                    ""
+                  ]
+                },
+                "description": "A Pre-analise de Maturidade PIPE/FAPESP (RF09) e a reavaliacao (RF10).\n\n`POST` sempre cria uma execucao nova: a anterior fica, com a versao de\ncriterios e a versao da proposta que avaliou.\n\noperationId: oportunidades_pre_analise_retrieve"
+              }
+            },
+            {
+              "name": "Executa a pre-analise de maturidade",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/pre-analise/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "pre-analise",
+                    ""
+                  ]
+                },
+                "description": "A Pre-analise de Maturidade PIPE/FAPESP (RF09) e a reavaliacao (RF10).\n\n`POST` sempre cria uma execucao nova: a anterior fica, com a versao de\ncriterios e a versao da proposta que avaliou.\n\noperationId: oportunidades_pre_analise_create"
+              }
+            },
+            {
+              "name": "Acata uma recomendacao",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/recomendacoes/{{recomendacao_id}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "recomendacoes",
+                    "{{recomendacao_id}}",
+                    ""
+                  ]
+                },
+                "description": "Marca a recomendacao como acatada - o par da reavaliacao (RF10).\n\noperationId: oportunidades_recomendacoes_partial_update",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"acatada\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Relatorios",
+          "item": [
+            {
+              "name": "Relatorio da equipe potencial",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/relatorio-equipe/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "relatorio-equipe",
+                    ""
+                  ]
+                },
+                "description": "O Relatorio de Equipe Potencial (PB77).\n\nDocumento da composicao sugerida com as aderencias do matching: quem\nentrou, por que entrou (`match_reasons`), com que score, e contra quais\ncompetencias necessarias. Sem rodada, o 404 explicado da aba - nao ha\ncomposicao a documentar.\n\noperationId: oportunidades_relatorio_equipe_retrieve"
+              }
+            },
+            {
+              "name": "Relatorio da pre-analise",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/relatorio-preanalise/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "relatorio-preanalise",
+                    ""
+                  ]
+                },
+                "description": "O Relatorio da Pre-analise (PB78).\n\nDocumento consolidado da ultima execucao: resultado por dimensao,\nlacunas e recomendacoes, com os criterios da **versao que ela citou**.\nSem execucao, responde o 404 explicado que a aba usa - a tela oferece\nexecutar em vez de imprimir folha vazia.\n\noperationId: oportunidades_relatorio_preanalise_retrieve"
+              }
+            },
+            {
+              "name": "Relatorio consolidado da oportunidade",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/relatorio/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "relatorio",
+                    ""
+                  ]
+                },
+                "description": "A visao consolidada da oportunidade (PB76).\n\nO documento e do Supervisor: o plano o lista na tela dele, e PB71\nmantem o Demandante com o andamento, sem o trabalho interno que o\nrelatorio reune.\n\nA view so orquestra - quem sabe montar o documento e o facade.\n\noperationId: oportunidades_relatorio_retrieve"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuracoes",
+      "item": [
+        {
+          "name": "Le o tema da organizacao (publico)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracoes/tema/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "configuracoes",
+                "tema",
+                ""
+              ]
+            },
+            "description": "`/api/configuracoes/tema/` - a paleta da organizacao.\n\nO GET e publico de proposito: a tela de login precisa pintar a marca antes\nde existir JWT. O PATCH e do Administrador e recebe o **diff**, nunca o\ndocumento inteiro - duas abas abertas nao se sobrescrevem.\n\noperationId: configuracoes_tema_retrieve",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Altera o tema (Administrador)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracoes/tema/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "configuracoes",
+                "tema",
+                ""
+              ]
+            },
+            "description": "`/api/configuracoes/tema/` - a paleta da organizacao.\n\nO GET e publico de proposito: a tela de login precisa pintar a marca antes\nde existir JWT. O PATCH e do Administrador e recebe o **diff**, nunca o\ndocumento inteiro - duas abas abertas nao se sobrescrevem.\n\noperationId: configuracoes_tema_partial_update"
+          }
+        }
+      ]
+    },
+    {
+      "name": "IA - saude e criterios",
+      "item": [
+        {
+          "name": "Lista os criterios vigentes da pre-analise",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ia/criterios/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ia",
+                "criterios",
+                ""
+              ]
+            },
+            "description": "`GET` lista a versao vigente; `POST` importa a baseline PIPE.\n\nNao existe PUT nem DELETE: criterio de fomento nao e digitado nem apagado\npela tela - ele vem da Base de Conhecimento versionada (P4).\n\noperationId: ia_criterios_list"
+          }
+        },
+        {
+          "name": "Importa a baseline de criterios PIPE (Administrador)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ia/criterios/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ia",
+                "criterios",
+                ""
+              ]
+            },
+            "description": "`GET` lista a versao vigente; `POST` importa a baseline PIPE.\n\nNao existe PUT nem DELETE: criterio de fomento nao e digitado nem apagado\npela tela - ele vem da Base de Conhecimento versionada (P4).\n\noperationId: ia_criterios_create"
+          }
+        },
+        {
+          "name": "Saude da plataforma (Administrador)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ia/saude/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ia",
+                "saude",
+                ""
+              ]
+            },
+            "description": "`GET /api/ia/saude/` - desempenho, consumo de IA, fila e processo.\n\noperationId: ia_saude_retrieve"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Indicadores",
+      "item": [
+        {
+          "name": "Indicadores do fluxo, no escopo do ator",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/indicadores/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "indicadores",
+                ""
+              ]
+            },
+            "description": "`GET /api/indicadores/` - numeros do fluxo, no escopo do ator (RF14).\n\noperationId: indicadores_retrieve"
+          }
+        },
+        {
+          "name": "Indicadores de matching e maturidade",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/indicadores/ia/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "indicadores",
+                "ia",
+                ""
+              ]
+            },
+            "description": "`GET /api/indicadores/ia/` - matching e maturidade (PB74, PB75).\n\nRota propria, e nao mais um bloco de `/api/indicadores/`: o painel que abre\ncom a sessao tem orcamento de tres consultas, e estes dois blocos leem\ncinco tabelas. A tela de Indicadores os busca depois de estar de pe.\n\nDo Supervisor: as duas historias dizem \"como Supervisor\", e o PB71 mantem o\nDemandante fora do resultado interno.\n\noperationId: indicadores_ia_retrieve"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notificacoes (Demandante)",
+      "item": [
+        {
+          "name": "Lista as notificacoes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notificacoes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notificacoes",
+                ""
+              ]
+            },
+            "description": "`GET /api/notificacoes/` - o que avisaram a quem esta autenticado.\n\noperationId: notificacoes_list"
+          }
+        },
+        {
+          "name": "Marca todas como lidas",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notificacoes/marcar-todas-lidas/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notificacoes",
+                "marcar-todas-lidas",
+                ""
+              ]
+            },
+            "description": "`POST /api/notificacoes/marcar-todas-lidas/` - limpa o selo de uma vez.\n\noperationId: notificacoes_marcar_todas_lidas_create"
+          }
+        },
+        {
+          "name": "Conta as nao lidas (selo do sino)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notificacoes/nao-lidas/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notificacoes",
+                "nao-lidas",
+                ""
+              ]
+            },
+            "description": "`GET /api/notificacoes/nao-lidas/` - o numero do selo do sino.\n\noperationId: notificacoes_nao_lidas_retrieve"
+          }
+        },
+        {
+          "name": "Marca uma notificacao como lida",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notificacoes/{{notificacao_id}}/lida/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notificacoes",
+                "{{notificacao_id}}",
+                "lida",
+                ""
+              ]
+            },
+            "description": "`POST /api/notificacoes/{id}/lida/` - a pessoa deu baixa no aviso.\n\noperationId: notificacoes_lida_create"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trilha de auditoria (Administrador)",
+      "item": [
+        {
+          "name": "Consulta a trilha de auditoria",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trilha/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trilha",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "categoria",
+                  "value": "",
+                  "description": "oportunidade | observacao | copiloto | competencia | matching | preanalise | decisao | rede | conta | config",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "ok | erro | negado",
+                  "disabled": true
+                },
+                {
+                  "key": "busca",
+                  "value": "",
+                  "description": "pessoa (e-mail ou nome), tipo do evento, id gravado, codigo ou titulo da oportunidade",
+                  "disabled": true
+                },
+                {
+                  "key": "desde",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo",
+                  "disabled": true
+                },
+                {
+                  "key": "ate",
+                  "value": "",
+                  "description": "AAAA-MM-DD, inclusivo",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`GET /api/trilha/` - o que aconteceu na plataforma (RF12).\n\nSem `post`, `patch` ou `delete`: a trilha e append-only, e quem grava e o\nservice que causou o evento. Uma rota de escrita aqui seria a porta por\nonde a trilha deixaria de ser confiavel.\n\nLogin e logout bem-sucedidos so aparecem com `categoria=conta`; entrada\nrecusada aparece sempre. Cada evento traz `tipo_rotulo`, `ator_nome` e\n`alvo` (`rotulo`, `oportunidade`, `removido`) ja legiveis.\n\noperationId: trilha_list"
+          }
+        },
+        {
+          "name": "Valores dos filtros da trilha",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trilha/filtros/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trilha",
+                "filtros",
+                ""
+              ]
+            },
+            "description": "`GET /api/trilha/filtros/` - os valores que os selects da tela oferecem.\n\nA tela consome o catalogo em vez de manter uma copia das categorias: lista\ncopiada envelhece calada no dia em que uma categoria nova nascer no\nmodelo, e o Administrador deixa de conseguir filtrar por ela.\n\noperationId: trilha_filtros_retrieve"
+          }
         }
       ]
     },
@@ -1123,6 +2166,26 @@
     {
       "key": "codigo",
       "value": "OP-2026-001",
+      "type": "string"
+    },
+    {
+      "key": "competencia_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "membro_equipe_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "recomendacao_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "notificacao_id",
+      "value": "1",
       "type": "string"
     }
   ]

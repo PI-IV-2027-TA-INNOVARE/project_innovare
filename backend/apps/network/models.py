@@ -5,17 +5,21 @@ O matching opera *somente* sobre esta rede (`CONTEXT.md` secao 4). Nao ha busca
 externa em Lattes, ResearchGate ou Scholar (secao 7, OUT OF SCOPE).
 """
 from django.db import models
+from django.db.models.functions import Coalesce
 
-from core.models import ModeloComCarimbo
+from core.models import ModeloComCarimbo, lista_fixa
 
 
 class PapelNaRede(models.TextChoices):
-    """Distinto do papel de acesso: um colaborador pode nao ter conta."""
+    """
+    Distinto do papel de acesso: o membro da rede pode nao ter conta.
+
+    RN-A01 fecha os atores em Demandante Externo, Pesquisador, Supervisor e
+    Administrador; so os dois ultimos integram a rede interna.
+    """
 
     SUPERVISOR = 'supervisor', 'Supervisor'
     PESQUISADOR = 'pesquisador', 'Pesquisador'
-    COLABORADOR = 'colaborador', 'Colaborador'
-    GRADUANDO = 'graduando', 'Graduando / bolsista'
 
 
 class Disponibilidade(models.TextChoices):
@@ -61,7 +65,7 @@ class Titulacao(models.Model):
     nivel = models.PositiveSmallIntegerField(db_column='nivel')
 
     class Meta:
-        db_table = 'titulacao'
+        db_table = 'Titulacao'
         ordering = ['nivel']
 
     def __str__(self):
@@ -78,7 +82,7 @@ class Competencia(ModeloComCarimbo):
     id_competencia = models.BigAutoField(primary_key=True, db_column='id_competencia')
     nome = models.CharField(max_length=160, db_column='nome')
     tipo = models.CharField(
-        max_length=16, choices=TipoCompetencia.choices, db_column='tipo'
+        max_length=16, choices=TipoCompetencia.choices, db_column='categoria'
     )
     canonica = models.BooleanField(default=False, db_column='canonica')
     sinonimo_de = models.ForeignKey(
@@ -92,16 +96,38 @@ class Competencia(ModeloComCarimbo):
     ativo = models.BooleanField(default=True, db_column='ativo')
 
     class Meta:
-        db_table = 'competencia'
+        db_table = 'Competencia'
         verbose_name_plural = 'competencias'
         constraints = [
+            lista_fixa('competencia', 'tipo', TipoCompetencia, coluna='categoria'),
             models.UniqueConstraint(
-                fields=['nome', 'tipo'], name='uq_competencia_nome_tipo'
+                fields=['nome', 'tipo'], name='uq_competencia_nome_categoria'
             ),
         ]
 
     def __str__(self):
         return f'{self.nome} ({self.get_tipo_display()})'
+
+
+class MembroRedeQuerySet(models.QuerySet):
+    def com_email(self, email):
+        """Quem usa este e-mail, more ele no membro ou na conta ligada."""
+        return self.filter(
+            models.Q(email_sem_conta=email) | models.Q(usuario__email=email)
+        )
+
+    def com_identificacao(self):
+        """
+        `nome_atual` e `email_atual` para filtrar e ordenar no banco.
+
+        Com conta, nome e e-mail moram nela; sem conta, no membro. O
+        `Coalesce` le os dois lugares, e o CHECK garante que so um esta
+        preenchido.
+        """
+        return self.select_related('usuario').annotate(
+            nome_atual=Coalesce('usuario__nome', 'nome_sem_conta'),
+            email_atual=Coalesce('usuario__email', 'email_sem_conta'),
+        )
 
 
 class MembroRede(ModeloComCarimbo):
@@ -110,6 +136,10 @@ class MembroRede(ModeloComCarimbo):
 
     Existe *antes* da conta: o Supervisor cadastra e so depois libera o acesso
     (RN-A04). `usuario` nulo e exatamente a situacao `sem_acesso`.
+
+    Nome e e-mail ficam aqui so enquanto nao ha conta. Liberado o acesso, eles
+    passam a morar em `Usuario` e as colunas daqui ficam nulas - copiados nos
+    dois lugares, dependiam de sincronizacao a mao e podiam divergir (3FN).
     """
 
     id_membro = models.BigAutoField(primary_key=True, db_column='id_membro')
@@ -117,12 +147,16 @@ class MembroRede(ModeloComCarimbo):
         'accounts.Usuario',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name='membro_rede',
         db_column='id_usuario',
     )
-    nome = models.CharField(max_length=160, db_column='nome')
-    email = models.EmailField(unique=True, db_column='email')
+    nome_sem_conta = models.CharField(
+        max_length=160, null=True, blank=True, db_column='nome'
+    )
+    email_sem_conta = models.EmailField(
+        unique=True, null=True, blank=True, db_column='email'
+    )
     papel_rede = models.CharField(
         max_length=16, choices=PapelNaRede.choices, db_column='papel_rede'
     )
@@ -148,7 +182,9 @@ class MembroRede(ModeloComCarimbo):
         default=Disponibilidade.PARCIAL,
         db_column='disponibilidade',
     )
-    experiencia = models.TextField(blank=True, default='', db_column='experiencia')
+    experiencia = models.TextField(
+        blank=True, default='', db_column='experiencia_profissional'
+    )
     situacao = models.CharField(
         max_length=12,
         choices=SituacaoMembro.choices,
@@ -160,7 +196,7 @@ class MembroRede(ModeloComCarimbo):
         null=True,
         on_delete=models.SET_NULL,
         related_name='membros_cadastrados',
-        db_column='cadastrado_por',
+        db_column='id_cadastrado_por',
     )
     competencias = models.ManyToManyField(
         Competencia,
@@ -168,8 +204,30 @@ class MembroRede(ModeloComCarimbo):
         related_name='membros',
     )
 
+    objects = MembroRedeQuerySet.as_manager()
+
     class Meta:
-        db_table = 'membro_rede'
+        db_table = 'Membro_Rede'
+        constraints = [
+            lista_fixa('membro_rede', 'papel_rede', PapelNaRede),
+            lista_fixa('membro_rede', 'disponibilidade', Disponibilidade),
+            lista_fixa('membro_rede', 'situacao', SituacaoMembro),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        usuario__isnull=True,
+                        nome_sem_conta__isnull=False,
+                        email_sem_conta__isnull=False,
+                    )
+                    | models.Q(
+                        usuario__isnull=False,
+                        nome_sem_conta__isnull=True,
+                        email_sem_conta__isnull=True,
+                    )
+                ),
+                name='ck_membro_rede_nome_email_sem_conta',
+            ),
+        ]
         verbose_name = 'membro da rede'
         verbose_name_plural = 'membros da rede'
         indexes = [
@@ -182,9 +240,23 @@ class MembroRede(ModeloComCarimbo):
     def __str__(self):
         return self.nome
 
+    @property
+    def nome(self):
+        return self.usuario.nome if self.usuario_id else self.nome_sem_conta
+
+    @property
+    def email(self):
+        return self.usuario.email if self.usuario_id else self.email_sem_conta
+
+    def ligar_a_conta(self, usuario):
+        """Nome e e-mail passam a morar na conta; aqui ficam nulos."""
+        self.usuario = usuario
+        self.nome_sem_conta = None
+        self.email_sem_conta = None
+
     def save(self, *args, **kwargs):
-        if self.email:
-            self.email = self.email.strip().lower()
+        if self.email_sem_conta:
+            self.email_sem_conta = self.email_sem_conta.strip().lower()
         return super().save(*args, **kwargs)
 
 
@@ -207,7 +279,7 @@ class MembroCompetencia(models.Model):
         db_column='id_competencia',
     )
     nivel = models.PositiveSmallIntegerField(
-        null=True, blank=True, db_column='nivel'
+        null=True, blank=True, db_column='nivel_dominio'
     )
     declarado_por = models.CharField(
         max_length=12,
@@ -218,8 +290,9 @@ class MembroCompetencia(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'competencia_perfil'
+        db_table = 'Competencia_Perfil'
         constraints = [
+            lista_fixa('competencia_perfil', 'declarado_por', DeclaradoPor),
             models.UniqueConstraint(
                 fields=['membro', 'competencia'],
                 name='uq_membro_competencia',
@@ -258,6 +331,6 @@ class Formacao(ModeloComCarimbo):
     )
 
     class Meta:
-        db_table = 'formacao'
+        db_table = 'Formacao'
         verbose_name_plural = 'formacoes'
         ordering = ['-ano_conclusao']

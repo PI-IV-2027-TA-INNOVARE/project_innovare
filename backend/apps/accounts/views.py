@@ -32,6 +32,7 @@ from apps.accounts.services.acesso import (
 )
 from apps.accounts.services.contas import (
     AlterarSituacaoContaService,
+    AtualizarContaService,
     ProvisionarContaService,
     ReenviarConviteService,
 )
@@ -178,6 +179,17 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             )
 
         return queryset
+
+    def partial_update(self, request, *args, **kwargs):
+        usuario = self.get_object()
+        serializer = self.get_serializer(usuario, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        AtualizarContaService().execute(
+            usuario=usuario, dados=serializer.validated_data, ator=request.user
+        )
+
+        return Response(self.get_serializer(usuario).data)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

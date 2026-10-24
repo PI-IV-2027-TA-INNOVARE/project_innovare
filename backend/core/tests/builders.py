@@ -16,11 +16,13 @@ contra o banco de teste.
 """
 from __future__ import annotations
 
+from datetime import date
 from itertools import count
 
 from django.utils import timezone
 
 from apps.accounts.models import Papel, SituacaoConta, Usuario
+from apps.maturity.models import VersaoCriterio
 from apps.network.models import (
     Competencia,
     DeclaradoPor,
@@ -63,6 +65,14 @@ def titulacao(codigo: str = 'doutorado') -> Titulacao:
     rotulo, nivel = TITULACOES_PADRAO.get(codigo, (codigo.capitalize(), 1))
     registro, _ = Titulacao.objects.get_or_create(
         codigo=codigo, defaults={'rotulo': rotulo, 'nivel': nivel}
+    )
+    return registro
+
+
+def versao_criterio(rotulo: str = 'V1') -> VersaoCriterio:
+    """A versao dos criterios PIPE que a pre-analise cita, criada sob demanda."""
+    registro, _ = VersaoCriterio.objects.get_or_create(
+        versao=rotulo, defaults={'vigente_de': date(2026, 1, 1)}
     )
     return registro
 
@@ -231,14 +241,6 @@ class MembroRedeBuilder:
         self._papel_rede = PapelNaRede.PESQUISADOR
         return self
 
-    def colaborador(self) -> MembroRedeBuilder:
-        self._papel_rede = PapelNaRede.COLABORADOR
-        return self
-
-    def graduando(self) -> MembroRedeBuilder:
-        self._papel_rede = PapelNaRede.GRADUANDO
-        return self
-
     def chamado(self, nome: str) -> MembroRedeBuilder:
         self._nome = nome
         return self
@@ -303,8 +305,8 @@ class MembroRedeBuilder:
             usuario = conta.build()
 
         membro = MembroRede.objects.create(
-            nome=self._nome,
-            email=email,
+            nome_sem_conta=None if usuario else self._nome,
+            email_sem_conta=None if usuario else email,
             papel_rede=self._papel_rede,
             titulacao=self._titulacao,
             organizacao=self._organizacao,
@@ -407,3 +409,26 @@ class OportunidadeBuilder:
             responsavel=self._responsavel,
             situacao=self._situacao,
         )
+
+
+def indicar_na_equipe(
+    oportunidade: Oportunidade,
+    membro: MembroRede,
+    papel: str | None = None,
+):
+    """
+    Poe a pessoa numa equipe potencial da oportunidade.
+
+    E o que da acesso ao Pesquisador: `escopo_de` o alcanca por uma indicacao
+    `incluido`, nao pelo papel (D02). Sem isto, todo teste de leitura do
+    Pesquisador responde 404 - e o 404 esta certo.
+    """
+    from apps.matching.models import EquipePotencial, MembroEquipe
+
+    equipe = EquipePotencial.objects.create(oportunidade=oportunidade)
+
+    return MembroEquipe.objects.create(
+        equipe=equipe,
+        membro=membro,
+        papel=papel or membro.papel_rede,
+    )

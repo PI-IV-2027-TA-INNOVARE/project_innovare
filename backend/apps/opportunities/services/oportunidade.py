@@ -10,15 +10,28 @@ from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import (
+    BooleanField,
+    Case,
+    Count,
+    Exists,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+    When,
+)
 from django.utils import timezone
 
 from apps.accounts.models import Papel, Usuario
-from apps.audit.models import CategoriaEvento
+from apps.audit.models import CategoriaEvento, EventoAuditoria
 from apps.audit.services import registrar_evento
 from apps.decisions.models import Decisao, TipoDecisao
 from apps.notifications.services import notificar
 from apps.opportunities.models import (
+    CATEGORIAS_VISIVEIS_AO_DEMANDANTE,
     AnexoOportunidade,
     Oportunidade,
     OrigemOportunidade,
@@ -51,7 +64,7 @@ def escopo_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     `incluido` (RN-A06).
     """
     base = Oportunidade.objects.select_related(
-        'demandante', 'responsavel', 'criado_por'
+        'demandante', 'responsavel__usuario', 'criado_por'
     )
 
     if usuario.papel == Papel.SUPERVISOR:
@@ -72,6 +85,110 @@ def escopo_de(usuario: Usuario) -> QuerySet[Oportunidade]:
         ).distinct()
 
     return base.none()
+
+
+def _aguarda_atuacao_de(usuario: Usuario):
+    """
+    Onde a vez e do Supervisor (PB61), com o que o modelo ja tem.
+
+    Tres casos: a oportunidade que ninguem comecou (`entrada`), a que espera
+    a decisao, e a que voltou de *Revisar* e ja tem a resposta do Demandante
+    - complementar nao muda a situacao (quem reconduz e o Supervisor), entao a
+    resposta so aparece na trilha, depois da ultima decisao *Revisar*.
+
+    "Minha" e a que ele conduz ou que ainda nao tem responsavel. Prioridade
+    nao entra: e campo que o PO ainda precisa definir.
+    """
+    if usuario.papel != Papel.SUPERVISOR:
+        return Value(False, output_field=BooleanField())
+
+    ultima_revisao = (
+        Decisao.objects.filter(
+            oportunidade=OuterRef(OuterRef('pk')),
+            tipo_decisao=TipoDecisao.REVISAR,
+        )
+        .order_by('-registrada_em')
+        .values('registrada_em')[:1]
+    )
+    respondeu = EventoAuditoria.objects.filter(
+        oportunidade=OuterRef('pk'),
+        tipo='complementacao_enviada',
+        ocorrido_em__gt=Subquery(ultima_revisao),
+    )
+
+    minha = Q(responsavel__isnull=True) | Q(responsavel__usuario=usuario)
+    vez_dele = Q(
+        situacao__in=[
+            SituacaoOportunidade.ENTRADA,
+            SituacaoOportunidade.AGUARDANDO_DECISAO,
+        ]
+    ) | (Q(situacao=SituacaoOportunidade.REVISAR) & Q(Exists(respondeu)))
+
+    return Case(
+        When(minha & vez_dele, then=Value(True)),
+        default=Value(False),
+        output_field=BooleanField(),
+    )
+
+
+def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
+    """
+    O escopo do ator, pronto para a tela de acompanhamento ler.
+
+    Separado de `escopo_de` de proposito. `escopo_de` e o portao de seguranca,
+    e tem um segundo consumidor que agrega sobre ele (`indicadores_de`, via
+    `pk__in`): carregar `total_anexos` e `decisoes` ali poria um `GROUP BY` e um
+    lote de decisoes dentro de uma subconsulta que so quer `pk`.
+
+    O que esta aqui e o custo de leitura da fila. Sem isto o serializer
+    resolvia `total_anexos` e `ultima_decisao` um registro por vez: o front
+    pede `page_size=100`, e eram 200 consultas numa tela - cada uma um RTT
+    quando o banco nao esta na mesma maquina. Ver
+    `core/tests/test_orcamento_de_queries.py`.
+
+    O `distinct=True` na contagem nao e enfeite: o escopo do Pesquisador chega
+    aqui com juncao por equipe, e sem ele cada anexo seria contado uma vez por
+    indicacao.
+
+    O `order_by` explicito tambem nao. A contagem poe um `GROUP BY` na
+    consulta, e com `GROUP BY` o Django deixa de aplicar o `Meta.ordering` da
+    Oportunidade: o SQL sai **sem `ORDER BY`**, sem aviso. Sem ordem total o
+    `LIMIT/OFFSET` da paginacao escolhe linha diferente a cada pagina, e a
+    pagina 2 repete ou pula o que a 1 mostrou. O `codigo` desempata porque e
+    unico - dois registros salvos no mesmo instante ficariam a merce do plano
+    de execucao.
+    """
+    return escopo_de(usuario).annotate(
+        total_anexos=Count('anexos', distinct=True),
+        aguarda_minha_atuacao=_aguarda_atuacao_de(usuario),
+    ).prefetch_related(
+        Prefetch('decisoes', queryset=Decisao.objects.select_related('responsavel'))
+    ).order_by('-atualizada_em', '-codigo')
+
+
+def historico_de(
+    oportunidade: Oportunidade, usuario: Usuario
+) -> QuerySet[EventoAuditoria]:
+    """
+    A trilha da oportunidade que cabe a cada ator ler (RF12 / PB69, PB70).
+
+    O Demandante nao ve as categorias internas: PB71 diz que ele acompanha o
+    andamento "sem acessar informacoes internas restritas (ex.: resultados de
+    matching, pre-analise detalhada)". O recorte e aqui, no servidor, e nao na
+    tela.
+
+    O evento entra pela FK ou pela referencia textual: a FK e opcional, e ha
+    evento registrado so com `entidade`/`entidade_id`.
+    """
+    eventos = EventoAuditoria.objects.filter(
+        Q(oportunidade=oportunidade)
+        | Q(entidade='oportunidade', entidade_id=oportunidade.codigo)
+    ).order_by('-ocorrido_em')
+
+    if usuario.papel == Papel.DEMANDANTE:
+        return eventos.filter(categoria__in=CATEGORIAS_VISIVEIS_AO_DEMANDANTE)
+
+    return eventos
 
 
 class CadastrarOportunidadeService:
@@ -224,17 +341,115 @@ class RegistrarDecisaoService:
             )
 
     def _contas_do_demandante(self, oportunidade: Oportunidade) -> QuerySet[Usuario]:
-        if oportunidade.demandante_id is None:
-            return Usuario.objects.none()
+        return _contas_do_demandante_de(oportunidade)
 
-        return Usuario.objects.filter(
-            organizacao_id=oportunidade.demandante_id, papel=Papel.DEMANDANTE
+
+TIPO_COMPLEMENTO_SOLICITADO = 'complemento_solicitado'
+TIPO_COMPLEMENTACAO_ENVIADA = 'complementacao_enviada'
+
+
+def ha_pedido_de_complemento_aberto(oportunidade: Oportunidade) -> bool:
+    """
+    Se existe pedido da PB26 ainda sem resposta.
+
+    O estado sai da **trilha**, e nao de coluna nova: ela e append-only, ja e a
+    fonte do Historico e `RegistrarObservacaoService` abriu o precedente de
+    guardar fato de fluxo nela. Uma coluna aqui seria migration - portao de
+    decisao (AGENTS.md 3.2) - para derivar o que os dois eventos ja dizem.
+
+    Aberto = o ultimo dos dois eventos e o pedido. Se a resposta vier depois, o
+    pedido esta fechado; se o Supervisor pedir de novo, reabre.
+    """
+    from apps.audit.models import EventoAuditoria
+
+    ultimo = (
+        EventoAuditoria.objects
+        .filter(
+            entidade='oportunidade',
+            entidade_id=oportunidade.codigo,
+            tipo__in=(TIPO_COMPLEMENTO_SOLICITADO, TIPO_COMPLEMENTACAO_ENVIADA),
         )
+        .order_by('-ocorrido_em', '-id_evento')
+        .values_list('tipo', flat=True)
+        .first()
+    )
+
+    return ultimo == TIPO_COMPLEMENTO_SOLICITADO
+
+
+class SolicitarComplementoService:
+    """
+    O pedido de informacao complementar ao Demandante (PB26).
+
+    Separado da decisao `Revisar` (PB64) de proposito. Decidir registra um
+    desfecho (RN-A07) e move a situacao; **perguntar nao e nenhum dos dois**.
+    Enquanto o pedido saia de carona na decisao, tirar uma duvida obrigava o
+    Supervisor a encerrar a avaliacao, e a trilha enchia de decisoes que nao
+    decidiram nada.
+
+    Por isso aqui a situacao fica onde esta: quem move o fluxo e a Decisao. O
+    que este servico deixa e um pedido aberto na trilha, que e o que destrava a
+    resposta da PB27.
+    """
+
+    @transaction.atomic
+    def execute(
+        self, *, oportunidade: Oportunidade, mensagem: str, ator: Usuario
+    ) -> dict[str, Any]:
+        contas = _contas_do_demandante_de(oportunidade)
+
+        if not contas.exists():
+            raise ConflitoDeEstado(
+                'Esta oportunidade nao tem Demandante Externo a quem pedir '
+                'complementacao.',
+                codigo='sem_demandante',
+            )
+
+        evento = registrar_evento(
+            categoria=CategoriaEvento.OPORTUNIDADE,
+            tipo=TIPO_COMPLEMENTO_SOLICITADO,
+            entidade='oportunidade',
+            entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
+            ator=ator.email,
+            detalhe={'mensagem': mensagem, 'autor_nome': ator.nome},
+        )
+
+        for conta in contas:
+            notificar(
+                usuario=conta,
+                tipo='oportunidade.complementacao_solicitada',
+                titulo=f'{oportunidade.codigo} precisa de complementacao',
+                mensagem=mensagem,
+                entidade='oportunidade',
+                entidade_id=oportunidade.codigo,
+            )
+
+        return {
+            'ocorrido_em': evento.ocorrido_em,
+            'mensagem': mensagem,
+            'autor_nome': ator.nome,
+        }
+
+
+def _contas_do_demandante_de(oportunidade: Oportunidade) -> QuerySet[Usuario]:
+    """As contas que respondem pela organizacao demandante da oportunidade."""
+    if oportunidade.demandante_id is None:
+        return Usuario.objects.none()
+
+    return Usuario.objects.filter(
+        organizacao_id=oportunidade.demandante_id, papel=Papel.DEMANDANTE
+    )
 
 
 class ComplementarOportunidadeService:
     """
-    Resposta do Demandante ao pedido de revisao (PB27).
+    Resposta do Demandante ao pedido de complementacao (PB27).
+
+    Dois caminhos abrem a resposta: a decisao `Revisar` (PB64), que devolve a
+    oportunidade inteira, e o pedido avulso da PB26, que so pergunta. Exigir
+    `REVISAR` aqui deixava a PB26 sem resposta possivel - o pedido chegava ao
+    Demandante e o `complementar` o recusava com `sem_pedido_aberto`.
 
     Nao muda a situacao sozinha: quem reconduz o fluxo e o Supervisor. A
     maquina de estados completa e P13.
@@ -249,7 +464,9 @@ class ComplementarOportunidadeService:
     def execute(
         self, *, oportunidade: Oportunidade, texto: str, ator: Usuario
     ) -> Oportunidade:
-        if oportunidade.situacao != SituacaoOportunidade.REVISAR:
+        em_revisao = oportunidade.situacao == SituacaoOportunidade.REVISAR
+
+        if not em_revisao and not ha_pedido_de_complemento_aberto(oportunidade):
             raise ConflitoDeEstado(
                 'Nao ha pedido de complementacao em aberto nesta oportunidade.',
                 codigo='sem_pedido_aberto',
@@ -271,6 +488,38 @@ class ComplementarOportunidadeService:
         )
 
         return oportunidade
+
+
+class RegistrarObservacaoService:
+    """
+    Nota do Supervisor durante a avaliacao (PB65).
+
+    Nao e decisao e nao mexe na situacao: a Decisao fecha o fluxo e exige um
+    desfecho (RN-A07), enquanto a observacao documenta o raciocinio enquanto
+    ele acontece. Por isso ela nasce direto na trilha append-only, sem tabela
+    propria - PB65 pede exatamente que ela fique "vinculada a oportunidade e
+    visivel no historico", que e o que a trilha ja e.
+    """
+
+    @transaction.atomic
+    def execute(
+        self, *, oportunidade: Oportunidade, texto: str, ator: Usuario
+    ) -> dict[str, Any]:
+        evento = registrar_evento(
+            categoria=CategoriaEvento.OBSERVACAO,
+            tipo='observacao_registrada',
+            entidade='oportunidade',
+            entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
+            ator=ator.email,
+            detalhe={'texto': texto, 'autor_nome': ator.nome},
+        )
+
+        return {
+            'ocorrido_em': evento.ocorrido_em,
+            'texto': texto,
+            'autor_nome': ator.nome,
+        }
 
 
 class AnexarDocumentoService:

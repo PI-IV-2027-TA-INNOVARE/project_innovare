@@ -16,12 +16,18 @@ Supervisor.
 | Linguagem | Python 3.10+ |
 | Framework | Django 5.2 · Django REST Framework 3.17 |
 | Auth | SimpleJWT (`/api/auth/token/`) |
-| Banco | PostgreSQL 14+ (pgvector chega com o matching, Fase 3.3) |
+| Banco | PostgreSQL 14+ (sem extensão: o embedding do matching fica em coluna `float[]` — plano §8.3) |
 | Docs | drf-spectacular · Swagger em `/api/docs/` |
 
-Nenhuma dependência nova em relação ao backend legado — `requirements.txt` é um
-subconjunto do que já estava em uso. Acrescentar uma linha ali é portão de
-decisão (`AGENTS.md` §3.2).
+O driver do Postgres é o **psycopg 3** (`psycopg[binary,pool]`), que traz o pool
+de conexões nativo do Django 5.2 — ver [Pool de conexões](#pool-de-conexões).
+Acrescentar uma linha no `requirements.txt` é portão de decisão (`AGENTS.md`
+§3.2).
+
+**Já tinha o projeto rodando?** Com o venv ativo, rode uma vez
+`pip install -r requirements.txt`: só os pacotes que mudaram são baixados. O
+`psycopg2-binary` antigo pode ficar instalado — o Django prefere o psycopg 3
+quando os dois existem —, ou saia com `pip uninstall psycopg2-binary`.
 
 ---
 
@@ -55,6 +61,25 @@ Mandato `AGENTS.md` §0.1: mantenha `DB_HOST` local.
 O `settings.py` tem uma trava que troca para SQLite em memória se detectar
 execução de teste com `DB_HOST` remoto — mas ela é a última linha de defesa, não
 a primeira.
+
+Para manter o `.env` do Neon intacto e desenvolver contra o banco local, use um
+segundo arquivo — `.env.*` também fica fora do git — e aponte para ele:
+
+```bash
+cp .env .env.local              # troque o bloco DB_* para o Postgres local,
+                                # AMBIENTE=local e DB_SSLMODE=prefer
+PDCONNECT_ENV_FILE=.env.local python manage.py runserver
+```
+
+No PowerShell: `$env:PDCONNECT_ENV_FILE='.env.local'; python manage.py runserver`.
+
+### Pool de conexões
+
+Ligado por padrão (`DB_POOL`). O `runserver` abre uma thread por requisição, e a
+conexão do Django é por thread: sem pool, **toda** requisição reabre a conexão
+— contra o Neon, que fica nos EUA, mais de um segundo de TCP, TLS e autenticação
+antes da primeira query. Com o pool, a conexão é aberta uma vez por processo e
+emprestada às threads. A suíte nunca usa pool.
 
 ### Neon (ambiente compartilhado)
 

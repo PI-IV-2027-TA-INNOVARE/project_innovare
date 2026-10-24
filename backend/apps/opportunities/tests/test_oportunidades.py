@@ -7,6 +7,8 @@ Nenhum toca banco remoto, SMTP real, provedor de IA ou disco de producao
 """
 import shutil
 import tempfile
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -22,6 +24,7 @@ from apps.matching.models import EquipePotencial, MembroEquipe
 from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
 from apps.notifications.models import Notificacao
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services import historico_de
 from apps.organizations.models import Organizacao, TipoOrganizacao
 
 SENHA = 'Bioinsumo!2026'
@@ -73,13 +76,11 @@ class OportunidadeBaseTests(TestCase):
         )
 
         self.membro_supervisor = MembroRede.objects.create(
-            usuario=self.supervisor, nome='Rafael Antunes',
-            email=self.supervisor.email, papel_rede=PapelNaRede.SUPERVISOR,
+            usuario=self.supervisor, papel_rede=PapelNaRede.SUPERVISOR,
             situacao=SituacaoMembro.ATIVO,
         )
         self.membro_pesquisador = MembroRede.objects.create(
-            usuario=self.pesquisador, nome='Maria Ferreira',
-            email=self.pesquisador.email, papel_rede=PapelNaRede.PESQUISADOR,
+            usuario=self.pesquisador, papel_rede=PapelNaRede.PESQUISADOR,
             situacao=SituacaoMembro.ATIVO,
         )
 
@@ -270,6 +271,139 @@ class EscopoDeLeituraTests(OportunidadeBaseTests):
         )
         self.assertEqual(por_origem.data['count'], 1)
         self.assertEqual(por_origem.data['results'][0]['codigo'], self.codigo_interna)
+
+
+class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
+    """
+    PB61: a fila mostra "as oportunidades que aguardam sua atuacao". Sem campo
+    de prioridade (decisao do PO), o que da para dizer com o que existe e
+    onde a vez e do Supervisor: a oportunidade que ninguem comecou, a que
+    espera a decisao e a que voltou de Revisar com a resposta do Demandante.
+    So conta a que ele conduz ou que ainda nao tem responsavel.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo = self.criar_externo().data['codigo']
+        self.como(self.supervisor)
+
+    def marca(self, codigo=None):
+        resposta = self.client.get(reverse('oportunidade-list'))
+        linha = next(
+            item for item in resposta.data['results']
+            if item['codigo'] == (codigo or self.codigo)
+        )
+        return linha['aguarda_minha_atuacao']
+
+    def mudar(self, **campos):
+        Oportunidade.objects.filter(codigo=self.codigo).update(**campos)
+
+    def test_oportunidade_que_ninguem_comecou_aguarda(self):
+        self.assertTrue(self.marca())
+
+    def test_em_andamento_nao_aguarda(self):
+        self.mudar(situacao=SituacaoOportunidade.MATCHING)
+
+        self.assertFalse(self.marca())
+
+    def test_aguardando_decisao_aguarda(self):
+        self.mudar(situacao=SituacaoOportunidade.AGUARDANDO_DECISAO)
+
+        self.assertTrue(self.marca())
+
+    def test_revisar_so_aguarda_depois_da_resposta_do_demandante(self):
+        self.client.post(
+            reverse('oportunidade-decisao', args=[self.codigo]),
+            {'tipo': TipoDecisao.REVISAR, 'justificativa': 'Falta descrever o processo.'},
+            format='json',
+        )
+        self.assertFalse(self.marca())
+
+        self.como(self.demandante)
+        resposta = self.client.post(
+            reverse('oportunidade-complementar', args=[self.codigo]),
+            {'texto': 'O processo e a pasteurizacao HTST.'},
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK, resposta.data)
+        self.como(self.supervisor)
+
+        self.assertTrue(self.marca())
+
+    def test_conduzida_por_outro_supervisor_nao_e_minha(self):
+        outro = Usuario.objects.create_user(
+            email='outro@ac2microbiologia.com.br', nome='Outra Supervisora',
+            papel=Papel.SUPERVISOR, password=SENHA,
+        )
+        membro = MembroRede.objects.create(
+            usuario=outro,
+            papel_rede=PapelNaRede.SUPERVISOR, situacao=SituacaoMembro.ATIVO,
+        )
+        self.mudar(responsavel=membro)
+
+        self.assertFalse(self.marca())
+
+    def test_conduzida_por_mim_aguarda(self):
+        self.mudar(responsavel=self.membro_supervisor)
+
+        self.assertTrue(self.marca())
+
+    def test_para_quem_nao_e_supervisor_a_marca_e_sempre_falsa(self):
+        self.como(self.demandante)
+
+        self.assertFalse(self.marca())
+
+
+class FiltroPorDataTests(OportunidadeBaseTests):
+    """
+    PB28: filtros por "status, origem, data". A data e a do cadastro, o dia
+    em que a oportunidade entrou no fluxo; os dois limites sao inclusivos.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo_vale = self.criar_externo().data['codigo']
+        self.codigo_terra = self.criar_externo(titulo='Nitrito em embutidos').data['codigo']
+        self.codigo_interna = self.criar_externo(titulo='Biofilme em trocador').data['codigo']
+        datas = {
+            self.codigo_vale: datetime(2026, 9, 1, 10, tzinfo=dt_timezone.utc),
+            self.codigo_terra: datetime(2026, 9, 15, 10, tzinfo=dt_timezone.utc),
+            self.codigo_interna: datetime(2026, 10, 1, 10, tzinfo=dt_timezone.utc),
+        }
+        for codigo, quando in datas.items():
+            Oportunidade.objects.filter(codigo=codigo).update(criada_em=quando)
+
+        self.como(self.supervisor)
+
+    def codigos(self, **parametros):
+        resposta = self.client.get(reverse('oportunidade-list'), parametros)
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        return {item['codigo'] for item in resposta.data['results']}
+
+    def test_cadastrada_de_e_inclusivo(self):
+        self.assertEqual(
+            self.codigos(cadastrada_de='2026-09-15'),
+            {self.codigo_terra, self.codigo_interna},
+        )
+
+    def test_cadastrada_ate_e_inclusivo(self):
+        self.assertEqual(
+            self.codigos(cadastrada_ate='2026-09-15'),
+            {self.codigo_vale, self.codigo_terra},
+        )
+
+    def test_os_dois_limites_juntos_fazem_um_intervalo(self):
+        self.assertEqual(
+            self.codigos(cadastrada_de='2026-09-02', cadastrada_ate='2026-09-30'),
+            {self.codigo_terra},
+        )
+
+    def test_data_malformada_e_recusada_em_vez_de_ignorada(self):
+        resposta = self.client.get(
+            reverse('oportunidade-list'), {'cadastrada_de': '15/09/2026'}
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class DecisaoTests(OportunidadeBaseTests):
@@ -522,6 +656,29 @@ class HistoricoTests(OportunidadeBaseTests):
         self.assertIn('oportunidade', categorias)
         self.assertNotIn('matching', categorias)
 
+    def test_o_recorte_do_demandante_mora_no_service(self):
+        """
+        PB71 e regra de negocio, e regra nao mora na view (AGENTS.md 1): quem
+        decide o que cada ator le da trilha e `historico_de`.
+        """
+        registrar_evento(
+            categoria='matching', tipo='matching_executado',
+            entidade='oportunidade', entidade_id=self.codigo,
+        )
+        oportunidade = Oportunidade.objects.get(codigo=self.codigo)
+
+        do_demandante = historico_de(oportunidade, self.demandante)
+        do_supervisor = historico_de(oportunidade, self.supervisor)
+
+        self.assertNotIn('matching', {e.categoria for e in do_demandante})
+        self.assertIn('matching', {e.categoria for e in do_supervisor})
+
+    def test_a_trilha_vem_da_mais_recente_para_a_mais_antiga(self):
+        oportunidade = Oportunidade.objects.get(codigo=self.codigo)
+        momentos = [e.ocorrido_em for e in historico_de(oportunidade, self.supervisor)]
+
+        self.assertEqual(momentos, sorted(momentos, reverse=True))
+
 
 class UltimaDecisaoNaLeituraTests(OportunidadeBaseTests):
     """
@@ -576,3 +733,227 @@ class UltimaDecisaoNaLeituraTests(OportunidadeBaseTests):
 
         self.assertEqual(decisao['tipo'], 'arquivar')
         self.assertEqual(decisao['justificativa'], '')
+
+
+class ObservacaoTests(OportunidadeBaseTests):
+    """
+    PB65 - observacao registrada durante a avaliacao.
+
+    Nao e decisao: a Decisao fecha o fluxo e exige desfecho, a observacao so
+    documenta o raciocinio enquanto ele acontece.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo = self.criar_externo().data['codigo']
+
+    def url(self):
+        return reverse('oportunidade-observacoes', args=[self.codigo])
+
+    def registrar(self, texto='Laudo do lote de verao confirma a contaminacao.'):
+        return self.client.post(self.url(), {'texto': texto}, format='json')
+
+    def test_supervisor_registra_observacao_e_ela_entra_na_trilha(self):
+        self.como(self.supervisor)
+        resposta = self.registrar()
+
+        self.assertEqual(resposta.status_code, status.HTTP_201_CREATED)
+
+        evento = EventoAuditoria.objects.get(
+            entidade_id=self.codigo, tipo='observacao_registrada'
+        )
+        self.assertEqual(
+            evento.detalhe['texto'],
+            'Laudo do lote de verao confirma a contaminacao.',
+        )
+        self.assertEqual(evento.ator, self.supervisor.email)
+
+    def test_observacao_aparece_no_historico_com_o_texto(self):
+        self.como(self.supervisor)
+        self.registrar()
+
+        evento = next(
+            e for e in self.client.get(
+                reverse('oportunidade-historico', args=[self.codigo])
+            ).data
+            if e['tipo'] == 'observacao_registrada'
+        )
+        self.assertEqual(evento['categoria'], 'observacao')
+        self.assertIn('contaminacao', evento['detalhe']['texto'])
+
+    def test_so_o_supervisor_registra_observacao(self):
+        for usuario in (self.demandante, self.pesquisador, self.administrador):
+            with self.subTest(papel=usuario.papel):
+                self.como(usuario)
+                self.assertEqual(
+                    self.registrar().status_code, status.HTTP_403_FORBIDDEN
+                )
+
+    def test_texto_curto_demais_e_recusado(self):
+        self.como(self.supervisor)
+        self.assertEqual(
+            self.registrar(texto='ok').status_code, status.HTTP_400_BAD_REQUEST
+        )
+
+    def test_observacao_nao_muda_a_situacao_da_oportunidade(self):
+        self.como(self.supervisor)
+        antes = Oportunidade.objects.get(codigo=self.codigo).situacao
+        self.registrar()
+
+        self.assertEqual(
+            Oportunidade.objects.get(codigo=self.codigo).situacao, antes
+        )
+        self.assertFalse(Decisao.objects.filter(
+            oportunidade__codigo=self.codigo).exists())
+
+    def test_demandante_nao_ve_a_observacao_interna(self):
+        self.como(self.supervisor)
+        self.registrar()
+
+        self.como(self.demandante)
+        tipos = {
+            e['tipo'] for e in self.client.get(
+                reverse('oportunidade-historico', args=[self.codigo])
+            ).data
+        }
+        self.assertNotIn('observacao_registrada', tipos)
+
+
+class SolicitacaoDeComplementoTests(OportunidadeBaseTests):
+    """
+    PB26: o Supervisor pede informacao ao Demandante sem decidir nada.
+
+    A PB64 ja devolvia a oportunidade com "Revisar", e o pedido saia de carona
+    nessa decisao. Mas decidir e registrar um desfecho (RN-A07) e mover a
+    situacao; perguntar nao e nenhum dos dois. Colapsar os dois obrigava o
+    Supervisor a encerrar a avaliacao para tirar uma duvida, e enchia a trilha
+    de decisoes que nao decidiram.
+
+    O pedido aberto vive na **trilha**, nao em coluna nova: a trilha e
+    append-only e ja e a fonte do historico, e `RegistrarObservacaoService` abriu
+    esse precedente. Assim a PB26 entra sem migration - e portao de decisao
+    (AGENTS.md 3.2) que este item nao precisa atravessar.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.codigo = self.criar_externo().data['codigo']
+        self.oportunidade = Oportunidade.objects.get(codigo=self.codigo)
+        self.oportunidade.responsavel = self.membro_supervisor
+        self.oportunidade.save(update_fields=['responsavel'])
+
+    def url(self):
+        return reverse('oportunidade-solicitar-complemento', args=[self.codigo])
+
+    def solicitar(self, mensagem='Faltam os laudos microbiologicos do lote.'):
+        return self.client.post(self.url(), {'mensagem': mensagem}, format='json')
+
+    def test_supervisor_solicita_e_a_situacao_nao_se_move(self):
+        self.como(self.supervisor)
+        situacao_antes = self.oportunidade.situacao
+
+        resposta = self.solicitar()
+
+        self.oportunidade.refresh_from_db()
+        self.assertEqual(resposta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self.oportunidade.situacao, situacao_antes)
+
+    def test_solicitar_nao_registra_decisao(self):
+        self.como(self.supervisor)
+
+        self.solicitar()
+
+        self.assertFalse(
+            Decisao.objects.filter(oportunidade=self.oportunidade).exists()
+        )
+
+    def test_o_pedido_notifica_o_demandante_com_o_que_falta(self):
+        self.como(self.supervisor)
+
+        self.solicitar('Faltam os laudos microbiologicos do lote.')
+
+        aviso = Notificacao.objects.get(usuario=self.demandante)
+        self.assertEqual(aviso.tipo, 'oportunidade.complementacao_solicitada')
+        self.assertIn('laudos microbiologicos', aviso.mensagem)
+
+    def test_o_pedido_fica_na_trilha(self):
+        self.como(self.supervisor)
+
+        self.solicitar()
+
+        self.assertTrue(
+            EventoAuditoria.objects.filter(
+                entidade='oportunidade',
+                entidade_id=self.codigo,
+                tipo='complemento_solicitado',
+            ).exists()
+        )
+
+    def test_demandante_responde_ao_pedido_sem_passar_por_revisar(self):
+        self.como(self.supervisor)
+        self.solicitar()
+
+        self.como(self.demandante)
+        resposta = self.client.post(
+            reverse('oportunidade-complementar', args=[self.codigo]),
+            {'texto': 'Laudos emitidos em 12/09.'},
+            format='json',
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertIn('Laudos emitidos', resposta.data['contexto'])
+
+    def test_respondido_o_pedido_fecha_e_nao_aceita_segunda_resposta(self):
+        self.como(self.supervisor)
+        self.solicitar()
+
+        self.como(self.demandante)
+        complementar = reverse('oportunidade-complementar', args=[self.codigo])
+        self.client.post(complementar, {'texto': 'Primeira resposta.'}, format='json')
+
+        segunda = self.client.post(
+            complementar, {'texto': 'Segunda sem ninguem pedir.'}, format='json'
+        )
+
+        self.assertEqual(segunda.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(segunda.data['codigo'], 'sem_pedido_aberto')
+
+    def test_mensagem_vazia_e_recusada(self):
+        self.como(self.supervisor)
+
+        resposta = self.client.post(self.url(), {'mensagem': '   '}, format='json')
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Notificacao.objects.filter(usuario=self.demandante).exists())
+
+    def test_ideia_interna_nao_tem_a_quem_pedir(self):
+        self.como(self.supervisor)
+        interna = self.client.post(
+            reverse('oportunidade-list'),
+            {'titulo': 'Ensaio de bioinsumo', 'resumo': 'Ideia do Nucleo.'},
+            format='json',
+        ).data['codigo']
+
+        resposta = self.client.post(
+            reverse('oportunidade-solicitar-complemento', args=[interna]),
+            {'mensagem': 'Faltam dados.'},
+            format='json',
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(resposta.data['codigo'], 'sem_demandante')
+
+    def test_demandante_nao_solicita_a_si_mesmo(self):
+        self.como(self.demandante)
+
+        self.assertEqual(self.solicitar().status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_pesquisador_nao_solicita(self):
+        self.como(self.pesquisador)
+
+        self.assertEqual(self.solicitar().status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_anonimo_nao_solicita(self):
+        self.como(None)
+
+        self.assertEqual(self.solicitar().status_code, status.HTTP_401_UNAUTHORIZED)

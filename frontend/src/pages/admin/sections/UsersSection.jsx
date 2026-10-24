@@ -215,20 +215,24 @@ export default function UsersSection() {
     }
   }
 
-  return (
-    <div className="admin-section">
-      <header className="admin-section__header">
-        <div className="admin-section__heading">
-          <h2 className="admin-section__title">Usuários</h2>
-          <p className="admin-section__subtitle">
-            Contas, perfis e acessos da plataforma. O Administrador gerencia o
-            acesso; as atribuições científicas e decisórias permanecem com o
-            Supervisor.
-          </p>
-        </div>
-      </header>
+  const cabecalho = (
+    <header className="admin-section__header">
+      <div className="admin-section__heading">
+        <h2 className="admin-section__title">Usuários</h2>
+        <p className="admin-section__subtitle">
+          Contas, perfis e acessos da plataforma. O Administrador gerencia o
+          acesso; as atribuições científicas e decisórias permanecem com o
+          Supervisor.
+        </p>
+      </div>
+    </header>
+  )
 
-      {erroCarga ? (
+  if (erroCarga) {
+    return (
+      <div className="admin-section">
+        {cabecalho}
+
         <div className="admin-callout" role="alert">
           <Icone icon={appIcons.info} className="admin-callout__icon" />
           <p className="admin-callout__text">{erroCarga}</p>
@@ -236,7 +240,13 @@ export default function UsersSection() {
             Tentar de novo
           </button>
         </div>
-      ) : null}
+      </div>
+    )
+  }
+
+  return (
+    <div className="admin-section">
+      {cabecalho}
 
       <div className="stat-grid">
         <article className="stat-card">

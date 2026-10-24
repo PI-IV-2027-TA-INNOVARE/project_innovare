@@ -1,11 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import AbaAnexos from './AbaAnexos'
+import AnexosOportunidade from './AnexosOportunidade'
 
 const api = vi.hoisted(() => ({ listarAnexos: null, enviarAnexo: null }))
 
-vi.mock('../../../../services/pdConnectApi', () => ({
+vi.mock('../services/pdConnectApi', () => ({
   listarAnexos: (...args) => api.listarAnexos(...args),
   enviarAnexo: (...args) => api.enviarAnexo(...args),
 }))
@@ -26,7 +26,7 @@ function arquivo(nome = 'novo-laudo.pdf', bytes = 1024) {
 }
 
 function renderizar(props = {}) {
-  return render(<AbaAnexos codigo="OP-2026-001" podeEnviar {...props} />)
+  return render(<AnexosOportunidade codigo="OP-2026-001" podeEnviar {...props} />)
 }
 
 beforeEach(() => {
@@ -34,7 +34,7 @@ beforeEach(() => {
   api.enviarAnexo = vi.fn().mockResolvedValue({ ...LAUDO, id_anexo: 2 })
 })
 
-describe('AbaAnexos — leitura', () => {
+describe('AnexosOportunidade — leitura', () => {
   it('lista os documentos da oportunidade vindos da API', async () => {
     renderizar()
 
@@ -66,7 +66,7 @@ describe('AbaAnexos — leitura', () => {
   })
 })
 
-describe('AbaAnexos — envio', () => {
+describe('AnexosOportunidade — envio', () => {
   it('manda o arquivo escolhido e recarrega a lista', async () => {
     const user = userEvent.setup({ delay: null })
     renderizar()

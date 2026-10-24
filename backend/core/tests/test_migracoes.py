@@ -11,7 +11,7 @@ teste que o proprio Django cria e destroi.
 from django.apps import apps as registro_de_apps
 from django.test import TestCase
 
-from apps.copilot.models import Lacuna, TipoLacuna
+from apps.copilot.models import Lacuna, PropostaEstruturada, TipoLacuna
 from apps.matching.models import EquipePotencial
 from apps.opportunities.models import Oportunidade, OrigemOportunidade
 from core.migracoes import MigrationExigeTabelaVazia, exigir_tabela_vazia
@@ -29,6 +29,9 @@ class GuardaDeTabelaVaziaTests(TestCase):
             origem=OrigemOportunidade.INTERNA,
             resumo='Resumo.',
             contexto='Contexto.',
+        )
+        self.proposta = PropostaEstruturada.objects.create(
+            oportunidade=self.oportunidade
         )
 
     def test_tabela_vazia_deixa_passar(self):
@@ -65,7 +68,7 @@ class GuardaDeTabelaVaziaTests(TestCase):
 
     def test_filtro_olha_so_o_recorte_que_atrapalha(self):
         Lacuna.objects.create(
-            oportunidade=self.oportunidade,
+            proposta=self.proposta,
             tipo=TipoLacuna.PROPOSTA,
             descricao='Falta a metodologia.',
         )
@@ -77,15 +80,15 @@ class GuardaDeTabelaVaziaTests(TestCase):
 
     def test_filtro_barra_quando_o_recorte_tem_linha(self):
         Lacuna.objects.create(
-            oportunidade=self.oportunidade,
-            tipo='competencia',
+            proposta=self.proposta,
+            tipo=TipoLacuna.PRE_ANALISE,
             descricao='Nenhum membro cobre microbiologia de alimentos.',
         )
         guarda = exigir_tabela_vazia(
-            'copilot', 'Lacuna', 'converte', filtro={'tipo': 'competencia'}
+            'copilot', 'Lacuna', 'converte', filtro={'tipo': 'pre_analise'}
         )
 
         with self.assertRaises(MigrationExigeTabelaVazia) as erro:
             rodar(guarda)
 
-        self.assertIn("{'tipo': 'competencia'}", str(erro.exception))
+        self.assertIn("{'tipo': 'pre_analise'}", str(erro.exception))

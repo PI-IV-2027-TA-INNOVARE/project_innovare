@@ -11,15 +11,50 @@ from pathlib import Path
 
 from decouple import Config, RepositoryEnv, config as env_config
 
-from core.configuracao import chave_de_assinatura
+from core.configuracao import (
+    AMBIENTE_PRODUCAO,
+    ambiente_declarado,
+    ambiente_incoerente,
+    chave_de_assinatura,
+    pool_de_conexoes,
+    seguranca_de_transporte,
+    vida_da_conexao,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 _ENV_FILE = Path(os.environ.get('PDCONNECT_ENV_FILE', BASE_DIR / '.env'))
 config = Config(RepositoryEnv(str(_ENV_FILE))) if _ENV_FILE.exists() else env_config
 
+RUNNING_TESTS = (
+    'test' in sys.argv
+    or 'pytest' in sys.modules
+    or os.environ.get('PYTEST_CURRENT_TEST') is not None
+)
+
+AMBIENTE = ambiente_declarado(config('AMBIENTE', default=''))
+EM_PRODUCAO = AMBIENTE == AMBIENTE_PRODUCAO
+
 DEBUG = config('DEBUG', default=False, cast=bool)
 SECRET_KEY = chave_de_assinatura(config('SECRET_KEY', default=''), DEBUG)
+
+if ambiente_incoerente(AMBIENTE, DEBUG) and not RUNNING_TESTS:
+    sys.stderr.write(
+        '[seguranca] AMBIENTE=producao com DEBUG=True. Este host trata o banco '
+        'como de producao e ao mesmo tempo pode devolver traceback e settings '
+        'na resposta de erro. O endurecimento de HTTPS fica desarmado aqui '
+        '(senao o runserver devolveria 301 para um https que nao existe, e o '
+        'navegador cacheia esse 301). Em deploy: DEBUG=False.\n'
+    )
+
+globals().update(seguranca_de_transporte(AMBIENTE, DEBUG, RUNNING_TESTS))
+"""
+Endurecimento de transporte (HTTPS, cookie seguro, HSTS, nosniff, anti-frame).
+
+Vem de `core/configuracao.py` em vez de uma lista aqui porque e regra de
+seguranca, e regra de seguranca sem teste e regra que ninguem percebe quando
+quebra - o mesmo motivo que tirou a chave de assinatura deste arquivo.
+"""
 ALLOWED_HOSTS = [
     h.strip()
     for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
@@ -64,6 +99,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'core.middleware.MedidorDeDesempenho',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -102,6 +138,10 @@ CORS_ALLOWED_ORIGINS = [
 
 DB_HOST = config('DB_HOST', default='localhost')
 
+POOL_DO_BANCO = pool_de_conexoes(
+    config('DB_POOL', default=None), rodando_testes=RUNNING_TESTS
+)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -110,20 +150,25 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD', default=''),
         'HOST': DB_HOST,
         'PORT': config('DB_PORT', default='5432'),
+        'CONN_MAX_AGE': vida_da_conexao(
+            AMBIENTE,
+            config('DB_CONN_MAX_AGE', default=None),
+            rodando_testes=RUNNING_TESTS,
+            com_pool=POOL_DO_BANCO is not None,
+        ),
+        'CONN_HEALTH_CHECKS': True,
+        'DISABLE_SERVER_SIDE_CURSORS': True,
         'OPTIONS': {
             'connect_timeout': 10,
-            'sslmode': config('DB_SSLMODE', default='prefer'),
+            'sslmode': config(
+                'DB_SSLMODE', default='require' if EM_PRODUCAO else 'prefer'
+            ),
+            **({'pool': POOL_DO_BANCO} if POOL_DO_BANCO else {}),
         },
     }
 }
 
 LOCAL_DB_HOSTS = {'localhost', '127.0.0.1', '::1', ''}
-
-RUNNING_TESTS = (
-    'test' in sys.argv
-    or 'pytest' in sys.modules
-    or os.environ.get('PYTEST_CURRENT_TEST') is not None
-)
 
 DB_HOST_IS_REMOTE = DB_HOST.strip().lower() not in LOCAL_DB_HOSTS
 
@@ -258,10 +303,50 @@ AI_MATCH_WEIGHT_LEXICAL = config('AI_MATCH_WEIGHT_LEXICAL', default=0.20, cast=f
 AI_MATCH_WEIGHT_AREA = config('AI_MATCH_WEIGHT_AREA', default=0.25, cast=float)
 AI_MATCH_WEIGHT_AVAILABILITY = config('AI_MATCH_WEIGHT_AVAILABILITY', default=0.10, cast=float)
 AI_MATCH_MIN_SCORE = config('AI_MATCH_MIN_SCORE', default=0.26, cast=float)
+AI_MATCH_PESO_DESEJAVEL = config('AI_MATCH_PESO_DESEJAVEL', default=0.5, cast=float)
+AI_MATCH_LIMITE_SUGESTOES = config('AI_MATCH_LIMITE_SUGESTOES', default=10, cast=int)
+AI_MATCH_COBERTURA_MINIMA = config('AI_MATCH_COBERTURA_MINIMA', default=0.2, cast=float)
+AI_MATCH_FATOR_DISPONIBILIDADE = {
+    'integral': config('AI_MATCH_DISP_INTEGRAL', default=1.0, cast=float),
+    'parcial': config('AI_MATCH_DISP_PARCIAL', default=0.6, cast=float),
+    'pontual': config('AI_MATCH_DISP_PONTUAL', default=0.3, cast=float),
+    'indisponivel': config('AI_MATCH_DISP_INDISPONIVEL', default=0.0, cast=float),
+}
 AI_MATCH_RERANK_ENABLED = config('AI_MATCH_RERANK_ENABLED', default=False, cast=bool)
 AI_MATCH_GEMINI_MODEL = config('AI_MATCH_GEMINI_MODEL', default='gemini-2.5-flash')
+AI_GEMINI_TEMPERATURA = config('AI_GEMINI_TEMPERATURA', default=0.3, cast=float)
+AI_GEMINI_MAX_TOKENS_SAIDA = config(
+    'AI_GEMINI_MAX_TOKENS_SAIDA', default=8192, cast=int
+)
+AI_GEMINI_TIMEOUT_S = config('AI_GEMINI_TIMEOUT_S', default=45, cast=float)
+AI_GEMINI_TENTATIVAS = config('AI_GEMINI_TENTATIVAS', default=2, cast=int)
+AI_GEMINI_ESPERA_INICIAL_S = config(
+    'AI_GEMINI_ESPERA_INICIAL_S', default=2.0, cast=float
+)
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 AI_CUSTO_TETO_MENSAL_BRL = config('AI_CUSTO_TETO_MENSAL_BRL', default=50.0, cast=float)
+AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL = config(
+    'AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL', default=0.0, cast=float
+)
+DESEMPENHO_LIMITE_MS = config('DESEMPENHO_LIMITE_MS', default=3000, cast=int)
+AI_CUSTO_ALERTA_PERCENTUAL = config(
+    'AI_CUSTO_ALERTA_PERCENTUAL', default=80, cast=int
+)
+AI_CUSTO_ENTRADA_BRL_POR_MILHAO = config(
+    'AI_CUSTO_ENTRADA_BRL_POR_MILHAO', default=0.0, cast=float
+)
+AI_CUSTO_SAIDA_BRL_POR_MILHAO = config(
+    'AI_CUSTO_SAIDA_BRL_POR_MILHAO', default=0.0, cast=float
+)
+
+BASE_CONHECIMENTO_PIPE = Path(
+    config(
+        'BASE_CONHECIMENTO_PIPE',
+        default=str(
+            BASE_DIR.parent / 'IA' / 'Colinha_IA_PIPE_Jornada_Fase1_PD_Connect_v2.json'
+        ),
+    )
+)
 
 if RUNNING_TESTS:
     GEMINI_API_KEY = ''

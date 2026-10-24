@@ -5,15 +5,19 @@ import { BrandingProvider } from '../../../context/BrandingContext'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import AppearanceSection from './AppearanceSection'
 
-const estado = vi.hoisted(() => ({ salvarTema: null }))
+const estado = vi.hoisted(() => ({ salvarTema: null, carregarTema: null }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
-  carregarTema: () => new Promise(() => {}),
+  carregarTema: (...args) => estado.carregarTema(...args),
   salvarTema: (...args) => estado.salvarTema(...args),
 }))
 
 beforeEach(() => {
   window.localStorage.clear()
+  document.documentElement.removeAttribute('style')
+  document.documentElement.removeAttribute('data-theme')
+
+  estado.carregarTema = vi.fn(() => new Promise(() => {}))
 
   estado.salvarTema = vi.fn().mockResolvedValue({
     secao: 'tema',
@@ -215,5 +219,203 @@ describe('AppearanceSection', () => {
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText.mock.calls[0][0]).toMatch(/^#[0-9a-f]{6}$/i)
     expect(await screen.findByRole('status')).toHaveTextContent(/copiado/i)
+  })
+})
+
+describe('AppearanceSection — cor invalida', () => {
+  it('marca o campo e nao deixa publicar o que nao e cor', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const cartao = cartaoDaCor('Laranja institucional')
+    const campo = within(cartao).getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, 'banana')
+
+    expect(campo).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeDisabled()
+  })
+
+  it('nomeia a cor recusada, para o admin saber qual consertar', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, 'banana')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/laranja institucional/i)
+  })
+
+  it('nao apaga a cor da tela enquanto o hex esta pela metade', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const anterior = document.documentElement.style.getPropertyValue('--accent-primary')
+    expect(anterior).not.toBe('')
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, '#1B5E')
+
+    expect(document.documentElement.style.getPropertyValue('--accent-primary'))
+      .toBe(anterior)
+  })
+
+  it('volta a permitir publicar quando a cor fica valida', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+    const salvar = screen.getByRole('button', { name: /salvar alterações/i })
+
+    await user.clear(campo)
+    await user.type(campo, 'banana')
+    expect(salvar).toBeDisabled()
+
+    await user.clear(campo)
+    await user.type(campo, '#1B5E20')
+
+    expect(campo).not.toHaveAttribute('aria-invalid', 'true')
+    expect(salvar).toBeEnabled()
+
+    await user.click(salvar)
+    expect(estado.salvarTema).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AppearanceSection — a paleta publicada vem do banco', () => {
+  it('pinta a tela com a paleta que a API devolveu, e nao com o padrao', async () => {
+    estado.carregarTema = vi.fn().mockResolvedValue({
+      secao: 'tema',
+      payload: { light: { accentPrimary: '#1B5E20' }, dark: {} },
+      revisao: 7,
+      atualizado_por_nome: 'Administração da plataforma',
+    })
+
+    renderAppearance()
+
+    expect(await screen.findByText(/revisão 7/i)).toBeInTheDocument()
+
+    expect(document.documentElement.style.getPropertyValue('--accent-primary'))
+      .toBe('#1B5E20')
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+    expect(campo).toHaveValue('#1B5E20')
+  })
+
+  it('credita quem publicou a revisao em vigor', async () => {
+    estado.carregarTema = vi.fn().mockResolvedValue({
+      secao: 'tema',
+      payload: { light: { accentPrimary: '#1B5E20' }, dark: {} },
+      revisao: 3,
+      atualizado_por_nome: 'Administração da plataforma',
+    })
+
+    renderAppearance()
+
+    expect(await screen.findByText(/última alteração por Administração da plataforma/i))
+      .toBeInTheDocument()
+  })
+
+  it('sem servidor, a tela abre na paleta padrao em vez de ficar sem cor', async () => {
+    estado.carregarTema = vi.fn().mockRejectedValue(new Error('Failed to fetch'))
+
+    renderAppearance()
+
+    await screen.findByText('12 cores · 0 alteradas')
+
+    expect(document.documentElement.style.getPropertyValue('--accent-primary'))
+      .toMatch(/^#[0-9a-f]{6}$/i)
+  })
+})
+
+describe('AppearanceSection — cada tema guarda a propria paleta', () => {
+  it('a cor escolhida no claro nao vaza para o escuro', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = () => within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo())
+    await user.type(campo(), '#1B5E20')
+    expect(campo()).toHaveValue('#1B5E20')
+
+    await user.click(screen.getByRole('button', { name: /tema: claro/i }))
+
+    expect(campo()).not.toHaveValue('#1B5E20')
+  })
+
+  it('publica os dois temas no mesmo patch quando os dois foram mexidos', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = () => within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo())
+    await user.type(campo(), '#1B5E20')
+
+    await user.click(screen.getByRole('button', { name: /tema: claro/i }))
+
+    await user.clear(campo())
+    await user.type(campo(), '#81C784')
+
+    await user.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    const patch = estado.salvarTema.mock.calls[0][0]
+
+    expect(patch.light.accentPrimary).toBe('#1B5E20')
+    expect(patch.dark.accentPrimary).toBe('#81C784')
+  })
+})
+
+describe('AppearanceSection — a recusa do servidor chega ao admin', () => {
+  it('mostra o motivo que a API devolveu e nao diz que publicou', async () => {
+    const user = userEvent.setup()
+
+    estado.salvarTema = vi.fn().mockRejectedValue(
+      new Error('Informe uma cor: hexadecimal como #1B5E20 ou #f80.')
+    )
+
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, '#123456')
+    await user.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/informe uma cor/i)
+    expect(screen.queryByText(/aparência publicada/i)).not.toBeInTheDocument()
+  })
+
+  it('o rascunho sobrevive a recusa, para o admin tentar de novo', async () => {
+    const user = userEvent.setup()
+
+    estado.salvarTema = vi.fn().mockRejectedValue(new Error('Falha de rede'))
+
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, '#123456')
+    await user.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await screen.findByRole('alert')
+
+    expect(campo).toHaveValue('#123456')
+    expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeEnabled()
   })
 })

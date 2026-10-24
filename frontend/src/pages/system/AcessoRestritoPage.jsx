@@ -1,16 +1,34 @@
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Icone, appIcons } from '../../lib/icons'
 import { roleLabel } from '../../lib/roles'
-import { lerContatos } from './contatosSuporte'
+import { lerContatosSuporte } from '../../services/pdConnectApi'
 import './SystemPages.scss'
 
 export default function AcessoRestritoPage() {
   const { user } = useAuth()
   const location = useLocation()
+  const [contatos, setContatos] = useState([])
+  const [falhou, setFalhou] = useState(false)
 
   const rotaTentada = location.state?.from
-  const contatos = lerContatos()
+
+  useEffect(() => {
+    let ativo = true
+
+    lerContatosSuporte()
+      .then((lista) => {
+        if (ativo) setContatos(lista)
+      })
+      .catch(() => {
+        if (ativo) setFalhou(true)
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [])
 
   return (
     <div className="system-page">
@@ -58,6 +76,12 @@ export default function AcessoRestritoPage() {
             </li>
           ))}
         </ul>
+
+        {falhou ? (
+          <p className="system-card__text" role="alert">
+            Não foi possível carregar os contatos agora. Tente novamente em instantes.
+          </p>
+        ) : null}
 
         <div className="system-card__acoes">
           <Link className="admin-btn" to="/painel">Voltar ao painel</Link>

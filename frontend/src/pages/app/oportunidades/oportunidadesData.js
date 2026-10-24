@@ -214,12 +214,15 @@ export function decisaoDaApi(ultima) {
 }
 
 export function eventoDaApi(evento, indice) {
+  const detalhe = evento.detalhe || {}
+
   return {
     id: `${evento.ocorrido_em}-${indice}`,
     em: Date.parse(evento.ocorrido_em),
     categoria: evento.categoria,
-    ator: evento.ator || 'Sistema',
+    ator: detalhe.autor_nome || evento.ator || 'Sistema',
     texto:
+      detalhe.texto ||
       TEXTO_DO_EVENTO[evento.tipo] ||
       String(evento.tipo || '').replace(/[._]/g, ' '),
   }
@@ -238,6 +241,7 @@ export function daApi(registro) {
     totalAnexos: registro.total_anexos || 0,
     criadaEm: Date.parse(registro.criada_em),
     atualizadaEm: Date.parse(registro.atualizada_em),
+    aguardaMinhaAtuacao: Boolean(registro.aguarda_minha_atuacao),
     decisao: decisaoDaApi(registro.ultima_decisao),
     competencias: [],
     equipe: [],

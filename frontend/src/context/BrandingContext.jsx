@@ -3,8 +3,10 @@ import { useTheme } from './ThemeContext'
 import { carregarTema, salvarTema } from '../services/pdConnectApi'
 import {
   BRAND_TOKEN_GROUPS,
+  BRAND_TOKENS,
   buildCssVariables,
   getDefaultBranding,
+  isValidColor,
 } from '../theme/brandTokens'
 
 const BrandingContext = createContext(null)
@@ -103,11 +105,41 @@ export function BrandingProvider({ children }) {
     [aplicados, theme]
   )
 
+  /**
+   * O que vai para a tela, que nao e o que o campo mostra.
+   *
+   * `branding` e a verdade do formulario: enquanto o admin digita `#1B5E20`, o
+   * campo precisa exibir `#`, `#1`, `#1B` - senao nao da para digitar. Pintar
+   * esses estados intermediarios apagaria a cor a cada tecla.
+   *
+   * Entao o token com valor invalido pinta com o **ultimo valor valido**: o que
+   * esta publicado, ou o padrao da AC2 se nada foi publicado. Nao basta omitir
+   * a variavel: sem ela o navegador cai no que a folha de estilo declara, que e
+   * o padrao da AC2 e nao a paleta publicada - a tela piscaria de volta para o
+   * laranja oficial em vez de ficar parada na cor que esta no ar.
+   */
+  const pintura = useMemo(() => {
+    const padrao = getDefaultBranding(theme)
+    const publicado = salvo[theme] || {}
+
+    return Object.fromEntries(
+      BRAND_TOKENS.map(({ id }) => {
+        const emEdicao = branding[id]
+
+        if (isValidColor(emEdicao)) return [id, emEdicao]
+
+        const anterior = isValidColor(publicado[id]) ? publicado[id] : padrao[id]
+
+        return [id, anterior]
+      })
+    )
+  }, [branding, salvo, theme])
+
   useEffect(() => {
     if (typeof document === 'undefined') return
 
     const root = document.documentElement
-    const variables = buildCssVariables(branding)
+    const variables = buildCssVariables(pintura)
 
     for (const cssVar of appliedVarsRef.current) {
       if (!(cssVar in variables)) {
@@ -120,7 +152,7 @@ export function BrandingProvider({ children }) {
     }
 
     appliedVarsRef.current = Object.keys(variables)
-  }, [branding])
+  }, [pintura])
 
   const setTokenValue = useCallback((tokenId, value) => {
     setRascunho((atual) => ({
@@ -160,7 +192,23 @@ export function BrandingProvider({ children }) {
     setErroAoSalvar('')
   }, [])
 
+  const invalidos = useMemo(() => {
+    const doTema = rascunho[theme] || {}
+
+    return BRAND_TOKENS
+      .filter(({ id }) => id in doTema && doTema[id] !== null)
+      .filter(({ id }) => !isValidColor(doTema[id]))
+      .map(({ id, label }) => ({ id, label }))
+  }, [rascunho, theme])
+
   const salvar = useCallback(async () => {
+    if (invalidos.length > 0) {
+      const mensagem = `Corrija ${invalidos.map(({ label }) => label).join(', ')} antes de publicar.`
+
+      setErroAoSalvar(mensagem)
+      return { ok: false, message: mensagem }
+    }
+
     const patch = {}
 
     for (const nome of THEMES) {
@@ -197,7 +245,7 @@ export function BrandingProvider({ children }) {
     } finally {
       setSalvando(false)
     }
-  }, [rascunho])
+  }, [invalidos, rascunho])
 
   const customizedTokenIds = useMemo(() => Object.keys(aplicados), [aplicados])
 
@@ -219,6 +267,7 @@ export function BrandingProvider({ children }) {
     isCustomized: customizedTokenIds.length > 0,
     alterado,
     pendentes,
+    invalidos,
     salvando,
     erroAoSalvar,
     revisao: origem.revisao,
@@ -234,6 +283,7 @@ export function BrandingProvider({ children }) {
     customizedTokenIds,
     descartarRascunho,
     erroAoSalvar,
+    invalidos,
     origem,
     pendentes,
     resetTheme,

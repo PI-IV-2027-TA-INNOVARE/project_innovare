@@ -126,12 +126,12 @@ describe('LoginPage — envio', () => {
     renderLogin()
 
     await user.type(campoEmail(), 'supervisor@ac2microbiologia.com.br')
-    await user.type(campoSenha(), 'supervisor123')
+    await user.type(campoSenha(), 'senha-de-teste')
     await user.click(botaoEntrar())
 
     expect(auth.signInWithCredentials).toHaveBeenCalledWith({
       email: 'supervisor@ac2microbiologia.com.br',
-      password: 'supervisor123',
+      password: 'senha-de-teste',
     })
   })
 
@@ -164,7 +164,7 @@ describe('LoginPage — envio', () => {
     renderLogin()
 
     await user.type(campoEmail(), 'supervisor@ac2microbiologia.com.br')
-    await user.type(campoSenha(), 'supervisor123')
+    await user.type(campoSenha(), 'senha-de-teste')
     await user.click(botaoEntrar())
 
     const enviando = screen.getByRole('button', { name: /entrando/i })
@@ -242,10 +242,13 @@ describe('LoginPage — canal unico de erro', () => {
   })
 })
 
-describe('LoginPage — modo demonstracao desligado', () => {
-  it('nao vaza credencial de vitrine quando VITE_AUTH_MOCK e false', () => {
+describe('LoginPage — nao existe atalho de credencial', () => {
+  it('a tela nao oferece conta de vitrine nem credencial preenchida', () => {
     renderLogin()
 
     expect(screen.queryByText(/modo demonstração/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/ver credenciais/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('E-mail')).toHaveValue('')
+    expect(screen.getByLabelText('Senha')).toHaveValue('')
   })
 })

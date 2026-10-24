@@ -11,7 +11,8 @@ from datetime import date
 
 from django.db.models import Q, QuerySet
 
-from apps.audit.models import EventoAuditoria
+from apps.audit.models import CategoriaEvento, EventoAuditoria
+from apps.audit.rotulos import ROTINA_OCULTA
 
 
 def trilha(
@@ -29,8 +30,12 @@ def trilha(
     existe para ver a plataforma inteira. O recorte por oportunidade vive na
     aba Historico, que tem rota propria e filtra por entidade.
 
-    `busca` cobre ator, entidade_id e tipo - os tres campos pelos quais se
-    procura um evento quando ja se sabe o que aconteceu e falta saber quando.
+    `busca` cobre o ator (e-mail ou nome), o tipo, o id gravado e a
+    oportunidade (codigo ou titulo) - o que a tela mostra de cada linha.
+
+    Login e logout bem-sucedidos so aparecem com a categoria "Conta e acesso"
+    escolhida: sao a maior parte da trilha e nada dizem sobre o fluxo. Entrada
+    recusada nao e rotina e continua visivel em qualquer recorte.
 
     O desempate por `-id_evento` importa: varios eventos do mesmo caso de uso
     nascem no mesmo `ocorrido_em`, e sem ele a ordem entre eles muda de uma
@@ -40,6 +45,9 @@ def trilha(
 
     if categoria:
         eventos = eventos.filter(categoria=categoria)
+
+    if categoria != CategoriaEvento.CONTA:
+        eventos = eventos.exclude(tipo__in=ROTINA_OCULTA)
 
     if status:
         eventos = eventos.filter(status=status)
@@ -53,10 +61,15 @@ def trilha(
     termo = (busca or '').strip()
 
     if termo:
+        from apps.accounts.models import Usuario
+
         eventos = eventos.filter(
             Q(ator__icontains=termo)
+            | Q(ator__in=Usuario.objects.filter(nome__icontains=termo).values('email'))
             | Q(entidade_id__icontains=termo)
             | Q(tipo__icontains=termo)
+            | Q(oportunidade__codigo__icontains=termo)
+            | Q(oportunidade__titulo__icontains=termo)
         )
 
-    return eventos.order_by('-ocorrido_em', '-id_evento')
+    return eventos.select_related('oportunidade').order_by('-ocorrido_em', '-id_evento')

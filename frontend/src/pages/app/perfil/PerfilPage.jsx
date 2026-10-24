@@ -15,9 +15,11 @@ import {
   TITULACOES,
   completudeDoPerfil,
   disponibilidadeLabel,
+  formacoesParaApi,
   perfilDaApi,
   titulacaoLabel,
 } from '../rede/redeData'
+import ListaDeFormacoes from '../rede/ListaDeFormacoes'
 import ListaEditavel from './ListaEditavel'
 import './PerfilPage.scss'
 
@@ -30,16 +32,21 @@ const PERFIL_VAZIO = {
   competencias: [],
   tecnicas: [],
   linhas: [],
+  formacoes: [],
 }
 
 const SENHA_VAZIA = { senhaAtual: '', novaSenha: '', confirmarSenha: '' }
 
-function Secao({ title, description, children, readOnly, hint }) {
+const TITULO_PROFISSIONAL = 'titulo-perfil-profissional'
+
+function Secao({ title, description, children, readOnly, hint, nivel = 2, className = '' }) {
+  const Titulo = `h${nivel}`
+
   return (
-    <section className="perfil-card">
+    <section className={`perfil-card ${className}`.trim()}>
       <header className="perfil-card__header">
         <div>
-          <h2 className="perfil-card__title">{title}</h2>
+          <Titulo className="perfil-card__title">{title}</Titulo>
           {description ? <p className="perfil-card__description">{description}</p> : null}
         </div>
 
@@ -51,14 +58,12 @@ function Secao({ title, description, children, readOnly, hint }) {
         ) : null}
       </header>
 
-      <fieldset className="perfil-card__body" disabled={readOnly}>
-        {children}
-      </fieldset>
+      <div className="perfil-card__body">{children}</div>
     </section>
   )
 }
 
-function TrocaDeSenha({ demonstracao, onConcluido }) {
+function TrocaDeSenha({ onConcluido }) {
   const [valores, setValores] = useState(SENHA_VAZIA)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -103,15 +108,6 @@ function TrocaDeSenha({ demonstracao, onConcluido }) {
     } finally {
       setSalvando(false)
     }
-  }
-
-  if (demonstracao) {
-    return (
-      <p className="perfil-card__note">
-        A troca de senha não funciona no ambiente de demonstração, que não tem
-        credencial real para verificar.
-      </p>
-    )
   }
 
   return (
@@ -169,7 +165,7 @@ function TrocaDeSenha({ demonstracao, onConcluido }) {
 }
 
 export default function PerfilPage() {
-  const { user, isMockAuth } = useAuth()
+  const { user } = useAuth()
   const { toast, showToast } = useToast()
 
   const nome = user?.displayName || 'Minha conta'
@@ -235,6 +231,7 @@ export default function PerfilPage() {
         competencias: perfil.competencias,
         tecnicas: perfil.tecnicas,
         linhas: perfil.linhas,
+        formacoes: formacoesParaApi(perfil.formacoes),
       })
 
       setPerfil(perfilDaApi(dados))
@@ -339,24 +336,37 @@ export default function PerfilPage() {
           title="Senha"
           description="Troque quando quiser. A nova senha vale no próximo acesso."
         >
-          <TrocaDeSenha demonstracao={isMockAuth} onConcluido={showToast} />
+          <TrocaDeSenha onConcluido={showToast} />
         </Secao>
 
         {carregandoPerfil ? (
-          <p className="perfil-card__note" role="status">Carregando o seu perfil...</p>
+          <p className="perfil-card__note perfil-grid__aviso" role="status">
+            Carregando o seu perfil...
+          </p>
         ) : null}
 
         {mostrarProfissional ? (
-          <>
-            <section className="perfil-card perfil-card--destaque">
-              <header className="perfil-card__header">
-                <div>
-                  <h2 className="perfil-card__title">Perfil profissional</h2>
-                  <p className="perfil-card__description">
-                    É o que o matching compara com as competências necessárias de
-                    cada oportunidade. As alterações valem depois que você salvar.
-                  </p>
-                </div>
+          <section
+            className="perfil-grupo"
+            aria-labelledby={TITULO_PROFISSIONAL}
+          >
+            <header className="perfil-grupo__header">
+              <div>
+                <h2 id={TITULO_PROFISSIONAL} className="perfil-card__title">
+                  Perfil profissional
+                </h2>
+                <p className="perfil-card__description">
+                  É o que o matching compara com as competências necessárias de
+                  cada oportunidade. As alterações valem depois que você salvar.
+                </p>
+              </div>
+
+              <div className="perfil-grupo__acao">
+                {alterado ? (
+                  <span className="perfil-grupo__pendente" role="status">
+                    Alterações não salvas
+                  </span>
+                ) : null}
 
                 <button
                   type="button"
@@ -367,102 +377,126 @@ export default function PerfilPage() {
                   <Icone icon={appIcons.save} />
                   {salvando ? 'Salvando...' : 'Salvar perfil'}
                 </button>
-              </header>
+              </div>
+            </header>
 
-              {erroPerfil ? (
-                <div className="perfil-card__body">
-                  <p className="admin-field__error" role="alert">{erroPerfil}</p>
-                </div>
-              ) : null}
-            </section>
+            {erroPerfil ? (
+              <p className="admin-field__error" role="alert">{erroPerfil}</p>
+            ) : null}
 
-            <Secao
-              title="Titulação"
-              description="Vocabulário controlado — é por ele que o matching de supervisão filtra."
-            >
-              <label className="admin-field">
-                <span className="admin-field__label">Titulação</span>
-                <select
-                  className="admin-input"
-                  value={perfil.titulacao}
-                  onChange={alterarCampo('titulacao')}
-                >
-                  <option value="">Não informada</option>
-                  {TITULACOES.map((titulacao) => (
-                    <option key={titulacao.id} value={titulacao.id}>{titulacao.label}</option>
-                  ))}
-                </select>
-              </label>
-            </Secao>
+            <div className="perfil-grupo__grid">
+              <Secao
+                nivel={3}
+                title="Titulação"
+                description="Vocabulário controlado — é por ele que o matching de supervisão filtra."
+              >
+                <label className="admin-field">
+                  <span className="admin-field__label">Titulação</span>
+                  <select
+                    className="admin-input"
+                    value={perfil.titulacao}
+                    onChange={alterarCampo('titulacao')}
+                  >
+                    <option value="">Não informada</option>
+                    {TITULACOES.map((titulacao) => (
+                      <option key={titulacao.id} value={titulacao.id}>{titulacao.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </Secao>
 
-            <Secao
-              title="Disponibilidade"
-              description="É o que torna a sugestão realista: competência sem disponibilidade produz equipe que não se sustenta."
-            >
-              <label className="admin-field">
-                <span className="admin-field__label">Disponibilidade atual</span>
-                <select
-                  className="admin-input"
-                  value={perfil.disponibilidade}
-                  onChange={alterarCampo('disponibilidade')}
-                >
-                  {DISPONIBILIDADES.map((item) => (
-                    <option key={item.id} value={item.id}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
+              <Secao
+                nivel={3}
+                title="Disponibilidade"
+                description="É o que torna a sugestão realista: competência sem disponibilidade produz equipe que não se sustenta."
+              >
+                <label className="admin-field">
+                  <span className="admin-field__label">Disponibilidade atual</span>
+                  <select
+                    className="admin-input"
+                    value={perfil.disponibilidade}
+                    onChange={alterarCampo('disponibilidade')}
+                  >
+                    {DISPONIBILIDADES.map((item) => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
 
-              <p className="perfil-card__note">
-                Hoje: <strong>{disponibilidadeLabel(perfil.disponibilidade)}</strong>
-              </p>
-            </Secao>
+                <p className="perfil-card__note">
+                  Hoje: <strong>{disponibilidadeLabel(perfil.disponibilidade)}</strong>
+                </p>
+              </Secao>
 
-            <Secao
-              title="Competências"
-              description="Conhecimento científico e técnico que você domina."
-            >
-              <ListaEditavel
-                label="Competências"
-                placeholder="Ex.: Microbiologia de alimentos"
-                values={perfil.competencias}
-                onChange={alterar('competencias')}
-              />
-            </Secao>
+              <Secao
+                nivel={3}
+                title="Experiência"
+                description="Projetos e tempo de atuação — texto livre."
+              >
+                <label className="admin-field">
+                  <span className="admin-field__label">Resumo da experiência</span>
+                  <textarea
+                    className="admin-input admin-input--area"
+                    rows={4}
+                    value={perfil.experiencia}
+                    onChange={alterarCampo('experiencia')}
+                    placeholder="Projetos relevantes, tempo de atuação, resultados."
+                  />
+                </label>
+              </Secao>
 
-            <Secao title="Técnicas" description="Métodos e equipamentos que você opera.">
-              <ListaEditavel
-                label="Técnicas"
-                placeholder="Ex.: PCR em tempo real"
-                values={perfil.tecnicas}
-                onChange={alterar('tecnicas')}
-              />
-            </Secao>
-
-            <Secao title="Linhas de pesquisa" description="Temas em que você atua.">
-              <ListaEditavel
-                label="Linhas de pesquisa"
-                placeholder="Ex.: Bioinsumos agrícolas"
-                values={perfil.linhas}
-                onChange={alterar('linhas')}
-              />
-            </Secao>
-
-            <Secao
-              title="Experiência"
-              description="Projetos e tempo de atuação — texto livre."
-            >
-              <label className="admin-field">
-                <span className="admin-field__label">Resumo da experiência</span>
-                <textarea
-                  className="admin-input admin-input--area"
-                  rows={4}
-                  value={perfil.experiencia}
-                  onChange={alterarCampo('experiencia')}
-                  placeholder="Projetos relevantes, tempo de atuação, resultados."
+              <Secao
+                nivel={3}
+                title="Competências"
+                description="Conhecimento científico e técnico que você domina."
+              >
+                <ListaEditavel
+                  label="Competências"
+                  placeholder="Ex.: Microbiologia de alimentos"
+                  values={perfil.competencias}
+                  onChange={alterar('competencias')}
                 />
-              </label>
+              </Secao>
+
+              <Secao
+                nivel={3}
+                title="Técnicas"
+                description="Métodos e equipamentos que você opera."
+              >
+                <ListaEditavel
+                  label="Técnicas"
+                  placeholder="Ex.: PCR em tempo real"
+                  values={perfil.tecnicas}
+                  onChange={alterar('tecnicas')}
+                />
+              </Secao>
+
+              <Secao
+                nivel={3}
+                title="Linhas de pesquisa"
+                description="Temas em que você atua."
+              >
+                <ListaEditavel
+                  label="Linhas de pesquisa"
+                  placeholder="Ex.: Bioinsumos agrícolas"
+                  values={perfil.linhas}
+                  onChange={alterar('linhas')}
+                />
+              </Secao>
+            </div>
+
+            <Secao
+              nivel={3}
+              className="perfil-card--larga"
+              title="Formação acadêmica"
+              description="Cursos concluídos ou em andamento, com a instituição e o nível."
+            >
+              <ListaDeFormacoes
+                values={perfil.formacoes}
+                onChange={alterar('formacoes')}
+              />
             </Secao>
-          </>
+          </section>
         ) : null}
       </div>
 

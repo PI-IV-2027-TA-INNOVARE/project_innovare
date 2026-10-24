@@ -17,15 +17,21 @@ const FILTRO_VAZIO = { categoria: '', status: '', busca: '', desde: '', ate: '' 
 
 const ATOR_SISTEMA = '__sistema__'
 
+const CATALOGO_VAZIO = { categorias: [], status: [], rotina_oculta: null }
+
 /**
  * O marcador do servidor não é nome de gente.
  *
  * `__sistema__` identifica o que rodou sem ator humano. Mostrado cru, faz o
  * Administrador procurar uma conta com esse login.
  */
-function nomeDoAtor(ator) {
-  return ator === ATOR_SISTEMA ? 'Sistema' : ator
+function nomeDoAtor(evento) {
+  if (evento.ator === ATOR_SISTEMA) return 'Sistema'
+  return evento.ator_nome || evento.ator
 }
+
+const itensAlterados = (total) =>
+  `${total} ${total === 1 ? 'item alterado' : 'itens alterados'}`
 
 function somenteOsPreenchidos(filtros) {
   return Object.fromEntries(
@@ -37,7 +43,7 @@ export default function AuditoriaSection() {
   const [rascunho, setRascunho] = useState(FILTRO_VAZIO)
   const [aplicados, setAplicados] = useState(FILTRO_VAZIO)
 
-  const [catalogo, setCatalogo] = useState({ categorias: [], status: [] })
+  const [catalogo, setCatalogo] = useState(CATALOGO_VAZIO)
   const [eventos, setEventos] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
@@ -45,7 +51,7 @@ export default function AuditoriaSection() {
   useEffect(() => {
     obterFiltrosTrilha()
       .then(setCatalogo)
-      .catch(() => setCatalogo({ categorias: [], status: [] }))
+      .catch(() => setCatalogo(CATALOGO_VAZIO))
   }, [])
 
   const consultar = useCallback(async (filtros) => {
@@ -113,7 +119,7 @@ export default function AuditoriaSection() {
       <form className="console-form console-form--filtros" onSubmit={aplicar}>
         <div className="console-form__field">
           <label className="form-label" htmlFor="trilha-busca">
-            Buscar por quem, sobre o quê ou tipo
+            Buscar por pessoa, oportunidade ou evento
           </label>
           <input
             id="trilha-busca"
@@ -121,7 +127,7 @@ export default function AuditoriaSection() {
             className="form-input"
             value={rascunho.busca}
             onChange={alterar('busca')}
-            placeholder="Ex.: OP-2026-001"
+            placeholder="Ex.: Rafael ou OP-2026-001"
           />
         </div>
 
@@ -203,6 +209,17 @@ export default function AuditoriaSection() {
         </div>
       </form>
 
+      {catalogo.rotina_oculta && aplicados.categoria !== catalogo.rotina_oculta.categoria ? (
+        <p className="trilha__nota">
+          Entradas e saídas da plataforma ficam fora desta lista para não
+          esconder o restante: escolha a categoria{' '}
+          {catalogo.categorias.find(
+            (item) => item.valor === catalogo.rotina_oculta.categoria
+          )?.rotulo || 'Conta e acesso'}{' '}
+          para vê-las.
+        </p>
+      ) : null}
+
       {erro ? (
         <p className="login-message" role="alert">
           {erro}
@@ -237,14 +254,41 @@ export default function AuditoriaSection() {
                     <span className="admin-tag">{evento.categoria_rotulo}</span>
                   </td>
                   <td data-label="Evento">
-                    <span className="trilha__texto">{evento.tipo}</span>
+                    <span className="trilha__texto">{evento.tipo_rotulo || evento.tipo}</span>
                     {evento.motivo ? (
                       <span className="trilha__meta">{evento.motivo}</span>
                     ) : null}
+                    {evento.detalhe?.alteracoes ? (
+                      <span className="trilha__meta">
+                        {itensAlterados(Object.keys(evento.detalhe.alteracoes).length)}
+                      </span>
+                    ) : null}
                   </td>
-                  <td data-label="Quem">{nomeDoAtor(evento.ator)}</td>
+                  <td data-label="Quem">
+                    <span className="trilha__texto">{nomeDoAtor(evento)}</span>
+                    {evento.ator !== ATOR_SISTEMA && nomeDoAtor(evento) !== evento.ator ? (
+                      <span className="trilha__meta">{evento.ator}</span>
+                    ) : null}
+                  </td>
                   <td data-label="Sobre">
-                    {evento.entidade} {evento.entidade_id}
+                    {evento.alvo ? (
+                      <>
+                        <span
+                          className={
+                            evento.alvo.removido
+                              ? 'trilha__texto trilha__alvo--removido'
+                              : 'trilha__texto'
+                          }
+                        >
+                          {evento.alvo.rotulo}
+                        </span>
+                        {evento.alvo.oportunidade ? (
+                          <span className="trilha__meta">{evento.alvo.oportunidade}</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      `${evento.entidade} ${evento.entidade_id}`
+                    )}
                   </td>
                   <td data-label="Situação">
                     <span className={`status-badge status-badge--${evento.status}`}>

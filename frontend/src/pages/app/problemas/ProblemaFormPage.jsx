@@ -7,7 +7,7 @@ import { useAuth } from '../../../context/AuthContext'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { useRascunho } from '../../../lib/rascunho'
-import { criarOportunidade } from '../../../services/pdConnectApi'
+import { criarOportunidade, enviarAnexo } from '../../../services/pdConnectApi'
 import './ProblemasPage.scss'
 
 const VAZIO = {
@@ -18,6 +18,7 @@ const VAZIO = {
 }
 
 const LIMITE_RESUMO = 400
+const TETO_BYTES = 10 * 1024 * 1024
 
 function validar(valores) {
   const erros = {}
@@ -51,8 +52,9 @@ export default function ProblemaFormPage() {
   const [saindoPara, setSaindoPara] = useState(null)
   const [erroEnvio, setErroEnvio] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [cadastrado, setCadastrado] = useState('')
 
-  const sujo = alterado || anexos.length > 0
+  const sujo = !cadastrado && (alterado || anexos.length > 0)
 
   const alterarCampo = (campo) => (event) => {
     const { value } = event.target
@@ -61,7 +63,15 @@ export default function ProblemaFormPage() {
   }
 
   const escolherAnexos = (event) => {
-    setAnexos(Array.from(event.target.files || []).map((arquivo) => arquivo.name))
+    const escolhidos = Array.from(event.target.files || [])
+    const grandes = escolhidos.filter((arquivo) => arquivo.size > TETO_BYTES)
+
+    setAnexos(escolhidos.filter((arquivo) => arquivo.size <= TETO_BYTES))
+    setErroEnvio(
+      grandes.length > 0
+        ? `${grandes.map((arquivo) => arquivo.name).join(', ')} passa de 10 MB e ficou de fora.`
+        : ''
+    )
   }
 
   const descartarRascunho = () => {
@@ -88,6 +98,28 @@ export default function ProblemaFormPage() {
     limpar()
     setSaindoPara(null)
     navigate(destino)
+  }
+
+  /**
+   * O anexo sobe depois do cadastro porque so entao existe oportunidade a que
+   * vincular (PB21). O problema e o dado que o Demandante nao refaz sozinho:
+   * se um arquivo falhar, o cadastro fica de pe e a tela nomeia o que faltou.
+   */
+  const enviarAnexosDe = async (codigo) => {
+    if (!codigo || anexos.length === 0) return []
+
+    const resultados = await Promise.all(
+      anexos.map(async (arquivo) => {
+        try {
+          await enviarAnexo(codigo, arquivo)
+          return null
+        } catch {
+          return arquivo.name
+        }
+      })
+    )
+
+    return resultados.filter(Boolean)
   }
 
   const enviar = async (event) => {
@@ -118,9 +150,20 @@ export default function ProblemaFormPage() {
       })
 
       limpar()
+
+      const recusados = await enviarAnexosDe(criado?.codigo)
+
       showToast(
         `Problema ${criado?.codigo || ''} cadastrado. A AC2 vai analisar e retornar por aqui.`.replace('  ', ' ')
       )
+
+      if (recusados.length > 0) {
+        setCadastrado(criado?.codigo || '')
+        setErroEnvio(
+          `O problema ${criado?.codigo} foi cadastrado, mas ${recusados.join(', ')} não subiu. Você pode anexar pelo acompanhamento do problema.`
+        )
+        return
+      }
 
       window.setTimeout(() => navigate('/problemas'), 600)
     } catch (problema) {
@@ -293,10 +336,10 @@ export default function ProblemaFormPage() {
 
             {anexos.length > 0 ? (
               <ul className="problema-anexos">
-                {anexos.map((nome) => (
-                  <li className="problema-anexos__item" key={nome}>
+                {anexos.map((arquivo) => (
+                  <li className="problema-anexos__item" key={arquivo.name}>
                     <Icone icon={appIcons.folder} aria-hidden="true" />
-                    {nome}
+                    {arquivo.name}
                   </li>
                 ))}
               </ul>
@@ -305,10 +348,9 @@ export default function ProblemaFormPage() {
             <div className="admin-callout" role="note">
               <Icone icon={appIcons.info} className="admin-callout__icon" />
               <p className="admin-callout__text">
-                Nenhum arquivo sai do seu computador nesta versão: a lista acima é
-                só a sua seleção, e ela não entra no rascunho. O envio real, os
-                tipos aceitos e a política de retenção entram com o módulo de
-                anexos.
+                Os arquivos sobem junto com o cadastro, até 10 MB cada: PDF,
+                imagem, texto, planilha ou documento. A seleção não entra no
+                rascunho — se você sair e voltar, escolha os arquivos de novo.
               </p>
             </div>
           </div>

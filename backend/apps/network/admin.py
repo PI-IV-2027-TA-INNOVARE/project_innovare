@@ -58,8 +58,13 @@ class MembroRedeAdmin(admin.ModelAdmin):
         'disponibilidade',
     ]
     list_filter = ['papel_rede', 'situacao', 'disponibilidade']
-    search_fields = ['nome', 'email']
-    ordering = ['nome']
+    search_fields = [
+        'nome_sem_conta', 'email_sem_conta', 'usuario__nome', 'usuario__email',
+    ]
+    list_select_related = ['usuario', 'titulacao']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).com_identificacao().order_by('nome_atual')
     exclude = ['competencias']
     raw_id_fields = ['usuario', 'titulacao', 'organizacao', 'cadastrado_por']
     readonly_fields = ['criado_em', 'atualizado_em']
@@ -70,7 +75,9 @@ class MembroRedeAdmin(admin.ModelAdmin):
 class MembroCompetenciaAdmin(admin.ModelAdmin):
     list_display = ['membro', 'competencia', 'nivel', 'declarado_por']
     list_filter = ['declarado_por']
-    search_fields = ['membro__nome', 'competencia__nome']
+    search_fields = [
+        'membro__nome_sem_conta', 'membro__usuario__nome', 'competencia__nome',
+    ]
     raw_id_fields = ['membro', 'competencia']
     readonly_fields = ['criado_em']
 
@@ -78,6 +85,8 @@ class MembroCompetenciaAdmin(admin.ModelAdmin):
 @admin.register(Formacao)
 class FormacaoAdmin(admin.ModelAdmin):
     list_display = ['membro', 'curso', 'instituicao', 'titulacao', 'ano_conclusao']
-    search_fields = ['membro__nome', 'curso', 'instituicao']
+    search_fields = [
+        'membro__nome_sem_conta', 'membro__usuario__nome', 'curso', 'instituicao',
+    ]
     raw_id_fields = ['membro', 'titulacao']
     readonly_fields = ['criado_em', 'atualizado_em']

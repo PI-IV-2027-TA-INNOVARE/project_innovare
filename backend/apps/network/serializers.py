@@ -4,10 +4,12 @@ Contrato da rede interna (RF02, RF03).
 O vocabulario e o do cliente: membro da rede, titulacao, competencia, tecnica,
 linha de pesquisa, disponibilidade.
 """
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.network.models import (
     Competencia,
+    Formacao,
     MembroRede,
     PapelNaRede,
     TipoCompetencia,
@@ -27,6 +29,42 @@ class CompetenciaSerializer(serializers.ModelSerializer):
         fields = ['id_competencia', 'nome', 'tipo']
 
 
+class FormacaoSerializer(serializers.ModelSerializer):
+    """Um curso concluido ou em andamento (PB11 / Escopo 3.3)."""
+
+    titulacao_codigo = serializers.SlugRelatedField(
+        source='titulacao',
+        slug_field='codigo',
+        queryset=Titulacao.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    titulacao_rotulo = serializers.CharField(
+        source='titulacao.rotulo', read_only=True, default=None
+    )
+    ano_conclusao = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1950
+    )
+
+    class Meta:
+        model = Formacao
+        fields = [
+            'id_formacao', 'curso', 'instituicao',
+            'titulacao_codigo', 'titulacao_rotulo', 'ano_conclusao',
+        ]
+        read_only_fields = ['id_formacao']
+
+    def validate_ano_conclusao(self, valor):
+        limite = timezone.now().year + 10
+
+        if valor is not None and valor > limite:
+            raise serializers.ValidationError(
+                f'Ano de conclusão acima de {limite}.'
+            )
+
+        return valor
+
+
 class ListaDeNomes(serializers.ListField):
     child = serializers.CharField(max_length=160, allow_blank=False)
 
@@ -36,8 +74,13 @@ class MembroRedeSerializer(serializers.ModelSerializer):
     As tres listas aparecem separadas na tela e moram numa tabela so.
 
     O `tipo` da competencia e o discriminador; o serializer faz a traducao nos
-    dois sentidos para a tela nao precisar conhecer a juncao.
+    dois sentidos para a tela nao precisar conhecer a juncao. `nome` e
+    `email` tambem sao traducao: moram no membro ou na conta dele, e o
+    servico grava cada um no lugar certo.
     """
+
+    nome = serializers.CharField(max_length=160)
+    email = serializers.EmailField()
 
     titulacao_codigo = serializers.SlugRelatedField(
         source='titulacao',
@@ -57,6 +100,7 @@ class MembroRedeSerializer(serializers.ModelSerializer):
     competencias = ListaDeNomes(required=False, write_only=True)
     tecnicas = ListaDeNomes(required=False, write_only=True)
     linhas = ListaDeNomes(required=False, write_only=True)
+    formacoes = FormacaoSerializer(many=True, required=False)
 
     class Meta:
         model = MembroRede
@@ -65,7 +109,7 @@ class MembroRedeSerializer(serializers.ModelSerializer):
             'titulacao_codigo', 'titulacao_rotulo',
             'organizacao', 'organizacao_nome',
             'disponibilidade', 'experiencia', 'situacao',
-            'competencias', 'tecnicas', 'linhas', 'tem_acesso',
+            'competencias', 'tecnicas', 'linhas', 'formacoes', 'tem_acesso',
             'criado_em', 'atualizado_em',
         ]
         read_only_fields = ['id_membro', 'situacao', 'criado_em', 'atualizado_em']
@@ -97,8 +141,9 @@ class MembroRedeSerializer(serializers.ModelSerializer):
         return valor.strip().lower()
 
     def validate_papel_rede(self, valor):
-        if valor not in PapelNaRede.values:
-            raise serializers.ValidationError('Papel na rede invalido.')
+        # RN-A03 / RN-A04: Supervisor cadastra apenas Pesquisadores
+        if valor != PapelNaRede.PESQUISADOR:
+            raise serializers.ValidationError('O Supervisor só pode cadastrar Pesquisadores.')
         return valor
 
 
@@ -109,9 +154,12 @@ class PerfilProprioSerializer(MembroRedeSerializer):
     mexer neles e cadastro, e cadastro e do Supervisor (RN-A04).
     """
 
+    nome = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+
     class Meta(MembroRedeSerializer.Meta):
         read_only_fields = [
-            'id_membro', 'nome', 'email', 'papel_rede', 'organizacao',
+            'id_membro', 'papel_rede', 'organizacao',
             'situacao', 'criado_em', 'atualizado_em',
         ]
 

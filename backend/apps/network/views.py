@@ -61,10 +61,10 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = (
-            MembroRede.objects
-            .select_related('titulacao', 'organizacao', 'usuario')
-            .prefetch_related('vinculos_competencia__competencia')
-            .order_by('nome')
+            MembroRede.objects.com_identificacao()
+            .select_related('titulacao', 'organizacao')
+            .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
+            .order_by('nome_atual')
         )
 
         papel = self.request.query_params.get('papel_rede')
@@ -82,8 +82,8 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
         busca = self.request.query_params.get('busca')
         if busca:
             queryset = queryset.filter(
-                Q(nome__icontains=busca)
-                | Q(email__icontains=busca)
+                Q(nome_atual__icontains=busca)
+                | Q(email_atual__icontains=busca)
                 | Q(vinculos_competencia__competencia__nome__icontains=busca)
             ).distinct()
 
@@ -95,9 +95,11 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         validados = dict(serializer.validated_data)
         listas = separar_listas(validados)
+        formacoes = validados.pop('formacoes', None)
 
         membro = CadastrarMembroService().execute(
-            dados=validados, listas=listas, ator=request.user
+            dados=validados, listas=listas, ator=request.user,
+            formacoes=formacoes,
         )
 
         return Response(
@@ -111,9 +113,11 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         validados = dict(serializer.validated_data)
         listas = separar_listas(validados)
+        formacoes = validados.pop('formacoes', None)
 
         membro = AtualizarMembroService().execute(
-            membro=membro, dados=validados, listas=listas, ator=request.user
+            membro=membro, dados=validados, listas=listas, ator=request.user,
+            formacoes=formacoes,
         )
 
         return Response(self.get_serializer(membro).data)
@@ -143,8 +147,8 @@ class PerfilProprioView(views.APIView):
     def _membro(self, request):
         membro = (
             MembroRede.objects
-            .select_related('titulacao', 'organizacao')
-            .prefetch_related('vinculos_competencia__competencia')
+            .select_related('usuario', 'titulacao', 'organizacao')
+            .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
             .filter(usuario=request.user)
             .first()
         )
@@ -169,9 +173,11 @@ class PerfilProprioView(views.APIView):
 
         validados = dict(serializer.validated_data)
         listas = separar_listas(validados)
+        formacoes = validados.pop('formacoes', None)
 
         membro = AtualizarPerfilProprioService().execute(
-            membro=membro, dados=validados, listas=listas, ator=request.user
+            membro=membro, dados=validados, listas=listas, ator=request.user,
+            formacoes=formacoes,
         )
 
         return Response(PerfilProprioSerializer(membro).data)

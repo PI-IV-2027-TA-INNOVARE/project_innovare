@@ -84,6 +84,18 @@ describe('UsersSection', () => {
     expect(await screen.findByText('Maria Ferreira')).toBeInTheDocument()
   })
 
+  it('na falha nao finge uma base vazia', async () => {
+    api.listUsuarios.mockRejectedValueOnce(new Error('Seu perfil nao tem competencia para esta acao.'))
+
+    render(<UsersSection />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Seu perfil nao tem competencia')
+    expect(screen.queryByText('Usuários totais')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nenhum usuário encontrado.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /criar primeiro usuário/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /novo usuário/i })).not.toBeInTheDocument()
+  })
+
   it('resume a base nos quatro indicadores', async () => {
     await renderUsuarios()
 

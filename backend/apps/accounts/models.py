@@ -14,7 +14,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.accounts.managers import UsuarioManager
-from core.models import ModeloComCarimbo
+from core.models import ModeloComCarimbo, lista_fixa
 
 
 class Papel(models.TextChoices):
@@ -62,6 +62,30 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
         null=True, blank=True, db_column='ultimo_acesso'
     )
     is_staff = models.BooleanField(default=False, db_column='acesso_admin_django')
+    is_superuser = models.BooleanField(
+        default=False,
+        help_text='Tem todas as permissoes do admin do Django sem atribuicao explicita.',
+        db_column='superusuario_django',
+    )
+    last_login = models.DateTimeField(
+        null=True, blank=True, db_column='ultima_entrada_admin'
+    )
+    groups = models.ManyToManyField(
+        'auth.Group',
+        blank=True,
+        help_text='Grupos do admin do Django; a conta recebe as permissoes de cada um.',
+        related_name='user_set',
+        related_query_name='user',
+        db_table='Usuario_Grupo',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        blank=True,
+        help_text='Permissoes do admin do Django atribuidas direto a conta.',
+        related_name='user_set',
+        related_query_name='user',
+        db_table='Usuario_Permissao',
+    )
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['nome', 'papel']
@@ -69,7 +93,11 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloComCarimbo):
     objects = UsuarioManager()
 
     class Meta:
-        db_table = 'usuario'
+        db_table = 'Usuario'
+        constraints = [
+            lista_fixa('usuario', 'papel', Papel),
+            lista_fixa('usuario', 'situacao', SituacaoConta),
+        ]
         verbose_name = 'usuario'
         verbose_name_plural = 'usuarios'
         indexes = [
@@ -130,7 +158,7 @@ class DemandanteExterno(models.Model):
     )
 
     class Meta:
-        db_table = 'demandante_externo'
+        db_table = 'Demandante_Externo'
         verbose_name = 'demandante externo'
         verbose_name_plural = 'demandantes externos'
 
@@ -172,7 +200,10 @@ class TokenAcesso(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'token_acesso'
+        db_table = 'Token_Acesso'
+        constraints = [
+            lista_fixa('token_acesso', 'finalidade', FinalidadeToken),
+        ]
         indexes = [
             models.Index(fields=['usuario', 'finalidade'], name='idx_token_usuario_final'),
         ]

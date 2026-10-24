@@ -45,6 +45,7 @@ import sqlparse  # noqa: E402
 from django.conf import settings  # noqa: E402
 from django.core.management import call_command  # noqa: E402
 from django.db import connection  # noqa: E402
+from django.db.migrations.operations.special import RunPython  # noqa: E402
 from django.db.migrations.loader import MigrationLoader  # noqa: E402
 
 from scripts.neon_http import Neon  # noqa: E402
@@ -91,6 +92,23 @@ def ordem_de_aplicacao():
                 ordenadas.append(dependencia)
 
     return ordenadas
+
+
+def convertem_dados_em_python(loader, nos):
+    """
+    As migrations com `RunPython`: o SQL do `sqlmigrate` nao as carrega.
+
+    O comando sai como comentario, que `instrucoes` descarta - a conversao de
+    dados sumiria e a migration pararia no meio, com o banco entre dois estados.
+    """
+    return [
+        no
+        for no in nos
+        if any(
+            isinstance(operacao, RunPython)
+            for operacao in loader.get_migration(*no).operations
+        )
+    ]
 
 
 def sql_da_migration(app, name):
@@ -158,6 +176,19 @@ def main():
 
     for app, name in pendentes:
         print(f'  - {app}.{name}')
+
+    em_python = convertem_dados_em_python(
+        MigrationLoader(connection, ignore_no_migrations=True), pendentes
+    )
+
+    if em_python:
+        print('\nEstas convertem dados em Python e nao viram SQL:')
+        for app, name in em_python:
+            print(f'  - {app}.{name}')
+        raise SystemExit(
+            'Nada foi aplicado. Rode `python manage.py migrate` de uma rede que '
+            'alcance a porta 5432.'
+        )
 
     if args.plano:
         return

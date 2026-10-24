@@ -50,7 +50,9 @@ class MembroEquipeAdmin(AdminSomenteLeitura):
         'validada',
     ]
     list_filter = ['papel', 'origem', 'incluido', 'validada']
-    search_fields = ['equipe__oportunidade__codigo', 'membro__nome']
+    search_fields = [
+        'equipe__oportunidade__codigo', 'membro__nome_sem_conta', 'membro__usuario__nome',
+    ]
 
 
 @admin.register(LacunaCompetenciaEquipe)

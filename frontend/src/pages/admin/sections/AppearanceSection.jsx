@@ -50,7 +50,16 @@ async function copyText(text) {
   }
 }
 
-function TokenCard({ token, value, isCustomized, onChange, onReset, onCopy, copied }) {
+function TokenCard({
+  token,
+  value,
+  isCustomized,
+  invalido,
+  onChange,
+  onReset,
+  onCopy,
+  copied,
+}) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const advancedId = useId()
   const kindLabel = TOKEN_KIND_LABELS[token.kind] || 'Token'
@@ -88,6 +97,7 @@ function TokenCard({ token, value, isCustomized, onChange, onReset, onCopy, copi
             onChange={(event) => onChange(event.target.value)}
             spellCheck="false"
             aria-label={`Valor de ${token.label}`}
+            aria-invalid={invalido || undefined}
           />
 
           <button
@@ -159,7 +169,15 @@ function TokenCard({ token, value, isCustomized, onChange, onReset, onCopy, copi
   )
 }
 
-function TokenGroup({ group, branding, customized, collapsed, onToggle, cardProps }) {
+function TokenGroup({
+  group,
+  branding,
+  customized,
+  invalidos,
+  collapsed,
+  onToggle,
+  cardProps,
+}) {
   const panelId = useId()
 
   return (
@@ -191,6 +209,7 @@ function TokenGroup({ group, branding, customized, collapsed, onToggle, cardProp
               token={token}
               value={branding[token.id]}
               isCustomized={customized.has(token.id)}
+              invalido={invalidos.has(token.id)}
               {...cardProps(token)}
             />
           ))}
@@ -209,6 +228,7 @@ export default function AppearanceSection() {
     isCustomized,
     alterado,
     pendentes,
+    invalidos,
     salvando,
     erroAoSalvar,
     revisao,
@@ -236,6 +256,11 @@ export default function AppearanceSection() {
   }, [])
 
   const customized = useMemo(() => new Set(customizedTokenIds), [customizedTokenIds])
+
+  const idsInvalidos = useMemo(
+    () => new Set(invalidos.map(({ id }) => id)),
+    [invalidos]
+  )
 
   const showToast = useCallback((message) => {
     setToast({ message, id: Date.now() })
@@ -381,7 +406,7 @@ export default function AppearanceSection() {
             type="button"
             className="admin-btn"
             onClick={handleSalvar}
-            disabled={!alterado || salvando}
+            disabled={!alterado || salvando || invalidos.length > 0}
           >
             <Icone icon={appIcons.save} />
             {salvando ? 'Salvando...' : 'Salvar alterações'}
@@ -396,6 +421,19 @@ export default function AppearanceSection() {
             {pendentes} {pendentes === 1 ? 'alteração não salva' : 'alterações não salvas'}.
             Até você salvar, a paleta nova é só sua — os outros usuários continuam
             vendo a que está publicada.
+          </p>
+        </div>
+      ) : null}
+
+      {invalidos.length > 0 ? (
+        <div className="admin-callout" role="alert">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">
+            {invalidos.length === 1
+              ? `${invalidos[0].label} não é uma cor válida.`
+              : `${invalidos.map(({ label }) => label).join(', ')} não são cores válidas.`}
+            {' '}Use hexadecimal, como <code>#1B5E20</code>. Enquanto não
+            corrigir, a tela mantém a cor anterior e não dá para publicar.
           </p>
         </div>
       ) : null}
@@ -444,6 +482,7 @@ export default function AppearanceSection() {
                   group={group}
                   branding={branding}
                   customized={customized}
+                  invalidos={idsInvalidos}
                   collapsed={!query && collapsedGroups.has(group.id)}
                   onToggle={() => toggleGroup(group.id)}
                   cardProps={cardProps}

@@ -4,10 +4,20 @@ Views da configuracao administravel.
 A view recebe, delega e responde. O merge patch mora no service.
 """
 from drf_spectacular.utils import extend_schema
-from rest_framework import permissions, serializers, views
+from rest_framework import permissions, views
 from rest_framework.response import Response
 
-from apps.platform_settings.serializers import ConfiguracaoSerializer, secao_vazia
+from apps.platform_settings.serializers import (
+    ConfiguracaoSerializer,
+    ContatoSuporteSerializer,
+    TemaPatchSerializer,
+    secao_vazia,
+)
+from apps.platform_settings.services.contatos import (
+    RestaurarContatosService,
+    SubstituirContatosService,
+    contatos_vigentes,
+)
 from apps.platform_settings.services.configuracoes import (
     SECAO_TEMA,
     AtualizarConfiguracaoService,
@@ -40,15 +50,54 @@ class TemaView(views.APIView):
 
         return Response(ConfiguracaoSerializer(configuracao).data)
 
-    @extend_schema(request=None, responses=ConfiguracaoSerializer)
+    @extend_schema(request=TemaPatchSerializer, responses=ConfiguracaoSerializer)
     def patch(self, request):
-        if not isinstance(request.data, dict):
-            raise serializers.ValidationError(
-                'O corpo do merge patch precisa ser um objeto.'
-            )
+        patch = TemaPatchSerializer(data=request.data)
+        patch.is_valid(raise_exception=True)
 
         configuracao = AtualizarConfiguracaoService().execute(
-            secao=SECAO_TEMA, patch=request.data, ator=request.user
+            secao=SECAO_TEMA, patch=patch.validated_data, ator=request.user
         )
 
         return Response(ConfiguracaoSerializer(configuracao).data)
+
+
+class ContatosSuporteView(views.APIView):
+    """
+    `/api/configuracoes/contatos-suporte/` - quem procurar quando o acesso e barrado.
+
+    O GET e publico pelo mesmo motivo do tema: a conta inativa e recusada antes
+    de existir JWT e ainda assim precisa do contato. PUT troca a lista inteira e
+    DELETE volta ao padrao da AC2; os dois sao do Administrador. Lista vazia
+    nao passa: e a saida de quem foi barrado.
+    """
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'DELETE'):
+            return [permissions.IsAuthenticated(), EhAdministrador()]
+
+        return [permissions.AllowAny()]
+
+    @extend_schema(responses=ContatoSuporteSerializer(many=True))
+    def get(self, request):
+        return Response(ContatoSuporteSerializer(contatos_vigentes(), many=True).data)
+
+    @extend_schema(
+        request=ContatoSuporteSerializer(many=True),
+        responses=ContatoSuporteSerializer(many=True),
+    )
+    def put(self, request):
+        contatos = ContatoSuporteSerializer(data=request.data, many=True, allow_empty=False)
+        contatos.is_valid(raise_exception=True)
+
+        gravados = SubstituirContatosService().execute(
+            contatos=contatos.validated_data, ator=request.user
+        )
+
+        return Response(ContatoSuporteSerializer(gravados, many=True).data)
+
+    @extend_schema(request=None, responses=ContatoSuporteSerializer(many=True))
+    def delete(self, request):
+        padrao = RestaurarContatosService().execute(ator=request.user)
+
+        return Response(ContatoSuporteSerializer(padrao, many=True).data)

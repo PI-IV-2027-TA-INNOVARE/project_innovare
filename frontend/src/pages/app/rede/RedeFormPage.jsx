@@ -10,6 +10,7 @@ import {
   obterMembroRede,
 } from '../../../services/pdConnectApi'
 import ListaEditavel from '../perfil/ListaEditavel'
+import ListaDeFormacoes from './ListaDeFormacoes'
 import {
   DISPONIBILIDADES,
   PAPEIS_REDE,
@@ -30,6 +31,7 @@ const VAZIO = {
   tecnicas: [],
   linhas: [],
   experiencia: '',
+  formacoes: [],
   liberarAcesso: false,
 }
 
@@ -223,9 +225,12 @@ export default function RedeFormPage() {
                 </select>
               </label>
 
-              <label className="admin-field">
-                <span className="admin-field__label">Instituição</span>
+              <div className="admin-field">
+                <label className="admin-field__label" htmlFor="campo-rede-instituicao">
+                  Instituição
+                </label>
                 <input
+                  id="campo-rede-instituicao"
                   type="text"
                   className="admin-input"
                   value={valores.instituicao}
@@ -233,10 +238,10 @@ export default function RedeFormPage() {
                   aria-readonly="true"
                   aria-describedby="dica-instituicao"
                 />
-              </label>
-              <span id="dica-instituicao" className="admin-field__hint">
-                O vínculo institucional vem do cadastro de organizações.
-              </span>
+                <span id="dica-instituicao" className="admin-field__hint">
+                  O vínculo institucional vem do cadastro de organizações.
+                </span>
+              </div>
             </div>
           </div>
         </section>
@@ -291,6 +296,21 @@ export default function RedeFormPage() {
                 placeholder="Projetos relevantes e tempo de atuação."
               />
             </label>
+          </div>
+        </section>
+
+        <section className="perfil-card">
+          <header className="perfil-card__header">
+            <div>
+              <h2 className="perfil-card__title">Formação acadêmica</h2>
+              <p className="perfil-card__description">
+                Cursos concluídos ou em andamento, com a instituição e o nível.
+              </p>
+            </div>
+          </header>
+
+          <div className="perfil-card__body">
+            <ListaDeFormacoes values={valores.formacoes} onChange={alterar('formacoes')} />
           </div>
         </section>
 

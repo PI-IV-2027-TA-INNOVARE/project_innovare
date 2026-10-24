@@ -6,6 +6,7 @@ export const PAPEIS = Object.freeze({
   IDEIA_INTERNA: [ROLES.SUPERVISOR],
   PROBLEMAS: [ROLES.DEMANDANTE],
   REDE: [ROLES.SUPERVISOR],
+  RELATORIO: [ROLES.SUPERVISOR],
   INDICADORES: [ROLES.SUPERVISOR, ROLES.PESQUISADOR, ROLES.DEMANDANTE],
   ADMIN: [ROLES.ADMINISTRADOR],
 })
@@ -15,6 +16,9 @@ export const ROTAS_PROTEGIDAS = Object.freeze([
   { padrao: '/sem-acesso', papeis: null },
   { padrao: '/oportunidades', papeis: PAPEIS.OPORTUNIDADES },
   { padrao: '/oportunidades/nova', papeis: PAPEIS.IDEIA_INTERNA },
+  { padrao: '/oportunidades/:id/relatorio/pre-analise', papeis: PAPEIS.RELATORIO },
+  { padrao: '/oportunidades/:id/relatorio/equipe', papeis: PAPEIS.RELATORIO },
+  { padrao: '/oportunidades/:id/relatorio', papeis: PAPEIS.RELATORIO },
   { padrao: '/oportunidades/:id', papeis: PAPEIS.OPORTUNIDADES },
   { padrao: '/problemas', papeis: PAPEIS.PROBLEMAS },
   { padrao: '/problemas/novo', papeis: PAPEIS.PROBLEMAS },
@@ -29,6 +33,7 @@ export const ROTAS_PROTEGIDAS = Object.freeze([
   { padrao: '/admin/usuarios', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/parametros', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/auditoria', papeis: PAPEIS.ADMIN },
+  { padrao: '/admin/saude', papeis: PAPEIS.ADMIN },
 ])
 
 const ROTA_POR_ENTIDADE = Object.freeze({

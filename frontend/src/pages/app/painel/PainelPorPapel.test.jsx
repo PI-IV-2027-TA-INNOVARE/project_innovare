@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -227,5 +227,60 @@ describe('PainelPorPapel — estados', () => {
     await user.click(screen.getByRole('button', { name: /tentar de novo/i }))
 
     expect(await screen.findByText('Oportunidades')).toBeInTheDocument()
+  })
+})
+
+describe('PainelPorPapel — custo de abertura', () => {
+  /**
+   * O painel pede duas coisas ao servidor, e elas nao dependem uma da outra.
+   *
+   * Em serie, o tempo de abrir a tela e a soma das duas idas; em paralelo, a
+   * maior das duas. Com a API na mesma maquina a diferenca se perde no ruido;
+   * com o banco do outro lado da internet, cada ida custa a conexao mais a
+   * consulta, e a espera dobra sem que nenhuma linha pareca errada.
+   *
+   * O caso afirma a simultaneidade pela unica evidencia que nao depende de
+   * cronometro: a segunda chamada acontece **enquanto** a primeira ainda nao
+   * respondeu.
+   */
+  function pendente() {
+    let resolver
+    const promessa = new Promise((resolve) => {
+      resolver = resolve
+    })
+
+    return { promessa, resolver }
+  }
+
+  it('pede a fila e a rede ao mesmo tempo', async () => {
+    const fila = pendente()
+    api.listOportunidades = vi.fn(() => fila.promessa)
+
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    await waitFor(() => expect(api.listarRede).toHaveBeenCalled())
+
+    fila.resolver({ results: [AGUARDANDO] })
+    await screen.findByText('Oportunidades')
+  })
+
+  it('pede a fila e o proprio perfil ao mesmo tempo', async () => {
+    const fila = pendente()
+    api.listOportunidades = vi.fn(() => fila.promessa)
+
+    renderPainel('pesquisador', 'Maria Ferreira')
+
+    await waitFor(() => expect(api.obterMeuPerfil).toHaveBeenCalled())
+
+    fila.resolver({ results: [AGUARDANDO] })
+    await screen.findByText('Oportunidades comigo')
+  })
+
+  it('o painel do Supervisor nao pede o perfil de pesquisador', async () => {
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    await screen.findByText('Oportunidades')
+
+    expect(api.obterMeuPerfil).not.toHaveBeenCalled()
   })
 })

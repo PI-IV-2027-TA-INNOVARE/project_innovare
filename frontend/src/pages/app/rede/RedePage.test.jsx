@@ -4,7 +4,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RedeFormPage from './RedeFormPage'
 import RedePage from './RedePage'
-import { completudeDoPerfil, titulacaoLabel } from './redeData'
+import {
+  completudeDoPerfil,
+  formacoesDaApi,
+  formacoesParaApi,
+  titulacaoLabel,
+} from './redeData'
 
 const api = vi.hoisted(() => ({
   listarRede: null,
@@ -54,7 +59,6 @@ const CARLA = {
   id_membro: 5,
   nome: 'Carla Nogueira',
   email: 'carla.nogueira@ac2microbiologia.com.br',
-  papel_rede: 'colaborador',
   situacao: 'sem_acesso',
   competencias: ['Química analítica'],
   tecnicas: [],
@@ -67,7 +71,6 @@ const PEDRO = {
   id_membro: 6,
   nome: 'Pedro Salgado',
   email: 'pedro.salgado@ac2microbiologia.com.br',
-  papel_rede: 'graduando',
   titulacao_codigo: 'graduacao',
   competencias: ['Cultivo microbiano'],
   tecnicas: [],
@@ -79,7 +82,6 @@ const BANCADA = {
   id_membro: 7,
   nome: 'Núcleo de P&D — Bancada 2',
   email: 'bancada2@ac2microbiologia.com.br',
-  papel_rede: 'colaborador',
   titulacao_codigo: 'graduacao',
   situacao: 'inativo',
   competencias: [],
@@ -216,6 +218,26 @@ describe('RedePage', () => {
 })
 
 describe('RedeFormPage', () => {
+  /**
+   * A dica estava solta como irma do `.admin-form__row`, e nao dentro do
+   * campo que ela explica. A linha e uma grade de colunas automaticas, entao
+   * a dica virava uma **terceira coluna** ao lado dos campos em vez de ficar
+   * sob "Instituicao" - e em tela estreita descia sob "Papel na rede",
+   * explicando o campo errado.
+   */
+  it('a dica da instituição fica dentro do campo que ela explica', async () => {
+    renderRede('/rede/novo')
+
+    const instituicao = await screen.findByLabelText('Instituição')
+    const campo = instituicao.closest('.admin-field')
+
+    expect(within(campo).getByText(/vínculo institucional vem do cadastro/i))
+      .toBeInTheDocument()
+    expect(instituicao).toHaveAccessibleDescription(
+      /vínculo institucional vem do cadastro/i
+    )
+  })
+
   it('separa cadastrar na rede de liberar o acesso', async () => {
     renderRede('/rede/novo')
 
@@ -265,6 +287,27 @@ describe('RedeFormPage', () => {
     expect(await screen.findByText(/pesquisador cadastrado na rede/i)).toBeInTheDocument()
   })
 
+  it('cadastra a pessoa com a formação acadêmica', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    await user.type(screen.getByLabelText('Nome'), 'Ana Prado')
+    await user.type(screen.getByLabelText('E-mail'), 'ana.prado@ac2microbiologia.com.br')
+    await user.click(screen.getByRole('button', { name: /adicionar formação/i }))
+    await user.type(screen.getByLabelText('Curso'), 'Engenharia de Alimentos')
+    await user.type(screen.getByLabelText('Instituição de ensino'), 'Unesp')
+    await user.click(screen.getByRole('button', { name: /cadastrar na rede/i }))
+
+    expect(api.criarMembroRede.mock.calls[0][0].formacoes).toEqual([
+      {
+        curso: 'Engenharia de Alimentos',
+        instituicao: 'Unesp',
+        titulacao_codigo: null,
+        ano_conclusao: null,
+      },
+    ])
+  })
+
   it('mostra a recusa do servidor sem perder o formulário', async () => {
     const user = userEvent.setup()
     api.criarMembroRede = vi.fn().mockRejectedValue(new Error('email: já existe cadastro com este e-mail.'))
@@ -281,6 +324,25 @@ describe('RedeFormPage', () => {
 })
 
 describe('redeData', () => {
+  it('não envia linha de formação deixada em branco', () => {
+    expect(
+      formacoesParaApi([
+        { curso: '', instituicao: '', titulacao: '', ano: '' },
+        { curso: ' Farmácia ', instituicao: 'USP', titulacao: 'doutorado', ano: '2020' },
+      ])
+    ).toEqual([
+      { curso: 'Farmácia', instituicao: 'USP', titulacao_codigo: 'doutorado', ano_conclusao: 2020 },
+    ])
+  })
+
+  it('traduz a formação da API para a tela', () => {
+    expect(
+      formacoesDaApi([
+        { curso: 'Farmácia', instituicao: 'USP', titulacao_codigo: null, ano_conclusao: null },
+      ])
+    ).toEqual([{ curso: 'Farmácia', instituicao: 'USP', titulacao: '', ano: '' }])
+  })
+
   it('mede a completude pelas dimensões do RF03', () => {
     const vazio = completudeDoPerfil({})
     expect(vazio.percentual).toBe(0)

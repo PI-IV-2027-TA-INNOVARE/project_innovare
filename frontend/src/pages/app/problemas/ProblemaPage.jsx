@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import AnexosOportunidade from '../../../components/AnexosOportunidade'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
@@ -51,8 +52,10 @@ export default function ProblemaPage() {
     setErroCarga('')
 
     try {
-      const registro = await obterOportunidade(id)
-      const trilha = await listarHistorico(id).catch(() => [])
+      const [registro, trilha] = await Promise.all([
+        obterOportunidade(id),
+        listarHistorico(id).catch(() => []),
+      ])
 
       setProblema(daApi(registro))
       setEventos((trilha.results || trilha).map(eventoDaApi))
@@ -213,6 +216,13 @@ export default function ProblemaPage() {
           <p className="oportunidade-resumo">{problema.contexto}</p>
         ) : null}
       </Bloco>
+
+      <AnexosOportunidade
+        codigo={id}
+        podeEnviar
+        titulo="Documentos"
+        descricao="Laudos, fotos e relatórios que você anexou — e o que a AC2 juntou ao registro. Até 10 MB por arquivo."
+      />
 
       {problema.decisao && !pedeComplementacao ? (
         <Bloco titulo="Encaminhamento do Núcleo de P&D">

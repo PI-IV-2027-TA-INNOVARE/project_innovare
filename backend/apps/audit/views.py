@@ -10,8 +10,10 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 
 from apps.audit.models import CategoriaEvento, StatusEvento
+from apps.audit.rotulos import ROTINA_OCULTA
 from apps.audit.serializers import EventoTrilhaSerializer, FiltroTrilhaSerializer
 from apps.audit.services.consulta import trilha
+from apps.audit.services.leitura import leitura_da_pagina
 from core.permissions import EhAdministrador
 
 
@@ -37,6 +39,17 @@ class TrilhaListView(ListAPIView):
 
         return trilha(**filtros.validated_data)
 
+    def list(self, request, *args, **kwargs):
+        """A pagina sai com alvos e atores resolvidos em lote, nao linha a linha."""
+        pagina = self.paginate_queryset(self.get_queryset())
+        serializer = self.get_serializer(
+            pagina,
+            many=True,
+            context={**self.get_serializer_context(), 'leitura': leitura_da_pagina(pagina)},
+        )
+
+        return self.get_paginated_response(serializer.data)
+
 
 class TrilhaFiltrosView(views.APIView):
     """
@@ -55,5 +68,9 @@ class TrilhaFiltrosView(views.APIView):
             {
                 'categorias': _catalogo(CategoriaEvento.choices),
                 'status': _catalogo(StatusEvento.choices),
+                'rotina_oculta': {
+                    'categoria': CategoriaEvento.CONTA,
+                    'tipos': list(ROTINA_OCULTA),
+                },
             }
         )

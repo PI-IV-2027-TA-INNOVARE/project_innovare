@@ -6,12 +6,6 @@ import {
   setApiAuthSession,
 } from '../lib/api'
 import { encerrarSessao, getAuthenticatedProfile, requestAuthToken } from '../services/pdConnectApi'
-import {
-  IS_MOCK_AUTH_ENABLED,
-  mockRestoreSession,
-  mockSignIn,
-  mockSignOut,
-} from '../services/mockAuth'
 import { ROLES, roleLabel } from '../lib/roles'
 
 const STORAGE_KEY = 'pdconnect-auth-session-v2'
@@ -68,6 +62,10 @@ function translateApiMessage(message) {
     return 'Sua sessao expirou. Faca login novamente.'
   }
 
+  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    return 'Sessao encerrada'
+  }
+
   return message
 }
 
@@ -93,7 +91,6 @@ function buildUser(profilePayload) {
     organizacao: profilePayload.organizacao || null,
     permissions: profilePayload.permissoes || [],
     lastAccess: profilePayload.ultimo_acesso || null,
-    isMock: false,
   }
 }
 
@@ -148,14 +145,6 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    if (IS_MOCK_AUTH_ENABLED) {
-      mockRestoreSession()
-        .then((restoredUser) => { if (restoredUser) setUser(restoredUser) })
-        .finally(() => setIsBootstrapping(false))
-
-      return undefined
-    }
-
     configureApiAuth({
       onUnauthorized: () => {
         clearAuthState('Sua sessao expirou. Faca login novamente.')
@@ -185,17 +174,6 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signInWithCredentials = async ({ email, password }) => {
-    if (IS_MOCK_AUTH_ENABLED) {
-      const result = await mockSignIn({ email, password })
-
-      if (result.ok) {
-        setUser(result.user)
-        setAuthError('')
-      }
-
-      return result
-    }
-
     try {
       const tokenPayload = await requestAuthToken({ email: email.trim(), password })
 
@@ -215,8 +193,6 @@ export function AuthProvider({ children }) {
   }
 
   const refreshUser = async () => {
-    if (IS_MOCK_AUTH_ENABLED) return { ok: true, user }
-
     if (!session) {
       return { ok: false, message: 'Nao existe sessao ativa para atualizar.' }
     }
@@ -241,8 +217,7 @@ export function AuthProvider({ children }) {
   }
 
   const logout = async () => {
-    if (IS_MOCK_AUTH_ENABLED) mockSignOut()
-    else await revogarSessaoNoServidor()
+    await revogarSessaoNoServidor()
 
     clearAuthState('')
     setIsBootstrapping(false)
@@ -254,7 +229,6 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(user),
     isBootstrapping,
     authError,
-    isMockAuth: IS_MOCK_AUTH_ENABLED,
     signInWithCredentials,
     refreshUser,
     logout,

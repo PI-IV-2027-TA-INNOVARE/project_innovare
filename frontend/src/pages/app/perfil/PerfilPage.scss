@@ -1,3 +1,5 @@
+@use '../../../styles/mixins' as *;
+
 .perfil-page {
   width: 100%;
   padding: 32px var(--admin-gutter) 64px;
@@ -94,11 +96,57 @@
 }
 
 .perfil-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  align-items: start;
-  gap: var(--admin-gap);
+  @include cartoes-em-grade(3);
+
   margin-top: var(--admin-pad);
+}
+
+.perfil-grid__aviso {
+  grid-column: 1 / -1;
+}
+
+.perfil-grupo {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--admin-gap);
+  padding: var(--admin-pad);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+}
+
+.perfil-grupo__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--admin-gap);
+  flex-wrap: wrap;
+}
+
+.perfil-grupo__acao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.perfil-grupo__pendente {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-radius: 999px;
+}
+
+.perfil-grupo__grid {
+  @include cartoes-em-grade(3);
+}
+
+.perfil-card--larga {
+  margin-top: var(--admin-gap);
 }
 
 .perfil-page__footer {

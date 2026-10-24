@@ -192,13 +192,27 @@ export function getDefaultBranding(theme = 'light') {
   }, {})
 }
 
+/**
+ * As custom properties da paleta, com os valores que nao sao cor descartados.
+ *
+ * Valor invalido nao "da erro" no navegador: `setProperty` o ignora e o token
+ * fica sem valor, entao a cor cai para o que o CSS declarou - ou para nada.
+ * Como a paleta publicada e servida a **todos** os usuarios (o GET do tema e
+ * anonimo, a tela de login pinta a marca antes do login), uma cor digitada
+ * errado apagaria a identidade da plataforma para todo mundo. Descartar aqui
+ * mantem a cor anterior na tela, que e o que o admin espera enquanto digita
+ * `#1B5E20` e passa por `#`, `#1`, `#1B`.
+ *
+ * Isto e conveniencia e nao defesa: a recusa que vale e a da fronteira, no
+ * `TemaPatchSerializer` do backend.
+ */
 export function buildCssVariables(branding = {}) {
   const variables = {}
 
   for (const token of BRAND_TOKENS) {
     const value = branding[token.id]
 
-    if (!value) continue
+    if (!isValidColor(value)) continue
 
     variables[token.cssVar] = value
 
@@ -253,6 +267,26 @@ export function shade(color, factor) {
 
 export function isValidHex(color) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(color || '').trim())
+}
+
+const RGB_FUNCIONAL =
+  /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d+)\s*)?\)$/i
+
+/**
+ * Se o valor pode virar custom property sem apagar a cor da tela.
+ *
+ * Mais largo que `isValidHex` de proposito: `accentWarm` e `borderColor` nascem
+ * em `rgba()` no tema escuro - sao veus translucidos, e alfa nao cabe no hex de
+ * seis digitos que o seletor de cor produz. Aceitar so hex tornaria esses dois
+ * tokens impossiveis de restaurar.
+ *
+ * `isValidHex` continua existindo para o `<input type="color">`, que so sabe
+ * falar hex: la a pergunta e outra - "da para abrir o seletor neste valor".
+ */
+export function isValidColor(color) {
+  const texto = String(color || '').trim()
+
+  return isValidHex(texto) || RGB_FUNCIONAL.test(texto)
 }
 
 export function toRgbaString(color, alpha = 1) {

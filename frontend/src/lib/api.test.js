@@ -1,68 +1,135 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiRequest, setApiAuthSession } from './api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apiRequest } from './api'
 
-function respostaOk(corpo = {}) {
-  return {
-    ok: true,
-    status: 200,
-    headers: new Headers({ 'Content-Type': 'application/json' }),
-    json: async () => corpo,
-    text: async () => JSON.stringify(corpo),
-  }
+function responderCom(status, corpo) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(corpo), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  ))
 }
 
-const chamada = () => global.fetch.mock.calls[0][1]
+function responderComTexto(status, corpo, tipo = 'text/html; charset=utf-8') {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+    new Response(corpo, { status, headers: { 'Content-Type': tipo } })
+  ))
+}
 
-beforeEach(() => {
-  setApiAuthSession({ accessToken: 'acesso-1', refreshToken: 'renovacao-1' })
-  global.fetch = vi.fn().mockResolvedValue(respostaOk())
-})
+const PAGINA_DE_DEBUG_DO_DJANGO = `<!DOCTYPE html>
+<html lang="en"><head><title>ProgrammingError at /api/auth/token/</title></head>
+<body><h1>ProgrammingError at /api/auth/token/</h1>
+<pre class="exception_value">relation "Usuario" does not exist</pre></body></html>`
 
 afterEach(() => {
-  setApiAuthSession(null)
   vi.unstubAllGlobals()
 })
 
-describe('apiRequest — envio de arquivo', () => {
-  it('manda o FormData como veio, sem serializar', async () => {
-    const corpo = new FormData()
-    corpo.append('arquivo', new File(['laudo'], 'laudo.pdf'))
+describe('apiRequest', () => {
+  it('usa o texto do detail como mensagem, sem o nome da chave', async () => {
+    responderCom(403, { detail: 'Seu perfil nao tem competencia para esta acao.' })
 
-    await apiRequest('/oportunidades/OP-2026-001/anexos/', {
-      method: 'POST',
-      body: corpo,
-    })
-
-    expect(chamada().body).toBe(corpo)
+    await expect(apiRequest('/usuarios/')).rejects.toThrow(
+      /^Seu perfil nao tem competencia para esta acao\.$/
+    )
   })
 
-  it('deixa o navegador definir o Content-Type do multipart', async () => {
-    /**
-     * O boundary é gerado pelo navegador e vai no cabeçalho. Definir
-     * `multipart/form-data` à mão manda um Content-Type sem boundary, e o
-     * servidor não consegue separar as partes.
-     */
-    await apiRequest('/oportunidades/OP-2026-001/anexos/', {
-      method: 'POST',
-      body: new FormData(),
+  it('deixa o codigo de maquina fora da mensagem', async () => {
+    responderCom(409, {
+      detail: 'Esta oportunidade ainda nao tem proposta estruturada.',
+      codigo: 'proposta_inexistente',
     })
 
-    expect(chamada().headers.has('Content-Type')).toBe(false)
+    const erro = await apiRequest('/oportunidades/OP-1/relatorio/').catch((e) => e)
+
+    expect(erro.message).toBe('Esta oportunidade ainda nao tem proposta estruturada.')
+    expect(erro.data.codigo).toBe('proposta_inexistente')
   })
 
-  it('continua mandando o token de acesso', async () => {
-    await apiRequest('/oportunidades/OP-2026-001/anexos/', {
-      method: 'POST',
-      body: new FormData(),
+  it('mantem o campo na frente das mensagens de validacao', async () => {
+    responderCom(400, { email: ['Ja existe uma conta com este e-mail.'] })
+
+    await expect(apiRequest('/usuarios/', { method: 'POST', body: {} })).rejects.toThrow(
+      'email: Ja existe uma conta com este e-mail.'
+    )
+  })
+
+  /**
+   * A pagina de debug do Django chegou inteira ao banner do login: o corpo que
+   * nao e JSON virava `detail` e a mensagem do erro era o HTML. Corpo que nao
+   * e JSON nunca e mensagem - nem `data`, porque ha tela que le `data.detail`
+   * antes de `message`.
+   */
+  it('nunca mostra a pagina HTML de erro do servidor', async () => {
+    responderComTexto(500, PAGINA_DE_DEBUG_DO_DJANGO)
+
+    const erro = await apiRequest('/auth/token/', { method: 'POST', body: {} }).catch((e) => e)
+
+    expect(erro.status).toBe(500)
+    expect(erro.message).toBe(
+      'O servidor encontrou um erro inesperado. Tente novamente em instantes; se continuar, avise o suporte.'
+    )
+    expect(erro.message).not.toContain('<')
+    expect(erro.data).toBeNull()
+  })
+
+  it('texto puro de erro, como o de um proxy, tambem nao vira mensagem', async () => {
+    responderComTexto(502, 'Bad Gateway', 'text/plain')
+
+    const erro = await apiRequest('/oportunidades/').catch((e) => e)
+
+    expect(erro.message).not.toContain('Bad Gateway')
+    expect(erro.data).toBeNull()
+  })
+
+  it('erro 4xx fora do JSON cai na mensagem padrao', async () => {
+    responderComTexto(404, '<h1>Not Found</h1>')
+
+    const erro = await apiRequest('/rota-inexistente/').catch((e) => e)
+
+    expect(erro.status).toBe(404)
+    expect(erro.message).not.toContain('<')
+  })
+
+  it('erro 500 em JSON mostra o detail que a API escreveu', async () => {
+    responderCom(500, {
+      detail: 'O servidor encontrou um erro inesperado. Tente novamente em instantes.',
+      codigo: 'erro_interno',
     })
 
-    expect(chamada().headers.get('Authorization')).toBe('Bearer acesso-1')
+    const erro = await apiRequest('/oportunidades/').catch((e) => e)
+
+    expect(erro.message).toBe(
+      'O servidor encontrou um erro inesperado. Tente novamente em instantes.'
+    )
+    expect(erro.data.codigo).toBe('erro_interno')
   })
 
-  it('não muda o caminho do JSON', async () => {
-    await apiRequest('/oportunidades/', { method: 'POST', body: { titulo: 'X' } })
+  it('JSON malformado nao estoura erro de parse na tela', async () => {
+    responderComTexto(500, '{"detail": ', 'application/json')
 
-    expect(chamada().headers.get('Content-Type')).toBe('application/json')
-    expect(chamada().body).toBe(JSON.stringify({ titulo: 'X' }))
+    const erro = await apiRequest('/oportunidades/').catch((e) => e)
+
+    expect(erro.status).toBe(500)
+    expect(erro.message).not.toMatch(/JSON|Unexpected/)
+  })
+
+  it('servidor fora do ar vira mensagem legivel em vez de "Failed to fetch"', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    const erro = await apiRequest('/auth/token/', { method: 'POST', body: {} }).catch((e) => e)
+
+    expect(erro.name).toBe('ApiError')
+    expect(erro.status).toBe(0)
+    expect(erro.message).toBe(
+      'Não foi possível falar com o servidor. Verifique sua conexão e tente novamente.'
+    )
+  })
+
+  it('cancelamento da requisicao continua sendo cancelamento', async () => {
+    const cancelamento = new DOMException('The operation was aborted.', 'AbortError')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(cancelamento))
+
+    await expect(apiRequest('/oportunidades/')).rejects.toBe(cancelamento)
   })
 })

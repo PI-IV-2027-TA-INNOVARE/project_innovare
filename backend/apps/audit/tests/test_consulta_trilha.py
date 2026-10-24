@@ -142,7 +142,18 @@ class FiltrosDaTrilhaTests(TrilhaBaseTests):
         self.assertEqual(por_tipo.data['count'], 1)
 
     def test_filtra_por_periodo(self):
-        ontem = (self.agora - timedelta(days=2)).date().isoformat()
+        """
+        A data do filtro e lida no fuso da aplicacao, e o teste tambem.
+
+        `timezone.now()` e UTC; `.date()` sobre ele devolve o dia UTC. Entre
+        21h e meia-noite em Sao Paulo (UTC-3) os dois discordam, e o evento de
+        "um dia atras" cai dentro da janela do `ate` - o teste falhava so nesse
+        intervalo. Calcular o dia com `localtime` o poe no mesmo fuso que o
+        filtro usa para resolver a data.
+        """
+        ontem = (
+            timezone.localtime(self.agora) - timedelta(days=2)
+        ).date().isoformat()
 
         self.assertEqual(self.listar(desde=ontem).data['count'], 2)
         self.assertEqual(self.listar(ate=ontem).data['count'], 1)
@@ -188,7 +199,8 @@ class ConteudoDoEventoTests(TrilhaBaseTests):
             set(evento),
             {
                 'id_evento', 'ocorrido_em', 'categoria', 'categoria_rotulo',
-                'tipo', 'ator', 'entidade', 'entidade_id', 'status',
+                'tipo', 'tipo_rotulo', 'ator', 'ator_nome', 'alvo',
+                'entidade', 'entidade_id', 'status',
                 'status_rotulo', 'motivo', 'detalhe', 'correlation_id',
             },
         )

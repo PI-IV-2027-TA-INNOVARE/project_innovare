@@ -1,0 +1,27 @@
+.lista-formacoes {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.lista-formacoes__itens {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-formacoes__item {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--admin-card-border);
+
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

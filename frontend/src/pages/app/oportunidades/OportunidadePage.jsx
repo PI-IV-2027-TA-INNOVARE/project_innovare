@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
@@ -11,46 +11,40 @@ import {
   obterOportunidade,
   registrarDecisao as registrarDecisaoNaApi,
 } from '../../../services/pdConnectApi'
-import AbaAnexos from './abas/AbaAnexos'
+import AnexosOportunidade from '../../../components/AnexosOportunidade'
+import AbaCompetencias from './abas/AbaCompetencias'
 import AbaContexto from './abas/AbaContexto'
+import AbaCopiloto from './abas/AbaCopiloto'
 import AbaDecisao from './abas/AbaDecisao'
+import AbaEquipe from './abas/AbaEquipe'
 import AbaHistorico from './abas/AbaHistorico'
-import AbaPlanejada from './abas/AbaPlanejada'
+import AbaPreAnalise from './abas/AbaPreAnalise'
+import AbaProposta from './abas/AbaProposta'
+import { ETAPAS, REGISTROS } from './etapas'
 import { daApi, eventoDaApi, origemLabel, situacaoLabel } from './oportunidadesData'
 import './OportunidadesPage.scss'
 
-const ABAS = [
-  { id: 'contexto', label: 'Contexto', icon: appIcons.folder },
-  { id: 'proposta', label: 'Proposta estruturada', icon: appIcons.edit, planejada: true },
-  { id: 'competencias', label: 'Competências', icon: appIcons.role, planejada: true },
-  { id: 'equipe', label: 'Equipe potencial', icon: appIcons.users, planejada: true },
-  { id: 'pre-analise', label: 'Pré-análise', icon: appIcons.researcher, planejada: true },
-  { id: 'decisao', label: 'Decisão', icon: appIcons.decision },
-  { id: 'anexos', label: 'Anexos', icon: appIcons.folder },
-  { id: 'historico', label: 'Histórico', icon: appIcons.history },
-]
+const ABAS = [...ETAPAS, ...REGISTROS]
 
-const DETALHE_PLANEJADO = {
-  proposta: {
-    titulo: 'Proposta estruturada',
-    texto:
-      'Problema de pesquisa, hipótese, objetivos, metodologia, resultados esperados, inovação, infraestrutura e recursos — trabalhados com o Copiloto e revisados por humano.',
-  },
-  competencias: {
-    titulo: 'Competências necessárias',
-    texto:
-      'Conhecimento científico e técnico exigido pela oportunidade, derivado da proposta estruturada e ajustável pelo Supervisor.',
-  },
-  equipe: {
-    titulo: 'Equipe potencial',
-    texto:
-      'Sugestões da rede interna com justificativa visível e lacunas de competência. Sugestão, nunca convocação — não há aceite nem recusa.',
-  },
-  'pre-analise': {
-    titulo: 'Pré-análise PIPE/FAPESP',
-    texto:
-      'Análise orientativa por dimensão, com lacunas e recomendações. Não é nota, parecer, aprovação nem decisão da FAPESP.',
-  },
+function BotaoAba({ item, ativa, bloqueada, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`oportunidade-aba${ativa ? ' is-active' : ''}`}
+      aria-current={ativa ? 'step' : undefined}
+      disabled={bloqueada}
+      onClick={onClick}
+    >
+      {item.numero ? (
+        <span className="oportunidade-aba__numero" aria-hidden="true">
+          {item.numero}
+        </span>
+      ) : (
+        <Icone icon={item.icon} className="oportunidade-aba__icon" />
+      )}
+      {item.label}
+    </button>
+  )
 }
 
 export default function OportunidadePage() {
@@ -65,19 +59,23 @@ export default function OportunidadePage() {
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState('')
   const [abaAtiva, setAbaAtiva] = useState('contexto')
+  const [abaOcupada, setAbaOcupada] = useState(false)
+  const [rascunhoPendente, setRascunhoPendente] = useState(false)
 
-  const carregar = useCallback(async () => {
-    setCarregando(true)
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) setCarregando(true)
     setErroCarga('')
 
     try {
-      const dados = await obterOportunidade(id)
-      const trilha = await listarHistorico(id).catch(() => [])
+      const [dados, trilha] = await Promise.all([
+        obterOportunidade(id),
+        listarHistorico(id).catch(() => []),
+      ])
 
       setRegistro(daApi(dados))
       setEventos((trilha.results || trilha).map(eventoDaApi))
     } catch (falha) {
-      setRegistro(null)
+      if (!silencioso) setRegistro(null)
       setErroCarga(falha?.message || 'Não foi possível carregar esta oportunidade.')
     } finally {
       setCarregando(false)
@@ -88,11 +86,33 @@ export default function OportunidadePage() {
     carregar()
   }, [carregar])
 
+  const atualizarEmSegundoPlano = useCallback(
+    () => carregar({ silencioso: true }),
+    [carregar],
+  )
+
+  const trocarAba = useCallback((destino) => {
+    if (
+      rascunhoPendente &&
+      !window.confirm('Há alterações não salvas na proposta. Sair desta etapa sem salvar?')
+    ) {
+      return
+    }
+
+    setRascunhoPendente(false)
+    setAbaAtiva(destino)
+  }, [rascunhoPendente])
+
+  const irPara = useCallback((destino) => {
+    trocarAba(destino)
+    window.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }, [trocarAba])
+
   const registrarDecisao = async (tipo, justificativa) => {
     try {
       await registrarDecisaoNaApi(id, { tipo, justificativa })
       showToast('Decisão registrada no histórico.')
-      await carregar()
+      await atualizarEmSegundoPlano()
     } catch (falha) {
       showToast(falha?.message || 'Não foi possível registrar a decisão.')
     }
@@ -117,7 +137,7 @@ export default function OportunidadePage() {
           Nenhuma oportunidade com o código <code>{id}</code>.
           {erroCarga ? ` ${erroCarga}` : ''}
         </p>
-        <button type="button" className="admin-btn admin-btn--outline" onClick={carregar}>
+        <button type="button" className="admin-btn admin-btn--outline" onClick={() => carregar()}>
           Tentar de novo
         </button>
       </div>
@@ -130,7 +150,19 @@ export default function OportunidadePage() {
   return (
     <div className="console oportunidade-page">
       <header className="oportunidade-page__header">
-        <BackLink to="/oportunidades">Voltar para oportunidades</BackLink>
+        <div className="oportunidade-page__topo">
+          <BackLink to="/oportunidades">Voltar para oportunidades</BackLink>
+
+          {ehSupervisor ? (
+            <Link
+              to={`/oportunidades/${id}/relatorio`}
+              className="admin-btn admin-btn--outline"
+            >
+              <Icone icon={appIcons.view} />
+              Relatório
+            </Link>
+          ) : null}
+        </div>
 
         <h1 className="oportunidade-page__title">{registro.titulo}</h1>
 
@@ -150,23 +182,76 @@ export default function OportunidadePage() {
       </header>
 
       <nav className="oportunidade-abas" aria-label="Etapas da oportunidade">
-        {ABAS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`oportunidade-aba${item.id === abaAtiva ? ' is-active' : ''}${item.planejada ? ' is-planned' : ''}`}
-            aria-current={item.id === abaAtiva ? 'page' : undefined}
-            onClick={() => setAbaAtiva(item.id)}
-          >
-            <Icone icon={item.icon} className="oportunidade-aba__icon" />
-            {item.label}
-            {item.planejada ? <span className="oportunidade-aba__tag">Planejado</span> : null}
-          </button>
-        ))}
+        <ol className="oportunidade-abas__etapas">
+          {ETAPAS.map((item) => (
+            <li key={item.id}>
+              <BotaoAba
+                item={item}
+                ativa={item.id === abaAtiva}
+                bloqueada={abaOcupada && item.id !== abaAtiva}
+                onClick={() => trocarAba(item.id)}
+              />
+            </li>
+          ))}
+        </ol>
+
+        <ul className="oportunidade-abas__registros" aria-label="Registros">
+          {REGISTROS.map((item) => (
+            <li key={item.id}>
+              <BotaoAba
+                item={item}
+                ativa={item.id === abaAtiva}
+                bloqueada={abaOcupada && item.id !== abaAtiva}
+                onClick={() => trocarAba(item.id)}
+              />
+            </li>
+          ))}
+        </ul>
       </nav>
 
+      {abaOcupada ? (
+        <p className="oportunidade-abas__aviso" role="status">
+          Aguarde a IA terminar para trocar de etapa.
+        </p>
+      ) : null}
+
       <div className="oportunidade-conteudo">
-        {abaAtiva === 'contexto' ? <AbaContexto oportunidade={registro} /> : null}
+        {abaAtiva === 'contexto' ? (
+          <AbaContexto
+            oportunidade={registro}
+            podeConduzir={ehSupervisor}
+            irPara={irPara}
+          />
+        ) : null}
+
+        {abaAtiva === 'copiloto' ? (
+          <AbaCopiloto
+            oportunidadeId={id}
+            aoEstruturar={atualizarEmSegundoPlano}
+            aoOcupar={setAbaOcupada}
+            irPara={irPara}
+          />
+        ) : null}
+
+        {abaAtiva === 'proposta' ? (
+          <AbaProposta
+            oportunidadeId={id}
+            irPara={irPara}
+            aoAlterar={setRascunhoPendente}
+          />
+        ) : null}
+
+        {abaAtiva === 'competencias' ? (
+          <AbaCompetencias oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+        ) : null}
+
+        {abaAtiva === 'equipe' ? (
+          <AbaEquipe oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+        ) : null}
+
+        {abaAtiva === 'pre-analise' ? (
+          <AbaPreAnalise oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+        ) : null}
 
         {abaAtiva === 'decisao' ? (
           <AbaDecisao
@@ -177,15 +262,15 @@ export default function OportunidadePage() {
         ) : null}
 
         {abaAtiva === 'anexos' ? (
-          <AbaAnexos codigo={id} podeEnviar={ehSupervisor} />
+          <AnexosOportunidade codigo={id} podeEnviar={ehSupervisor} />
         ) : null}
 
-        {abaAtiva === 'historico' ? <AbaHistorico historico={eventos} /> : null}
-
-        {aba.planejada ? (
-          <AbaPlanejada
-            titulo={DETALHE_PLANEJADO[aba.id].titulo}
-            texto={DETALHE_PLANEJADO[aba.id].texto}
+        {abaAtiva === 'historico' ? (
+          <AbaHistorico
+            codigo={id}
+            historico={eventos}
+            podeRegistrar={ehSupervisor}
+            podeSolicitarComplemento={ehSupervisor && registro.origem === 'externo'}
           />
         ) : null}
       </div>

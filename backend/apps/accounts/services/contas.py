@@ -21,12 +21,46 @@ from apps.accounts.models import (
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
+from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
 from core.exceptions import ConflitoDeEstado, ErroDeDominio
 
 if TYPE_CHECKING:
     from apps.organizations.models import Organizacao
 
 PAPEIS_PROVISIONAVEIS = (Papel.SUPERVISOR, Papel.ADMINISTRADOR, Papel.DEMANDANTE)
+
+
+def _criar_membro_rede_para_supervisor(
+    *,
+    usuario: Usuario,
+    organizacao: Organizacao | None,
+    ator: Usuario,
+) -> MembroRede | None:
+    """Cria MembroRede correspondente quando um SUPERVISOR e provisionado."""
+    if usuario.papel != Papel.SUPERVISOR:
+        return None
+
+    if MembroRede.objects.com_email(usuario.email).exists():
+        return None
+
+    membro = MembroRede.objects.create(
+        usuario=usuario,
+        papel_rede=PapelNaRede.SUPERVISOR,
+        organizacao=organizacao,
+        experiencia='',
+        situacao=SituacaoMembro.ATIVO,
+        cadastrado_por=ator,
+    )
+
+    registrar_evento(
+        categoria=CategoriaEvento.REDE,
+        tipo='membro_cadastrado',
+        entidade='membro_rede',
+        entidade_id=membro.id_membro,
+        ator=getattr(ator, 'email', str(ator)),
+        detalhe={'papel_rede': membro.papel_rede, 'email': membro.email, 'origem': 'provisionamento_admin'},
+    )
+    return membro
 
 
 class ProvisionarContaService:
@@ -61,6 +95,10 @@ class ProvisionarContaService:
             email=email, nome=nome, papel=papel, organizacao=organizacao,
         )
 
+        _criar_membro_rede_para_supervisor(
+            usuario=usuario, organizacao=organizacao, ator=ator,
+        )
+
         token = TokenAcesso.emitir(usuario, FinalidadeToken.CONVITE)
         self._email.convite_acesso(usuario, token)
 
@@ -71,6 +109,70 @@ class ProvisionarContaService:
             entidade_id=usuario.id_usuario,
             ator=getattr(ator, 'email', str(ator)),
             detalhe={'papel': usuario.papel, 'email': usuario.email},
+        )
+        return usuario
+
+
+def garantir_email_livre(
+    email: str, *, usuario: Usuario | None = None, membro: MembroRede | None = None
+) -> None:
+    """
+    Recusa o e-mail que ja pertence a outra pessoa - conta ou membro da rede.
+
+    O membro sem conta guarda o proprio e-mail, porque nasce antes da conta
+    (RN-A04); com conta, o e-mail e o da conta. A unicidade de cada tabela
+    sozinha nao basta: o e-mail livre em `Usuario` pode estar em uso por um
+    membro ainda sem acesso, e liberar o acesso dele quebraria depois.
+    """
+    contas = Usuario.objects.filter(email=email)
+    membros = MembroRede.objects.filter(email_sem_conta=email)
+
+    if usuario is not None:
+        contas = contas.exclude(pk=usuario.pk)
+    if membro is not None:
+        membros = membros.exclude(pk=membro.pk)
+
+    if contas.exists() or membros.exists():
+        raise ConflitoDeEstado(
+            'Este e-mail ja pertence a outra pessoa na plataforma.',
+            codigo='email_em_uso',
+        )
+
+
+class AtualizarContaService:
+    """
+    Edicao da conta pelo Administrador.
+
+    Se a conta tem membro na rede, nome e e-mail sao os dela: o membro nao
+    guarda copia, entao nao ha o que propagar. Situacao nao passa por aqui -
+    tem rota propria, que audita a transicao.
+    """
+
+    @transaction.atomic
+    def execute(self, *, usuario: Usuario, dados: dict, ator: Usuario) -> Usuario:
+        membro = MembroRede.objects.filter(usuario=usuario).first()
+
+        if 'email' in dados and dados['email'] != usuario.email:
+            garantir_email_livre(dados['email'], usuario=usuario, membro=membro)
+
+        mudou = sorted(
+            campo for campo, valor in dados.items() if getattr(usuario, campo) != valor
+        )
+
+        if not mudou:
+            return usuario
+
+        for campo, valor in dados.items():
+            setattr(usuario, campo, valor)
+        usuario.save()
+
+        registrar_evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='conta_atualizada',
+            entidade='usuario',
+            entidade_id=usuario.id_usuario,
+            ator=getattr(ator, 'email', str(ator)),
+            detalhe={'campos': mudou},
         )
         return usuario
 

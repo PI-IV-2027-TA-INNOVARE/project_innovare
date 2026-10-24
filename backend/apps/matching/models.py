@@ -8,6 +8,8 @@ import uuid
 
 from django.db import models
 
+from core.models import lista_fixa
+
 from apps.ai.models import StatusExecucao
 from apps.network.models import PapelNaRede
 
@@ -39,8 +41,8 @@ class ExecucaoMatching(models.Model):
     versao_modelo = models.CharField(
         max_length=120, blank=True, default='', db_column='versao_modelo'
     )
-    usou_rerank = models.BooleanField(default=False, db_column='usou_rerank')
-    fallback_usado = models.BooleanField(default=False, db_column='fallback_usado')
+    usou_rerank = models.BooleanField(default=False, db_column='usou_reordenacao')
+    fallback_usado = models.BooleanField(default=False, db_column='usou_caminho_alternativo')
     executado_por = models.CharField(
         max_length=160, default='__sistema__', db_column='executado_por'
     )
@@ -65,7 +67,10 @@ class ExecucaoMatching(models.Model):
     )
 
     class Meta:
-        db_table = 'execucao_matching'
+        db_table = 'Execucao_Matching'
+        constraints = [
+            lista_fixa('execucao_matching', 'status', StatusExecucao),
+        ]
         verbose_name = 'execucao de matching'
         verbose_name_plural = 'execucoes de matching'
         ordering = ['-iniciado_em']
@@ -99,7 +104,7 @@ class EquipePotencial(models.Model):
     data_geracao = models.DateTimeField(auto_now_add=True, db_column='data_geracao')
 
     class Meta:
-        db_table = 'equipe_potencial'
+        db_table = 'Equipe_Potencial'
         verbose_name = 'equipe potencial'
         verbose_name_plural = 'equipes potenciais'
         ordering = ['-data_geracao']
@@ -140,11 +145,11 @@ class MembroEquipe(models.Model):
         decimal_places=4,
         null=True,
         blank=True,
-        db_column='score_compatibilidade',
+        db_column='pontuacao_compatibilidade',
     )
     justificativa = models.TextField(blank=True, default='', db_column='justificativa')
-    match_reasons = models.JSONField(default=list, db_column='match_reasons')
-    score_features = models.JSONField(default=dict, db_column='score_features')
+    match_reasons = models.JSONField(default=list, db_column='motivos_compatibilidade')
+    score_features = models.JSONField(default=dict, db_column='componentes_pontuacao')
     incluido = models.BooleanField(default=True, db_column='incluido')
     origem = models.CharField(
         max_length=8,
@@ -159,17 +164,19 @@ class MembroEquipe(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name='equipes_ajustadas',
-        db_column='ajustado_por',
+        db_column='id_ajustado_por',
     )
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
     atualizado_em = models.DateTimeField(auto_now=True, db_column='atualizado_em')
 
     class Meta:
-        db_table = 'membro_equipe'
+        db_table = 'Membro_Equipe'
         verbose_name = 'membro da equipe potencial'
         verbose_name_plural = 'membros da equipe potencial'
         ordering = ['-score_compatibilidade']
         constraints = [
+            lista_fixa('membro_equipe', 'papel', PapelNaRede),
+            lista_fixa('membro_equipe', 'origem', OrigemIndicacao),
             models.UniqueConstraint(
                 fields=['equipe', 'membro'], name='uq_membro_equipe'
             ),
@@ -214,7 +221,7 @@ class LacunaCompetenciaEquipe(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
 
     class Meta:
-        db_table = 'lacuna_competencia_equipe'
+        db_table = 'Lacuna_Competencia_Equipe'
         verbose_name = 'lacuna de competencia da equipe'
         verbose_name_plural = 'lacunas de competencia da equipe'
 

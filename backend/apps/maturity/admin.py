@@ -13,6 +13,7 @@ from apps.maturity.models import (
     PreAnalise,
     PreAnaliseDimensao,
     Recomendacao,
+    VersaoCriterio,
 )
 from core.admin import AdminSomenteLeitura, InlineSomenteLeitura
 
@@ -21,12 +22,19 @@ class DimensaoInline(InlineSomenteLeitura):
     model = PreAnaliseDimensao
 
 
+@admin.register(VersaoCriterio)
+class VersaoCriterioAdmin(admin.ModelAdmin):
+    list_display = ['versao', 'baseline', 'vigente_de', 'vigente_ate']
+    search_fields = ['versao', 'baseline']
+
+
 @admin.register(CriterioPreAnalise)
 class CriterioPreAnaliseAdmin(admin.ModelAdmin):
-    list_display = ['versao', 'dimensao', 'codigo', 'peso', 'vigente_de', 'vigente_ate']
-    list_filter = ['versao', 'dimensao']
+    list_display = ['versao_criterio', 'dimensao', 'codigo', 'peso']
+    list_filter = ['versao_criterio', 'dimensao']
     search_fields = ['codigo', 'descricao']
-    ordering = ['versao', 'dimensao', 'codigo']
+    ordering = ['versao_criterio__versao', 'dimensao', 'codigo']
+    list_select_related = ['versao_criterio']
 
 
 @admin.register(PreAnalise)
@@ -34,12 +42,12 @@ class PreAnaliseAdmin(AdminSomenteLeitura):
     list_display = [
         'id_pre_analise',
         'proposta',
-        'versao_criterios',
+        'versao_criterio',
         'versao_proposta',
         'status',
         'executada_em',
     ]
-    list_filter = ['status', 'versao_criterios']
+    list_filter = ['status', 'versao_criterio']
     search_fields = ['proposta__oportunidade__codigo']
     date_hierarchy = 'executada_em'
     inlines = [DimensaoInline]

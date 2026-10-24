@@ -15,6 +15,13 @@ const PerfilPage = lazy(() => import('./pages/app/perfil'))
 const OportunidadesPage = lazy(() => import('./pages/app/oportunidades'))
 const OportunidadePage = lazy(() => import('./pages/app/oportunidades/detalhe'))
 const IdeiaFormPage = lazy(() => import('./pages/app/oportunidades/nova'))
+const RelatorioPage = lazy(() => import('./pages/app/oportunidades/relatorio'))
+const RelatorioPreAnalisePage = lazy(
+  () => import('./pages/app/oportunidades/relatorio-preanalise'),
+)
+const RelatorioEquipePage = lazy(
+  () => import('./pages/app/oportunidades/relatorio-equipe'),
+)
 const ProblemasPage = lazy(() => import('./pages/app/problemas'))
 const ProblemaFormPage = lazy(() => import('./pages/app/problemas/novo'))
 const ProblemaPage = lazy(() => import('./pages/app/problemas/detalhe'))
@@ -28,6 +35,7 @@ const AppearanceSection = lazy(() => import('./pages/admin/sections/AppearanceSe
 const UsersSection = lazy(() => import('./pages/admin/sections/UsersSection'))
 const ParametrosSection = lazy(() => import('./pages/admin/sections/ParametrosSection'))
 const AuditoriaSection = lazy(() => import('./pages/admin/sections/AuditoriaSection'))
+const SaudeSection = lazy(() => import('./pages/admin/sections/SaudeSection'))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
 const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
 
@@ -84,6 +92,23 @@ function App() {
           <Route element={<ProtectedRoute requiredRole={PAPEIS.IDEIA_INTERNA} />}>
             <Route element={<AuthenticatedLayout />}>
               <Route path="/oportunidades/nova" element={<IdeiaFormPage />} />
+            </Route>
+          </Route>
+
+          <Route element={<ProtectedRoute requiredRole={PAPEIS.RELATORIO} />}>
+            <Route element={<AuthenticatedLayout />}>
+              <Route
+                path="/oportunidades/:id/relatorio"
+                element={<RelatorioPage />}
+              />
+              <Route
+                path="/oportunidades/:id/relatorio/pre-analise"
+                element={<RelatorioPreAnalisePage />}
+              />
+              <Route
+                path="/oportunidades/:id/relatorio/equipe"
+                element={<RelatorioEquipePage />}
+              />
             </Route>
           </Route>
 
@@ -144,6 +169,14 @@ function App() {
                   element={
                     <SecaoProtegida permissao={PERMISSOES.CONFIGURACAO}>
                       <ParametrosSection />
+                    </SecaoProtegida>
+                  }
+                />
+                <Route
+                  path="saude"
+                  element={
+                    <SecaoProtegida permissao={PERMISSOES.AUDITORIA}>
+                      <SaudeSection />
                     </SecaoProtegida>
                   }
                 />

@@ -1,6 +1,11 @@
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000/api'
 const AUTH_REFRESH_PATH = '/auth/token/refresh/'
 
+const MENSAGEM_ERRO_DO_SERVIDOR =
+  'O servidor encontrou um erro inesperado. Tente novamente em instantes; se continuar, avise o suporte.'
+const MENSAGEM_SEM_CONEXAO =
+  'Não foi possível falar com o servidor. Verifique sua conexão e tente novamente.'
+
 let authSession = null
 let refreshPromise = null
 let unauthorizedHandler = null
@@ -71,6 +76,10 @@ function flattenErrorDetail(detail) {
   }
 
   if (typeof detail === 'object') {
+    if ('detail' in detail) {
+      return flattenErrorDetail(detail.detail)
+    }
+
     return Object.entries(detail)
       .map(([field, value]) => {
         const message = flattenErrorDetail(value)
@@ -83,27 +92,57 @@ function flattenErrorDetail(detail) {
   return ''
 }
 
-async function parseResponse(response) {
-  const contentType = response.headers.get('content-type') || ''
+function respostaEmJson(response) {
+  return (response.headers.get('content-type') || '').includes('application/json')
+}
 
-  if (contentType.includes('application/json')) {
-    return response.json()
+async function parseResponse(response) {
+  if (respostaEmJson(response)) {
+    try {
+      return await response.json()
+    } catch {
+      return null
+    }
   }
 
   const text = await response.text()
   return text ? { detail: text } : null
 }
 
-function buildApiError(data, fallback, status = null) {
+/**
+ * Corpo de erro que nao e JSON nunca chega a tela.
+ *
+ * A pagina de debug do Django, o 502 de um proxy ou um HTML qualquer viravam
+ * `detail` e apareciam inteiros no banner. Fora do JSON so o status conta: 5xx
+ * e erro do servidor, o resto cai na mensagem padrao de quem chamou.
+ */
+function buildApiError(response, data, fallback) {
+  const status = response.status
+  const dadosDaApi = respostaEmJson(response) ? data : null
+  const padrao = status >= 500 ? MENSAGEM_ERRO_DO_SERVIDOR : fallback
+
   return new ApiError(
-    flattenErrorDetail(data) || fallback,
-    { status, data }
+    flattenErrorDetail(dadosDaApi) || padrao,
+    { status, data: dadosDaApi }
   )
 }
 
+async function enviar(url, init) {
+  try {
+    return await fetch(url, init)
+  } catch (erro) {
+    if (erro?.name === 'AbortError') {
+      throw erro
+    }
+
+    throw new ApiError(MENSAGEM_SEM_CONEXAO, { status: 0 })
+  }
+}
+
 async function requestTokenRefresh(refreshToken) {
-  const response = await fetch(buildUrl(AUTH_REFRESH_PATH), {
+  const response = await enviar(buildUrl(AUTH_REFRESH_PATH), {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -114,9 +153,9 @@ async function requestTokenRefresh(refreshToken) {
 
   if (!response.ok) {
     throw buildApiError(
+      response,
       data,
-      'Nao foi possivel renovar a sessao autenticada.',
-      response.status
+      'Nao foi possivel renovar a sessao autenticada.'
     )
   }
 
@@ -209,7 +248,8 @@ export async function apiRequest(path, options = {}) {
     requestHeaders.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(buildUrl(path), {
+  const response = await enviar(buildUrl(path), {
+    cache: 'no-store',
     ...rest,
     headers: requestHeaders,
     body: corpoDaRequisicao(body, enviaArquivo),
@@ -232,16 +272,16 @@ export async function apiRequest(path, options = {}) {
     } catch {
       throw new ApiError('Sua sessao expirou. Faca login novamente.', {
         status: 401,
-        data,
+        data: respostaEmJson(response) ? data : null,
       })
     }
   }
 
   if (!response.ok) {
     throw buildApiError(
+      response,
       data,
-      'Nao foi possivel concluir a requisicao para a API.',
-      response.status
+      'Nao foi possivel concluir a requisicao para a API.'
     )
   }
 

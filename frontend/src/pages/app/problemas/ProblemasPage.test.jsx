@@ -209,10 +209,12 @@ describe('ProblemaFormPage', () => {
     expect(screen.getByLabelText(/^título$/i)).toHaveValue('Espuma no tanque')
   })
 
-  it('avisa que nenhum anexo sai do computador nesta versão', () => {
+  it('diz que o anexo sobe junto com o cadastro, e o teto por arquivo', () => {
     renderApp('/problemas/novo')
 
-    expect(screen.getByText(/nenhum arquivo sai do seu computador/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/arquivos sobem junto com o cadastro, até 10 MB cada/i)
+    ).toBeInTheDocument()
   })
 })
 
