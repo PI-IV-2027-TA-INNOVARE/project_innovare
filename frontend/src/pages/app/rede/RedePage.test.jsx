@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   criarMembroRede: null,
   atualizarMembroRede: null,
   liberarAcessoMembro: null,
+  inativarMembro: null,
+  reativarMembro: null,
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
@@ -25,6 +27,8 @@ vi.mock('../../../services/pdConnectApi', () => ({
   criarMembroRede: (...args) => api.criarMembroRede(...args),
   atualizarMembroRede: (...args) => api.atualizarMembroRede(...args),
   liberarAcessoMembro: (...args) => api.liberarAcessoMembro(...args),
+  inativarMembro: (...args) => api.inativarMembro(...args),
+  reativarMembro: (...args) => api.reativarMembro(...args),
 }))
 
 const MARIA = {
@@ -114,6 +118,8 @@ beforeEach(() => {
   api.criarMembroRede = vi.fn().mockResolvedValue({ ...CARLA, id_membro: 9 })
   api.atualizarMembroRede = vi.fn().mockResolvedValue(MARIA)
   api.liberarAcessoMembro = vi.fn().mockResolvedValue({ ...CARLA, situacao: 'ativo', tem_acesso: true })
+  api.inativarMembro = vi.fn().mockResolvedValue({ ...MARIA, situacao: 'inativo' })
+  api.reativarMembro = vi.fn().mockResolvedValue({ ...BANCADA, situacao: 'sem_acesso' })
 })
 
 describe('RedePage', () => {
@@ -207,6 +213,56 @@ describe('RedePage', () => {
     await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
 
     expect(screen.queryByRole('menuitem', { name: /liberar acesso/i })).not.toBeInTheDocument()
+  })
+
+  /**
+   * Inativar tira a pessoa da próxima rodada de matching e do login, sem
+   * apagar a participação nas equipes já geradas. É reversível, mas pesa: a
+   * tela diz o efeito antes de confirmar.
+   */
+  it('inativa pela API depois de dizer o efeito', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Maria Ferreira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /inativar na rede/i }))
+
+    expect(confirmar).toHaveBeenCalledWith(expect.stringMatching(/perde o acesso/i))
+    expect(api.inativarMembro).toHaveBeenCalledWith(1)
+    expect(await screen.findByText(/não entra mais na plataforma/i)).toBeInTheDocument()
+    confirmar.mockRestore()
+  })
+
+  it('sem confirmar, nada muda', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Maria Ferreira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /inativar na rede/i }))
+
+    expect(api.inativarMembro).not.toHaveBeenCalled()
+    confirmar.mockRestore()
+  })
+
+  it('oferece reativar a quem está inativo, e não liberar acesso', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Núcleo de P&D — Bancada 2').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para núcleo de p&d — bancada 2/i }))
+
+    expect(screen.queryByRole('menuitem', { name: /liberar acesso/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: /reativar na rede/i }))
+
+    expect(api.reativarMembro).toHaveBeenCalledWith(7)
+    expect(await screen.findByText(/voltou para a rede/i)).toBeInTheDocument()
   })
 
   it('abre a ficha clicando na pessoa, sem passar pelo menu', async () => {

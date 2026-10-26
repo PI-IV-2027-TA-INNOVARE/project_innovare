@@ -267,8 +267,8 @@ function AvisoSemEquipe({ irPara }) {
     <div className="admin-callout admin-callout--alerta" role="note">
       <Icone icon={appIcons.warning} className="admin-callout__icon" />
       <p className="admin-callout__text">
-        A equipe potencial ainda não foi definida. Sem ela, a dimensão Equipe e
-        supervisão sai como lacuna. O recomendado é rodar o matching antes.
+        A pré-análise avalia também a equipe: gere a equipe potencial, com ao
+        menos uma pessoa incluída, antes de pré-analisar.
       </p>
       {irPara ? (
         <button
@@ -294,6 +294,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   const [semAnalise, setSemAnalise] = useState(false)
   const [semProposta, setSemProposta] = useState(false)
   const [semEquipe, setSemEquipe] = useState(false)
+  const [propostaPendente, setPropostaPendente] = useState(false)
   const [erroCarga, setErroCarga] = useState('')
   const [ocupado, setOcupado] = useState('')
 
@@ -307,7 +308,10 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
     ])
 
     setSemEquipe(
-      equipe.status === 'rejected' && equipe.reason?.data?.codigo === CODIGO_SEM_EQUIPE,
+      (equipe.status === 'rejected' && equipe.reason?.data?.codigo === CODIGO_SEM_EQUIPE) ||
+        (equipe.status === 'fulfilled' &&
+          Boolean(equipe.value) &&
+          !(equipe.value.membros || []).some((membro) => membro.incluido)),
     )
 
     if (resultado.status === 'fulfilled') {
@@ -453,7 +457,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={executar}
-              disabled={Boolean(ocupado)}
+              disabled={Boolean(ocupado) || semEquipe || propostaPendente}
             >
               <Icone icon={appIcons.researcher} />
               {ocupado === 'executar' ? 'Analisando...' : 'Executar pré-análise'}
@@ -465,7 +469,11 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           {espera}
           {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 
-          <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
           <p className="oportunidade-page__vazio">
             {podeExecutar
               ? 'Nenhuma pré-análise foi executada ainda.'
@@ -508,7 +516,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={executar}
-              disabled={Boolean(ocupado)}
+              disabled={Boolean(ocupado) || semEquipe || propostaPendente}
             >
               <Icone icon={appIcons.reset} />
               {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
@@ -534,6 +542,14 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         {espera}
 
         {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
+
+        {podeExecutar ? (
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
+        ) : null}
 
         {falhou ? (
           <div className="admin-callout admin-callout--alerta" role="alert">

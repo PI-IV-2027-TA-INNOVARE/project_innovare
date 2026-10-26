@@ -11,7 +11,12 @@ from typing import Any
 from django.db import transaction
 
 from apps.accounts.models import FinalidadeToken, Papel, SituacaoConta, TokenAcesso, Usuario
-from apps.accounts.services.contas import garantir_email_livre
+from apps.accounts.services.acesso import encerrar_sessoes
+from apps.accounts.services.contas import (
+    AlterarSituacaoContaService,
+    garantir_email_livre,
+    recusar_conta_anonimizada,
+)
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
@@ -25,7 +30,12 @@ from apps.network.models import (
     SituacaoMembro,
     TipoCompetencia,
 )
-from core.exceptions import ConflitoDeEstado, ErroDeDominio, ServicoIndisponivel
+from core.exceptions import (
+    AcaoNaoPermitida,
+    ConflitoDeEstado,
+    ErroDeDominio,
+    ServicoIndisponivel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +242,11 @@ class AtualizarMembroService:
     Nome e e-mail sao gravados onde moram: no membro, enquanto ele nao tem
     conta; na conta, depois do acesso liberado - o e-mail e o login dela.
 
+    Por isso o Supervisor so troca nome e e-mail de conta de Pesquisador:
+    trocar o e-mail de login de um Supervisor ou Administrador e pedir a
+    recuperacao de senha seria tomar a conta dele. E-mail novo encerra as
+    sessoes e invalida os convites e links de senha que foram para o antigo.
+
     A trilha guarda quais campos mudaram, nao o antes e o depois: o valor
     antigo de nome, e-mail e experiencia ficaria nela para sempre (LGPD).
     """
@@ -252,6 +267,9 @@ class AtualizarMembroService:
             campo: dados[campo] for campo in ('nome', 'email') if campo in dados
         }
 
+        if conta is not None:
+            recusar_conta_anonimizada(conta)
+
         if 'email' in identificacao and identificacao['email'] != membro.email:
             garantir_email_livre(identificacao['email'], usuario=conta, membro=membro)
 
@@ -261,11 +279,22 @@ class AtualizarMembroService:
                 if getattr(conta, campo) != valor
             ]
 
+            if mudou_na_conta and conta.papel != Papel.PESQUISADOR:
+                raise AcaoNaoPermitida(
+                    'Nome e e-mail de conta de Supervisor ou Administrador são '
+                    'mantidos pelo Administrador.',
+                    codigo='conta_fora_da_rede',
+                )
+
             for campo in mudou_na_conta:
                 setattr(conta, campo, identificacao[campo])
 
             if mudou_na_conta:
                 conta.save(update_fields=[*mudou_na_conta, 'atualizado_em'])
+
+            if 'email' in mudou_na_conta:
+                encerrar_sessoes(conta)
+                TokenAcesso.objects.filter(usuario=conta).delete()
         else:
             for campo, valor in identificacao.items():
                 setattr(membro, f'{campo}_sem_conta', valor)
@@ -420,5 +449,116 @@ class AtualizarPerfilProprioService:
                 + sorted(listas.keys())
                 + (['formacoes'] if formacoes is not None else [])
             },
+        )
+        return membro
+
+
+def exigir_pesquisador_da_rede(membro: MembroRede) -> None:
+    """
+    O Supervisor gere a rede de Pesquisadores (RN-A04). Tirar o login de um
+    Supervisor ou de conta de outro perfil e gestao de contas, do Administrador.
+    """
+    conta = membro.usuario
+
+    if membro.papel_rede != PapelNaRede.PESQUISADOR or (
+        conta is not None and conta.papel != Papel.PESQUISADOR
+    ):
+        raise AcaoNaoPermitida(
+            'Inativar e reativar Supervisor, ou conta de outro perfil, é com o '
+            'Administrador.',
+            codigo='conta_fora_da_rede',
+        )
+
+
+class InativarMembroService:
+    """
+    Tira a pessoa da rede sem apagar a historia (P3 / PB16).
+
+    Inativo sai das proximas rodadas de matching (`candidatos_da_rede`) e perde
+    o login; as equipes ja geradas continuam com ela, marcada como inativa.
+    Conta suspensa pelo Administrador continua suspensa: inativar nao a troca.
+    """
+
+    @transaction.atomic
+    def execute(self, *, membro: MembroRede, ator: Usuario) -> MembroRede:
+        membro = (
+            MembroRede.objects.select_for_update().select_related('usuario').get(pk=membro.pk)
+        )
+
+        if membro.situacao == SituacaoMembro.INATIVO:
+            raise ConflitoDeEstado(
+                'Esta pessoa já está inativa na rede.', codigo='ja_inativo'
+            )
+
+        if membro.usuario_id is not None and membro.usuario_id == getattr(ator, 'pk', None):
+            raise ErroDeDominio(
+                'Você não pode inativar o próprio cadastro.', codigo='autobloqueio'
+            )
+
+        exigir_pesquisador_da_rede(membro)
+
+        membro.situacao = SituacaoMembro.INATIVO
+        membro.save(update_fields=['situacao', 'atualizado_em'])
+
+        if membro.usuario is not None:
+            if membro.usuario.situacao == SituacaoConta.ATIVO:
+                AlterarSituacaoContaService().execute(
+                    usuario=membro.usuario, situacao=SituacaoConta.INATIVO, ator=ator
+                )
+            encerrar_sessoes(membro.usuario)
+
+        registrar_evento(
+            categoria=CategoriaEvento.REDE,
+            tipo='membro_inativado',
+            entidade='membro_rede',
+            entidade_id=membro.id_membro,
+            ator=getattr(ator, 'email', str(ator)),
+            detalhe={'tinha_acesso': membro.usuario_id is not None},
+        )
+        return membro
+
+
+class ReativarMembroService:
+    """
+    Devolve a pessoa a rede: volta ao matching e, se tinha conta, ao login.
+
+    So devolve o login que a inativacao tirou: conta suspensa pelo
+    Administrador continua suspensa. Conta anonimizada a pedido da pessoa nao
+    volta: o cadastro dela ja nao guarda quem ela era (LGPD).
+    """
+
+    @transaction.atomic
+    def execute(self, *, membro: MembroRede, ator: Usuario) -> MembroRede:
+        membro = (
+            MembroRede.objects.select_for_update().select_related('usuario').get(pk=membro.pk)
+        )
+
+        if membro.situacao != SituacaoMembro.INATIVO:
+            raise ConflitoDeEstado(
+                'Esta pessoa não está inativa na rede.', codigo='nao_inativo'
+            )
+
+        if membro.usuario is not None:
+            recusar_conta_anonimizada(membro.usuario)
+
+        exigir_pesquisador_da_rede(membro)
+
+        membro.situacao = (
+            SituacaoMembro.ATIVO if membro.usuario_id else SituacaoMembro.SEM_ACESSO
+        )
+        membro.save(update_fields=['situacao', 'atualizado_em'])
+
+        if membro.usuario is not None and membro.usuario.situacao == SituacaoConta.INATIVO:
+            AlterarSituacaoContaService().execute(
+                usuario=membro.usuario, situacao=SituacaoConta.ATIVO, ator=ator
+            )
+
+        registrar_evento(
+            categoria=CategoriaEvento.REDE,
+            tipo='membro_reativado',
+            entidade='membro_rede',
+            entidade_id=membro.id_membro,
+            ator=getattr(ator, 'email', str(ator)),
+            detalhe={'situacao': membro.situacao},
         )
         return membro

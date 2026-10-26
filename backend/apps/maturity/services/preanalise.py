@@ -33,7 +33,7 @@ from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.competencies.services.derivacao import texto_da_proposta
 from apps.copilot.models import Lacuna, TipoLacuna
-from apps.copilot.services.proposta import proposta_de
+from apps.copilot.services.proposta import exigir_proposta_revisada, proposta_de
 from apps.maturity.models import (
     CriterioPreAnalise,
     DimensaoMaturidade,
@@ -47,7 +47,8 @@ from apps.maturity.models import (
 from apps.ai.models import StatusExecucao
 from apps.ai.services.apelidos import Apelidos
 from apps.ai.services.custo import MOTIVO_LIMITE_DA_OPORTUNIDADE, MOTIVO_LIMITE_DO_MES
-from apps.opportunities.models import Oportunidade
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services.fluxo import avancar, conferir_avanco
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
 
 DIMENSAO_DO_CRITERIO = {
@@ -271,6 +272,21 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
     }
 
 
+def exigir_equipe_potencial(oportunidade: Oportunidade) -> None:
+    """
+    PB50: a pre-analise parte de "uma proposta estruturada e uma equipe
+    potencial definida". Definida e a ultima geracao com alguem incluido.
+    """
+    equipe = oportunidade.equipes_potenciais.first()
+
+    if equipe is None or not equipe.membros.filter(incluido=True).exists():
+        raise ConflitoDeEstado(
+            'A pré-análise avalia também a equipe: gere a equipe potencial, com '
+            'ao menos uma pessoa incluída, antes de pré-analisar.',
+            'sem_equipe',
+        )
+
+
 def _texto_da_equipe(oportunidade: Oportunidade) -> tuple[str, Apelidos]:
     """
     A equipe como a IA a recebe: apelido, papel, titulacao e disponibilidade.
@@ -433,6 +449,10 @@ class PreAnalisarService:
                 'proposta_vazia',
             )
 
+        exigir_proposta_revisada(proposta)
+        exigir_equipe_potencial(oportunidade)
+        conferir_avanco(oportunidade, SituacaoOportunidade.PRE_ANALISE)
+
         correlation_id = uuid.uuid4()
         equipe_texto, apelidos = _texto_da_equipe(oportunidade)
         resultado = self._resolver_provedor().pre_analise_pipe(
@@ -455,6 +475,14 @@ class PreAnalisarService:
         dimensoes = dados.get('dimensoes', [])
 
         with transaction.atomic():
+            avancar(oportunidade, SituacaoOportunidade.PRE_ANALISE, ator)
+            proposta.refresh_from_db()
+            exigir_proposta_revisada(proposta)
+            exigir_equipe_potencial(oportunidade)
+
+            if dimensoes:
+                avancar(oportunidade, SituacaoOportunidade.AGUARDANDO_DECISAO, ator)
+
             analise = PreAnalise.objects.create(
                 proposta=proposta,
                 versao_criterio=versao,

@@ -59,7 +59,9 @@ class CompetenciasBaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA_PREENCHIDA
+            oportunidade=self.oportunidade,
+            revisada_por_humano=True,
+            **PROPOSTA_PREENCHIDA,
         )
 
         self.como(self.supervisor)

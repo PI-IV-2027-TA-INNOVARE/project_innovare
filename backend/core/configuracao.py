@@ -256,3 +256,36 @@ def exigir_ambiente_coerente(ambiente, debug, rodando_testes=False):
         'backend/.env para o banco local (AMBIENTE=local); o banco remoto e '
         'de homologacao, com DEBUG=False.'
     )
+
+
+CAMINHO_PADRAO_DO_ADMIN = 'admin'
+
+
+def caminho_do_admin(valor, ambiente=AMBIENTE_LOCAL):
+    """
+    O endereco do `/admin/` do Django, sem barra no inicio e com uma no fim.
+
+    Fica em configuracao para nao ser o endereco padrao que todo robo tenta
+    (S8): em producao o padrao e recusado. Recusa tambem o vazio, que poria o
+    admin na raiz, e o que comeca por `api`, que disputaria rota com a API.
+    """
+    caminho = (valor or '').strip().strip('/')
+
+    if ambiente == AMBIENTE_PRODUCAO and caminho == CAMINHO_PADRAO_DO_ADMIN:
+        raise ImproperlyConfigured(
+            'Em producao o /admin/ do Django nao fica no endereco padrao. '
+            'Defina ADMIN_URL com um caminho proprio, como painel-tecnico-7f3a.'
+        )
+
+    if not caminho:
+        raise ImproperlyConfigured(
+            'ADMIN_URL vazio poria o /admin/ do Django na raiz do site. '
+            'Use um caminho, como painel-tecnico-7f3a.'
+        )
+
+    if caminho.split('/')[0] == 'api':
+        raise ImproperlyConfigured(
+            f'ADMIN_URL={valor!r} disputa rota com a API. Escolha outro caminho.'
+        )
+
+    return f'{caminho}/'

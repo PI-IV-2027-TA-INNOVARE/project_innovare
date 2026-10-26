@@ -10,7 +10,12 @@ import {
 import { BotaoPessoa, FichaDePessoa } from '../../../components/console/Pessoa'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
-import { liberarAcessoMembro, listarRede } from '../../../services/pdConnectApi'
+import {
+  inativarMembro,
+  liberarAcessoMembro,
+  listarRede,
+  reativarMembro,
+} from '../../../services/pdConnectApi'
 import {
   PAPEIS_REDE,
   SITUACOES,
@@ -154,6 +159,33 @@ export default function RedePage() {
       showToast(falha?.message || `Não foi possível liberar o acesso de ${pessoa.nome}.`)
     } finally {
       marcarLiberando(pessoa.id, false)
+    }
+  }
+
+  const mudarSituacao = async (pessoa, inativar) => {
+    if (
+      inativar &&
+      !window.confirm(
+        `Inativar ${pessoa.nome}? A pessoa sai das próximas rodadas de matching e perde o acesso à plataforma. As equipes já geradas continuam com ela.`,
+      )
+    ) {
+      return
+    }
+
+    try {
+      const acao = inativar ? inativarMembro : reativarMembro
+      const atualizado = membroDaApi(await acao(pessoa.id))
+
+      setPessoas((atual) =>
+        atual.map((item) => (item.id === pessoa.id ? atualizado : item))
+      )
+      showToast(
+        inativar
+          ? `${pessoa.nome} saiu da rede e não entra mais na plataforma.`
+          : `${pessoa.nome} voltou para a rede.`,
+      )
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível mudar a situação.')
     }
   }
 
@@ -374,7 +406,7 @@ export default function RedePage() {
                         icon: appIcons.edit,
                         onSelect: () => navigate(`/rede/${pessoa.id}`),
                       },
-                      ...(pessoa.temAcesso
+                      ...(pessoa.temAcesso || pessoa.situacao === 'inativo'
                         ? []
                         : [liberando.has(pessoa.id)
                           ? {
@@ -388,6 +420,18 @@ export default function RedePage() {
                               icon: appIcons.activate,
                               onSelect: () => liberarAcesso(pessoa),
                             }]),
+                      pessoa.situacao === 'inativo'
+                        ? {
+                            label: 'Reativar na rede',
+                            icon: appIcons.activate,
+                            onSelect: () => mudarSituacao(pessoa, false),
+                          }
+                        : {
+                            label: 'Inativar na rede',
+                            icon: appIcons.deactivate,
+                            tone: 'danger',
+                            onSelect: () => mudarSituacao(pessoa, true),
+                          },
                     ]}
                   />
                 </td>

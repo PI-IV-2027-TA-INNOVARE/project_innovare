@@ -275,10 +275,9 @@ class EscopoDeLeituraTests(OportunidadeBaseTests):
 
 class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
     """
-    PB61: a fila mostra "as oportunidades que aguardam sua atuacao". Sem campo
-    de prioridade (decisao do PO), o que da para dizer com o que existe e
-    onde a vez e do Supervisor: a oportunidade que ninguem comecou, a que
-    espera a decisao e a que voltou de Revisar com a resposta do Demandante.
+    PB61: a fila mostra "as oportunidades que aguardam sua atuacao". A vez e
+    do Supervisor na oportunidade que ninguem comecou, na que espera a decisao
+    e na que voltou de Revisar com a resposta do Demandante.
     So conta a que ele conduz ou que ainda nao tem responsavel.
     """
 
@@ -312,6 +311,7 @@ class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
         self.assertTrue(self.marca())
 
     def test_revisar_so_aguarda_depois_da_resposta_do_demandante(self):
+        self.mudar(situacao=SituacaoOportunidade.AGUARDANDO_DECISAO)
         self.client.post(
             reverse('oportunidade-decisao', args=[self.codigo]),
             {'tipo': TipoDecisao.REVISAR, 'justificativa': 'Falta descrever o processo.'},
@@ -412,7 +412,8 @@ class DecisaoTests(OportunidadeBaseTests):
         self.codigo = self.criar_externo().data['codigo']
         self.oportunidade = Oportunidade.objects.get(codigo=self.codigo)
         self.oportunidade.responsavel = self.membro_supervisor
-        self.oportunidade.save(update_fields=['responsavel'])
+        self.oportunidade.situacao = SituacaoOportunidade.AGUARDANDO_DECISAO
+        self.oportunidade.save(update_fields=['responsavel', 'situacao'])
 
     def url(self):
         return reverse('oportunidade-decisao', args=[self.codigo])
@@ -477,7 +478,8 @@ class ComplementacaoTests(OportunidadeBaseTests):
         self.codigo = self.criar_externo().data['codigo']
         self.oportunidade = Oportunidade.objects.get(codigo=self.codigo)
         self.oportunidade.responsavel = self.membro_supervisor
-        self.oportunidade.save(update_fields=['responsavel'])
+        self.oportunidade.situacao = SituacaoOportunidade.AGUARDANDO_DECISAO
+        self.oportunidade.save(update_fields=['responsavel', 'situacao'])
 
     def url(self):
         return reverse('oportunidade-complementar', args=[self.codigo])
@@ -630,6 +632,9 @@ class HistoricoTests(OportunidadeBaseTests):
             {'contexto': 'Ocorre no lote de verao.'},
             format='json',
         )
+        Oportunidade.objects.filter(codigo=self.codigo).update(
+            situacao=SituacaoOportunidade.AGUARDANDO_DECISAO
+        )
         self.client.post(
             reverse('oportunidade-decisao', args=[self.codigo]),
             {'tipo': TipoDecisao.CONTINUAR, 'justificativa': 'Maturidade suficiente.'},
@@ -703,6 +708,9 @@ class UltimaDecisaoNaLeituraTests(OportunidadeBaseTests):
     def setUp(self):
         super().setUp()
         self.codigo = self.criar_externo().data['codigo']
+        Oportunidade.objects.filter(codigo=self.codigo).update(
+            situacao=SituacaoOportunidade.AGUARDANDO_DECISAO
+        )
 
     def decidir(self, tipo, justificativa):
         self.como(self.supervisor)

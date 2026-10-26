@@ -15,6 +15,12 @@ export const SITUACOES = Object.freeze([
   { id: 'arquivada', label: 'Arquivada', etapa: 7, desfecho: true },
 ])
 
+export const PRIORIDADES = Object.freeze([
+  { id: 'alta', label: 'Alta', ordem: 0 },
+  { id: 'media', label: 'Média', ordem: 1 },
+  { id: 'baixa', label: 'Baixa', ordem: 2 },
+])
+
 export const DECISOES = Object.freeze([
   {
     id: 'continuar',
@@ -213,6 +219,18 @@ export function decisaoDaApi(ultima) {
   }
 }
 
+function textoComDetalhe(tipo, detalhe) {
+  if (tipo === 'situacao_atualizada' && detalhe.para) {
+    return `Situação: ${situacaoLabel(detalhe.para)}.`
+  }
+
+  if (tipo === 'prioridade_definida' && detalhe.para) {
+    return `Prioridade: ${prioridadeLabel(detalhe.para)}.`
+  }
+
+  return ''
+}
+
 export function eventoDaApi(evento, indice) {
   const detalhe = evento.detalhe || {}
 
@@ -223,6 +241,7 @@ export function eventoDaApi(evento, indice) {
     ator: evento.ator_nome || detalhe.autor_nome || evento.ator || 'Sistema',
     texto:
       detalhe.texto ||
+      textoComDetalhe(evento.tipo, detalhe) ||
       TEXTO_DO_EVENTO[evento.tipo] ||
       String(evento.tipo || '').replace(/[._]/g, ' '),
   }
@@ -236,6 +255,7 @@ export function daApi(registro) {
     demandante: registro.demandante_nome || NUCLEO_INTERNO,
     responsavel: registro.responsavel_nome || '',
     situacao: registro.situacao,
+    prioridade: registro.prioridade || null,
     resumo: registro.resumo || '',
     contexto: registro.contexto || '',
     totalAnexos: registro.total_anexos || 0,
@@ -254,6 +274,7 @@ const rotulo = (lista, id) => lista.find((item) => item.id === id)?.label || id
 export const origemLabel = (id) => rotulo(ORIGENS, id)
 export const situacaoLabel = (id) => rotulo(SITUACOES, id)
 export const decisaoLabel = (id) => rotulo(DECISOES, id)
+export const prioridadeLabel = (id) => rotulo(PRIORIDADES, id)
 
 export function emAndamento(oportunidade) {
   return !SITUACOES.find((situacao) => situacao.id === oportunidade.situacao)?.desfecho

@@ -10,6 +10,7 @@ from apps.opportunities.services.oportunidade import (
     AtualizarContextoService,
     CadastrarOportunidadeService,
     ComplementarOportunidadeService,
+    DefinirPrioridadeService,
     RegistrarDecisaoService,
     RegistrarObservacaoService,
     SolicitarComplementoService,
@@ -21,6 +22,7 @@ from apps.opportunities.services.oportunidade import (
     fila_de,
     historico_de,
     nomes_de_quem_agiu,
+    por_prioridade,
 )
 
 __all__ = [
@@ -33,6 +35,7 @@ __all__ = [
     'AtualizarContextoService',
     'CadastrarOportunidadeService',
     'ComplementarOportunidadeService',
+    'DefinirPrioridadeService',
     'RegistrarDecisaoService',
     'RegistrarObservacaoService',
     'SolicitarComplementoService',
@@ -44,4 +47,5 @@ __all__ = [
     'fila_de',
     'historico_de',
     'nomes_de_quem_agiu',
+    'por_prioridade',
 ]

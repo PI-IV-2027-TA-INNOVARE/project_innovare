@@ -20,6 +20,7 @@ from apps.opportunities.models import (
     AnexoOportunidade,
     Oportunidade,
     OrigemOportunidade,
+    PrioridadeOportunidade,
 )
 from apps.opportunities.services.oportunidade import QUEM_AGIU_PELA_AC2, anexos_visiveis
 
@@ -57,6 +58,9 @@ class OportunidadeSerializer(serializers.ModelSerializer):
     situacao_rotulo = serializers.CharField(
         source='get_situacao_display', read_only=True
     )
+    prioridade_rotulo = serializers.CharField(
+        source='get_prioridade_display', read_only=True
+    )
     demandante_nome = serializers.CharField(
         source='demandante.nome', read_only=True, default=None
     )
@@ -72,12 +76,13 @@ class OportunidadeSerializer(serializers.ModelSerializer):
         fields = [
             'codigo', 'titulo', 'origem', 'origem_rotulo', 'resumo', 'contexto',
             'demandante', 'demandante_nome', 'responsavel', 'responsavel_nome',
-            'situacao', 'situacao_rotulo', 'total_anexos', 'ultima_decisao',
-            'aguarda_minha_atuacao', 'criada_em', 'atualizada_em',
+            'situacao', 'situacao_rotulo', 'prioridade', 'prioridade_rotulo',
+            'total_anexos', 'ultima_decisao', 'aguarda_minha_atuacao',
+            'criada_em', 'atualizada_em',
         ]
         read_only_fields = [
-            'codigo', 'origem', 'demandante', 'situacao', 'ultima_decisao',
-            'criada_em', 'atualizada_em',
+            'codigo', 'origem', 'demandante', 'situacao', 'prioridade',
+            'ultima_decisao', 'criada_em', 'atualizada_em',
         ]
 
     def get_total_anexos(self, oportunidade) -> int:
@@ -137,7 +142,8 @@ class OportunidadeSerializer(serializers.ModelSerializer):
     def to_representation(self, oportunidade):
         """
         O Demandante acompanha a AC2 como um todo (PB71): quem conduz a
-        oportunidade por dentro nao sai para ele, como no historico.
+        oportunidade por dentro nao sai para ele, como no historico. A
+        prioridade e trabalho interno da fila e nem chega ao payload dele.
         """
         dados = super().to_representation(oportunidade)
         usuario = getattr(self.context.get('request'), 'user', None)
@@ -145,6 +151,8 @@ class OportunidadeSerializer(serializers.ModelSerializer):
         if getattr(usuario, 'papel', None) == Papel.DEMANDANTE:
             dados['responsavel'] = None
             dados['responsavel_nome'] = None
+            dados.pop('prioridade', None)
+            dados.pop('prioridade_rotulo', None)
 
         return dados
 
@@ -179,16 +187,27 @@ class CadastroOportunidadeSerializer(serializers.Serializer):
         )
 
 
+class PrioridadeSerializer(serializers.Serializer):
+    """A prioridade que o Supervisor da a oportunidade na fila (PB61)."""
+
+    prioridade = serializers.ChoiceField(choices=PrioridadeOportunidade.choices)
+
+
 class FiltroDaFilaSerializer(serializers.Serializer):
     """
-    Os filtros de data da fila (PB28), no formato `AAAA-MM-DD`.
+    Os filtros de data da fila (PB28), no formato `AAAA-MM-DD`, e o filtro e a
+    ordem por prioridade (PB61).
 
-    Data malformada e recusada: ignorada, a fila voltaria inteira e quem
+    Valor malformado e recusado: ignorada, a fila voltaria inteira e quem
     filtrou leria o resultado como se o filtro tivesse valido.
     """
 
     cadastrada_de = serializers.DateField(required=False, input_formats=['iso-8601'])
     cadastrada_ate = serializers.DateField(required=False, input_formats=['iso-8601'])
+    prioridade = serializers.ChoiceField(
+        choices=PrioridadeOportunidade.choices, required=False
+    )
+    ordenar = serializers.ChoiceField(choices=[('prioridade', 'Prioridade')], required=False)
 
     def validate(self, dados):
         inicio = dados.get('cadastrada_de')

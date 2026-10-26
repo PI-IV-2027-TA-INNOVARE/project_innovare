@@ -19,6 +19,7 @@ from rest_framework.test import APIClient
 
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.copilot.models import PropostaEstruturada
+from apps.matching.models import EquipePotencial
 from apps.maturity.models import CriterioPreAnalise, VersaoCriterio
 from apps.maturity.serializers import AVISO_ORIENTATIVO
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
@@ -62,7 +63,10 @@ class RelatorioPreAnaliseBaseTests(TestCase):
             .build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
+        )
+        indicar_na_equipe(
+            self.oportunidade, MembroRedeBuilder().pesquisador().chamado('Helena Torres').build()
         )
 
         base_conhecimento.cache_clear()
@@ -172,8 +176,10 @@ class DocumentoTests(RelatorioPreAnaliseBaseTests):
         self.assertEqual(dados['equipe']['membros'][0]['nome'], 'Marina Alves')
 
     def test_sem_equipe_o_documento_nao_inventa_composicao(self):
+        """A pre-analise anterior a regra da equipe definida (PB50) segue legivel."""
         self.importar()
         self.analisar()
+        EquipePotencial.objects.filter(oportunidade=self.oportunidade).delete()
 
         self.assertIsNone(self.client.get(self.url()).data['equipe'])
 

@@ -173,6 +173,8 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
     }
   }
 
+  const [propostaPendente, setPropostaPendente] = useState(false)
+
   const derivar = async () => {
     setDerivando(true)
     setAviso(null)
@@ -313,7 +315,7 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
             type="button"
             className="admin-btn"
             onClick={derivar}
-            disabled={ocupado}
+            disabled={ocupado || propostaPendente}
           >
             <Icone icon={appIcons.flow} />
             {derivando ? 'Derivando...' : 'Derivar da proposta'}
@@ -330,7 +332,11 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
       </header>
 
       <div className="perfil-card__body competencias__corpo">
-        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+        <AvisoPropostaNaoRevisada
+          oportunidadeId={oportunidadeId}
+          irPara={irPara}
+          aoVerificar={setPropostaPendente}
+        />
 
         {derivando ? (
           <EsperaIA titulo="A IA está lendo a proposta para identificar as competências." />
@@ -407,7 +413,7 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
             <button
               type="submit"
               className="admin-btn admin-btn--outline"
-              disabled={!nova.descricao.trim() || ocupado}
+              disabled={!nova.descricao.trim() || ocupado || propostaPendente}
             >
               <Icone icon={appIcons.addUser} />
               Acrescentar

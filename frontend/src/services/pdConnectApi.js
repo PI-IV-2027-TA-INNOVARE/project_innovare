@@ -115,6 +115,13 @@ export function registrarDecisao(codigo, payload) {
   return apiRequest(`/oportunidades/${codigo}/decisao/`, { method: 'POST', body: payload })
 }
 
+export function definirPrioridade(codigo, prioridade) {
+  return apiRequest(`/oportunidades/${codigo}/prioridade/`, {
+    method: 'POST',
+    body: { prioridade },
+  })
+}
+
 export function complementarOportunidade(codigo, payload) {
   return apiRequest(`/oportunidades/${codigo}/complementar/`, {
     method: 'POST',
@@ -166,6 +173,14 @@ export function atualizarMembroRede(id, payload) {
 
 export function liberarAcessoMembro(id) {
   return apiRequest(`/rede/${id}/liberar-acesso/`, { method: 'POST' })
+}
+
+export function inativarMembro(id) {
+  return apiRequest(`/rede/${id}/inativar/`, { method: 'POST' })
+}
+
+export function reativarMembro(id) {
+  return apiRequest(`/rede/${id}/reativar/`, { method: 'POST' })
 }
 
 export function obterMeuPerfil() {

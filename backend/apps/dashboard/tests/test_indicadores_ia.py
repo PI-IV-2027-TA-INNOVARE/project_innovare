@@ -69,7 +69,7 @@ class IndicadoresDeIABaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
         )
 
         base_conhecimento.cache_clear()
@@ -93,6 +93,11 @@ class IndicadoresDeIABaseTests(TestCase):
         with override_settings(BASE_CONHECIMENTO_PIPE=self.base):
             base_conhecimento.cache_clear()
             ImportarCriteriosService().execute(ator=self.administrador)
+
+        equipe = self.oportunidade.equipes_potenciais.first()
+
+        if equipe is None or not equipe.membros.filter(incluido=True).exists():
+            indicar_na_equipe(self.oportunidade, MembroRedeBuilder().pesquisador().build())
 
         return PreAnalisarService(provedor=ProvedorFake()).execute(
             oportunidade=self.oportunidade, ator=self.supervisor

@@ -14,6 +14,7 @@ from decouple import Config, RepositoryEnv, config as env_config
 from core.configuracao import (
     AMBIENTE_PRODUCAO,
     ambiente_declarado,
+    caminho_do_admin,
     chave_de_assinatura,
     exigir_ambiente_coerente,
     pool_de_conexoes,
@@ -256,6 +257,7 @@ SPECTACULAR_SETTINGS = {
         'PapelNaRedeEnum': 'apps.network.models.PapelNaRede',
         'SituacaoMembroEnum': 'apps.network.models.SituacaoMembro',
         'SituacaoOportunidadeEnum': 'apps.opportunities.models.SituacaoOportunidade',
+        'PrioridadeEnum': 'apps.opportunities.models.PrioridadeOportunidade',
         'NivelDimensaoEnum': 'apps.maturity.models.NivelDimensao',
     },
 }
@@ -313,6 +315,8 @@ if RUNNING_TESTS:
     SEND_NOTIFICATION_EMAILS = False
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+ADMIN_URL = caminho_do_admin(config('ADMIN_URL', default='admin'), AMBIENTE)
 
 TOKEN_RECUPERACAO_HORAS = config('TOKEN_RECUPERACAO_HORAS', default=2, cast=int)
 TOKEN_CONVITE_HORAS = config('TOKEN_CONVITE_HORAS', default=24, cast=int)

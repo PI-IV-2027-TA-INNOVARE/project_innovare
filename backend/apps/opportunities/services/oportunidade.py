@@ -6,6 +6,7 @@ tela de Historico le.
 """
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
@@ -15,6 +16,7 @@ from django.db.models import (
     Case,
     Count,
     Exists,
+    IntegerField,
     OuterRef,
     Prefetch,
     Q,
@@ -30,14 +32,17 @@ from apps.audit.models import CategoriaEvento, EventoAuditoria
 from apps.audit.services import registrar_evento
 from apps.decisions.models import Decisao, TipoDecisao
 from apps.notifications.services import notificar
+from apps.notifications.services.email import avisar_decisao_por_email
 from apps.opportunities.models import (
     CATEGORIAS_VISIVEIS_AO_DEMANDANTE,
     AnexoOportunidade,
     Oportunidade,
     OrigemOportunidade,
+    PrioridadeOportunidade,
     SequenciaCodigo,
     SituacaoOportunidade,
 )
+from apps.opportunities.services.fluxo import mover
 from apps.opportunities.services.tipo_do_anexo import tipo_conferido
 from core.exceptions import (
     AcaoNaoPermitida,
@@ -51,6 +56,14 @@ if TYPE_CHECKING:
 
 QUEM_AGIU_PELA_AC2 = 'Núcleo de P&D da AC2'
 """Como o historico do Demandante nomeia quem agiu pela AC2, sem o e-mail (PB71)."""
+
+TIPO_PRIORIDADE_DEFINIDA = 'prioridade_definida'
+
+TIPOS_INTERNOS_DA_OPORTUNIDADE = (TIPO_PRIORIDADE_DEFINIDA,)
+"""
+Eventos da categoria `oportunidade` que o Demandante nao le. A prioridade e
+trabalho interno da fila do Supervisor (PB61), como a observacao (PB71).
+"""
 
 
 def _do_demandante(usuario: Usuario) -> bool:
@@ -140,8 +153,7 @@ def _aguarda_atuacao_de(usuario: Usuario):
     - complementar nao muda a situacao (quem reconduz e o Supervisor), entao a
     resposta so aparece na trilha, depois da ultima decisao *Revisar*.
 
-    "Minha" e a que ele conduz ou que ainda nao tem responsavel. Prioridade
-    nao entra: e campo que o PO ainda precisa definir.
+    "Minha" e a que ele conduz ou que ainda nao tem responsavel.
     """
     if usuario.papel != Papel.SUPERVISOR:
         return Value(False, output_field=BooleanField())
@@ -216,6 +228,17 @@ def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     ).order_by('-atualizada_em', '-codigo')
 
 
+def por_prioridade(fila: QuerySet[Oportunidade]) -> QuerySet[Oportunidade]:
+    """Alta, Media e Baixa nessa ordem; dentro de cada uma, a mais recente antes."""
+    ordem = Case(
+        When(prioridade=PrioridadeOportunidade.ALTA, then=Value(0)),
+        When(prioridade=PrioridadeOportunidade.MEDIA, then=Value(1)),
+        default=Value(2),
+        output_field=IntegerField(),
+    )
+    return fila.order_by(ordem, '-atualizada_em', '-codigo')
+
+
 def historico_de(
     oportunidade: Oportunidade, usuario: Usuario
 ) -> QuerySet[EventoAuditoria]:
@@ -244,7 +267,7 @@ def historico_de(
 
         anexo_interno = Q(tipo='anexo_enviado') & ~_enviado_pela_empresa(usuario, 'conta_do_ator')
         return eventos.filter(categoria__in=CATEGORIAS_VISIVEIS_AO_DEMANDANTE).exclude(
-            anexo_interno
+            anexo_interno | Q(tipo__in=TIPOS_INTERNOS_DA_OPORTUNIDADE)
         )
 
     return eventos
@@ -363,6 +386,43 @@ class AtualizarContextoService:
         return oportunidade
 
 
+class DefinirPrioridadeService:
+    """
+    A prioridade na fila do Supervisor (PB61 / P4).
+
+    Grava por `update` para nao mexer em `atualizada_em`: o Demandante ve
+    quando a oportunidade mudou, e a prioridade nao e mudanca que ele acompanha.
+    """
+
+    @transaction.atomic
+    def execute(
+        self, *, oportunidade: Oportunidade, prioridade: str, ator: Usuario
+    ) -> Oportunidade:
+        anterior = (
+            Oportunidade.objects.select_for_update()
+            .filter(pk=oportunidade.pk)
+            .values_list('prioridade', flat=True)
+            .first()
+        )
+
+        if anterior == prioridade:
+            return oportunidade
+
+        Oportunidade.objects.filter(pk=oportunidade.pk).update(prioridade=prioridade)
+        oportunidade.prioridade = prioridade
+
+        registrar_evento(
+            categoria=CategoriaEvento.OPORTUNIDADE,
+            tipo=TIPO_PRIORIDADE_DEFINIDA,
+            entidade='oportunidade',
+            entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
+            ator=ator.email,
+            detalhe={'de': anterior, 'para': prioridade},
+        )
+        return oportunidade
+
+
 class RegistrarDecisaoService:
     """
     O fecho do fluxo (RF11 / RN-A07 / D03).
@@ -370,6 +430,10 @@ class RegistrarDecisaoService:
     Quando o desfecho e *Revisar*, o Demandante precisa saber que a bola voltou
     para ele: PB26 exige a notificacao, e sem ela o pedido so aparece se a
     pessoa por acaso abrir a tela.
+
+    A situacao muda pelo `fluxo`: Continuar e Revisar so depois da pre-analise,
+    Arquivar em qualquer etapa em curso. As tres decisoes tambem saem por
+    e-mail para a empresa demandante, depois de gravadas (P17).
     """
 
     @transaction.atomic
@@ -381,11 +445,7 @@ class RegistrarDecisaoService:
         justificativa: str,
         ator: Usuario,
     ) -> Decisao:
-        if oportunidade.situacao == SituacaoOportunidade.ARQUIVADA:
-            raise ConflitoDeEstado(
-                'Oportunidade arquivada não recebe nova decisão.',
-                codigo='ja_arquivada',
-            )
+        mover(oportunidade, SITUACAO_POR_DECISAO[tipo], ator, registrar=False)
 
         decisao = Decisao.objects.create(
             oportunidade=oportunidade,
@@ -393,9 +453,6 @@ class RegistrarDecisaoService:
             observacoes=justificativa,
             responsavel=ator,
         )
-
-        oportunidade.situacao = SITUACAO_POR_DECISAO[tipo]
-        oportunidade.save(update_fields=['situacao', 'atualizada_em'])
 
         registrar_evento(
             categoria=CategoriaEvento.DECISAO,
@@ -409,6 +466,18 @@ class RegistrarDecisaoService:
 
         if tipo == TipoDecisao.REVISAR:
             self._avisar_demandante(oportunidade, justificativa)
+
+        if oportunidade.demandante_id is not None:
+            transaction.on_commit(
+                partial(
+                    avisar_decisao_por_email,
+                    id_organizacao=oportunidade.demandante_id,
+                    codigo=oportunidade.codigo,
+                    titulo=oportunidade.titulo,
+                    tipo=tipo,
+                    justificativa=justificativa,
+                )
+            )
 
         return decisao
 

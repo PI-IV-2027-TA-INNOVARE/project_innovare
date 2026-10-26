@@ -90,6 +90,18 @@
   color: var(--text-muted);
 }
 
+.oportunidade-page__prioridade {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  .admin-input--select {
+    width: auto;
+    min-height: 36px;
+    padding-block: 4px;
+  }
+}
+
 .oportunidade-page__codigo {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   font-size: 0.8125rem;
@@ -320,6 +332,24 @@
     line-height: 1.5;
     color: var(--text-muted);
   }
+}
+
+.decisao-opcao.is-disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+
+  &:hover {
+    border-color: var(--admin-card-border);
+  }
+
+  input {
+    cursor: not-allowed;
+  }
+}
+
+.equipe__inativo {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 .decisao-acoes {

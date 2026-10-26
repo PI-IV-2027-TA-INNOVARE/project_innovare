@@ -286,6 +286,45 @@ describe('OportunidadesPage', () => {
     expect(primeiro).toBe('Cultura starter para queijo artesanal')
   })
 
+  /**
+   * PB61: a fila indica status e prioridade. A prioridade vem da API e a
+   * fila abre ordenada por ela, Alta primeiro; o filtro recorta por valor.
+   */
+  it('abre ordenada pela prioridade e filtra por ela', async () => {
+    const user = userEvent.setup()
+    const [primeira, segunda, ...resto] = OPORTUNIDADES_EXEMPLO
+    api.listOportunidades.mockResolvedValue({
+      results: [
+        { ...comoApi(primeira), prioridade: 'baixa' },
+        { ...comoApi(segunda), prioridade: 'alta' },
+        ...resto.map((item) => ({ ...comoApi(item), prioridade: 'media' })),
+      ],
+    })
+    renderApp()
+    await esperarLista()
+
+    const titulos = () =>
+      [...document.querySelectorAll('.oportunidade-link__titulo')].map((item) => item.textContent)
+    expect(titulos()[0]).toBe(segunda.titulo)
+    expect(titulos().at(-1)).toBe(primeira.titulo)
+
+    await user.selectOptions(screen.getByLabelText('Prioridade'), 'alta')
+
+    expect(titulos()).toEqual([segunda.titulo])
+  })
+
+  /**
+   * A fila chega em páginas de 100. Pedir a ordem ao servidor garante que a
+   * oportunidade de prioridade alta parada há meses entra na primeira página.
+   */
+  it('pede ao servidor a fila já ordenada pela prioridade', async () => {
+    servidorResponde(OPORTUNIDADES_EXEMPLO)
+    renderApp()
+    await esperarLista()
+
+    expect(api.listOportunidades).toHaveBeenCalledWith({ ordenar: 'prioridade' })
+  })
+
   it('busca por título, código e demandante', async () => {
     const user = userEvent.setup()
     renderApp()

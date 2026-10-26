@@ -47,6 +47,17 @@ class SituacaoOportunidade(models.TextChoices):
     ARQUIVADA = 'arquivada', 'Arquivada'
 
 
+class PrioridadeOportunidade(models.TextChoices):
+    """
+    O que o Supervisor ataca primeiro na fila (PB61 / P4). Quem define e o
+    Supervisor, e toda oportunidade nasce Media. Trabalho interno: o
+    Demandante nao a ve.
+    """
+
+    ALTA = 'alta', 'Alta'
+    MEDIA = 'media', 'Média'
+    BAIXA = 'baixa', 'Baixa'
+
 
 CATEGORIAS_VISIVEIS_AO_DEMANDANTE = ("oportunidade", "decisao")
 """
@@ -123,6 +134,13 @@ class Oportunidade(models.Model):
         default=SituacaoOportunidade.ENTRADA,
         db_column='status',
     )
+    prioridade = models.CharField(
+        max_length=5,
+        choices=PrioridadeOportunidade.choices,
+        default=PrioridadeOportunidade.MEDIA,
+        db_default=PrioridadeOportunidade.MEDIA,
+        db_column='prioridade',
+    )
     criada_em = models.DateTimeField(auto_now_add=True, db_column='data_criacao')
     atualizada_em = models.DateTimeField(auto_now=True, db_column='atualizada_em')
 
@@ -133,6 +151,7 @@ class Oportunidade(models.Model):
         constraints = [
             lista_fixa('oportunidade', 'origem', OrigemOportunidade),
             lista_fixa('oportunidade', 'situacao', SituacaoOportunidade, coluna='status'),
+            lista_fixa('oportunidade', 'prioridade', PrioridadeOportunidade),
             models.CheckConstraint(
                 condition=(
                     models.Q(origem='interna', demandante__isnull=True)
@@ -145,6 +164,10 @@ class Oportunidade(models.Model):
             models.Index(
                 fields=['situacao', '-atualizada_em'],
                 name='idx_oport_fila_supervisor',
+            ),
+            models.Index(
+                fields=['situacao', 'prioridade'],
+                name='idx_oport_status_prioridade',
             ),
         ]
 

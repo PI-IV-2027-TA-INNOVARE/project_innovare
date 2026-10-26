@@ -31,7 +31,7 @@ from apps.ai.services.protocolos import ProvedorDeIA
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.competencies.models import CompetenciaNecessaria
-from apps.copilot.services.proposta import proposta_de
+from apps.copilot.services.proposta import exigir_proposta_revisada, proposta_de
 from apps.matching.models import (
     EquipePotencial,
     ExecucaoMatching,
@@ -42,7 +42,8 @@ from apps.matching.models import (
 from apps.matching.services.motor import Avaliacao, MotorDeMatching, candidato_de
 from apps.matching.services.semantica import BaseSemantica, provedor_de_embedding
 from apps.network.models import MembroRede, SituacaoMembro
-from apps.opportunities.models import Oportunidade
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services.fluxo import avancar, conferir_avanco, exigir_em_curso
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
 
 
@@ -121,6 +122,7 @@ class ExecutarMatchingService:
         conexao do banco durante a espera.
         """
         proposta = proposta_de(oportunidade)
+        exigir_proposta_revisada(proposta)
         necessarias = list(proposta.competencias_necessarias.select_related('competencia'))
 
         if not necessarias:
@@ -128,6 +130,8 @@ class ExecutarMatchingService:
                 'Derive as competências necessárias antes de rodar o matching.',
                 'sem_competencias',
             )
+
+        conferir_avanco(oportunidade, SituacaoOportunidade.MATCHING)
 
         candidatos = [candidato_de(membro) for membro in candidatos_da_rede()]
 
@@ -156,6 +160,10 @@ class ExecutarMatchingService:
         selecionadas = rerank['selecionadas']
 
         with transaction.atomic():
+            avancar(oportunidade, SituacaoOportunidade.MATCHING, ator)
+            proposta.refresh_from_db()
+            exigir_proposta_revisada(proposta)
+
             execucao = ExecucaoMatching.objects.create(
                 oportunidade=oportunidade,
                 estrategia=motor.estrategia,
@@ -403,6 +411,8 @@ class AjustarMembroService:
     def execute(
         self, *, membro: MembroEquipe, dados: dict[str, Any], ator: Usuario
     ) -> MembroEquipe:
+        exigir_em_curso(membro.equipe.oportunidade)
+
         for campo, valor in dados.items():
             setattr(membro, campo, valor)
 
@@ -433,9 +443,17 @@ class AdicionarMembroService:
         papel: str,
         ator: Usuario,
     ) -> MembroEquipe:
+        exigir_em_curso(equipe.oportunidade)
+
         if equipe.membros.filter(membro=membro_rede).exists():
             raise ConflitoDeEstado(
                 'Esta pessoa já consta da equipe potencial.', 'membro_duplicado'
+            )
+
+        if membro_rede.situacao == SituacaoMembro.INATIVO:
+            raise ConflitoDeEstado(
+                'Esta pessoa está inativa na rede e não entra em equipe nova.',
+                'membro_inativo',
             )
 
         membro = MembroEquipe.objects.create(
@@ -474,6 +492,7 @@ class ValidarEquipeService:
     def execute(
         self, *, equipe: EquipePotencial, ator: Usuario
     ) -> EquipePotencial:
+        exigir_em_curso(equipe.oportunidade)
         incluidos = equipe.membros.filter(incluido=True)
 
         if not incluidos.exists():

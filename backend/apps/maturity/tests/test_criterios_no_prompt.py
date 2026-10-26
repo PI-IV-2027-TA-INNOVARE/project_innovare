@@ -15,7 +15,12 @@ from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.copilot.models import Lacuna, PropostaEstruturada
 from apps.maturity.models import Recomendacao
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
-from core.tests.builders import OportunidadeBuilder, UsuarioBuilder
+from core.tests.builders import (
+    MembroRedeBuilder,
+    OportunidadeBuilder,
+    UsuarioBuilder,
+    indicar_na_equipe,
+)
 from core.tests.dubles import PREANALISE_PADRAO, ProvedorFake, escrever_base_pipe
 
 PROPOSTA = {
@@ -42,7 +47,12 @@ class CriteriosNoPromptTests(TestCase):
         administrador = UsuarioBuilder().administrador().build()
         self.supervisor = UsuarioBuilder().supervisor().build()
         self.oportunidade = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
-        PropostaEstruturada.objects.create(oportunidade=self.oportunidade, **PROPOSTA)
+        PropostaEstruturada.objects.create(
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
+        )
+        indicar_na_equipe(
+            self.oportunidade, MembroRedeBuilder().pesquisador().chamado('Helena Torres').build()
+        )
 
         self.override = override_settings(BASE_CONHECIMENTO_PIPE=self.base)
         self.override.enable()

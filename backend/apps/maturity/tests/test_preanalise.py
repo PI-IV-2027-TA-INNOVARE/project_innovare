@@ -78,7 +78,10 @@ class PreAnaliseBaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
+        )
+        indicar_na_equipe(
+            self.oportunidade, MembroRedeBuilder().pesquisador().chamado('Helena Torres').build()
         )
 
         base_conhecimento.cache_clear()

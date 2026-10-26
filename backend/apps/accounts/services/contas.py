@@ -20,6 +20,7 @@ from apps.accounts.models import (
     Usuario,
 )
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
+from apps.accounts.services.titular import anonimizada
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
@@ -162,6 +163,20 @@ def garantir_email_livre(
         )
 
 
+def recusar_conta_anonimizada(usuario: Usuario) -> None:
+    """
+    Conta anonimizada a pedido da pessoa nao volta a ser usada (LGPD).
+
+    Reativada ou editada, ela passaria a outra pessoa com o historico de quem
+    pediu para sair: oportunidades, anexos e indicacoes em equipe.
+    """
+    if anonimizada(usuario):
+        raise ConflitoDeEstado(
+            'Esta conta foi anonimizada a pedido da pessoa e não volta a ser usada.',
+            codigo='conta_anonimizada',
+        )
+
+
 class AtualizarContaService:
     """
     Edicao da conta pelo Administrador.
@@ -173,6 +188,7 @@ class AtualizarContaService:
 
     @transaction.atomic
     def execute(self, *, usuario: Usuario, dados: dict, ator: Usuario) -> Usuario:
+        recusar_conta_anonimizada(usuario)
         membro = MembroRede.objects.filter(usuario=usuario).first()
         dados = dict(dados)
         cnpj = dados.pop('cnpj', None)
@@ -269,6 +285,8 @@ class AlterarSituacaoContaService:
         if anterior == situacao:
             return usuario
 
+        recusar_conta_anonimizada(usuario)
+
         usuario.situacao = situacao
         usuario.save(update_fields=['situacao', 'atualizado_em'])
 
@@ -290,6 +308,8 @@ class ReenviarConviteService:
         self._email: EnviadorDeEmail = enviador or EnviadorDjango()
 
     def execute(self, *, usuario: Usuario, ator: Usuario) -> TokenAcesso:
+        recusar_conta_anonimizada(usuario)
+
         if usuario.has_usable_password():
             raise ConflitoDeEstado(
                 'Esta conta já definiu senha. Para trocar, a pessoa pede a '

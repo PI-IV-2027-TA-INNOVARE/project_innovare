@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from apps.network.models import MembroRede, Titulacao
 from apps.network.serializers import (
     LiberarAcessoSerializer,
+    MudancaDeSituacaoSerializer,
     MembroRedeSerializer,
     PerfilProprioSerializer,
     TitulacaoSerializer,
@@ -20,7 +21,9 @@ from apps.network.services.rede import (
     AtualizarMembroService,
     AtualizarPerfilProprioService,
     CadastrarMembroService,
+    InativarMembroService,
     LiberarAcessoMembroService,
+    ReativarMembroService,
 )
 from core.exceptions import RecursoNaoEncontrado
 from core.permissions import EhSupervisor, TemPapel
@@ -128,6 +131,26 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
     def liberar_acesso(self, request, pk=None):
         """Cria a conta e envia o convite de primeiro acesso (PB08)."""
         membro = LiberarAcessoMembroService().execute(
+            membro=self.get_object(), ator=request.user
+        )
+
+        return Response(self.get_serializer(membro).data)
+
+    @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroRedeSerializer)
+    @action(detail=True, methods=['post'], url_path='inativar', url_name='inativar')
+    def inativar(self, request, pk=None):
+        """Sai das proximas rodadas de matching e perde o login (P3)."""
+        membro = InativarMembroService().execute(
+            membro=self.get_object(), ator=request.user
+        )
+
+        return Response(self.get_serializer(membro).data)
+
+    @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroRedeSerializer)
+    @action(detail=True, methods=['post'], url_path='reativar', url_name='reativar')
+    def reativar(self, request, pk=None):
+        """Volta ao matching e, se tinha conta, ao login (P3)."""
+        membro = ReativarMembroService().execute(
             membro=self.get_object(), ator=request.user
         )
 

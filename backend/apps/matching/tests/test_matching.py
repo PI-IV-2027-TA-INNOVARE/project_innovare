@@ -67,7 +67,7 @@ class MatchingBaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
         )
 
         self.essencial = CompetenciaNecessaria.objects.create(

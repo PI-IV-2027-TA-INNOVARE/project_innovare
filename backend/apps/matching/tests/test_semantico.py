@@ -73,6 +73,7 @@ class BaseSemanticaTests(TestCase):
         self.oportunidade = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         self.proposta = PropostaEstruturada.objects.create(
             oportunidade=self.oportunidade,
+            revisada_por_humano=True,
             problema_pesquisa='Contaminação na linha de envase.',
             objetivo_geral='Detectar a contaminação em 48 horas.',
             metodologia='PCR quantitativo e cultivo seletivo.',

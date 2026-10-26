@@ -38,7 +38,16 @@ describe('PrivacidadePage', () => {
     expect(resumo.getByText('Onde fica')).toBeInTheDocument()
     expect(resumo.getByText(/no Brasil/)).toBeInTheDocument()
     expect(resumo.getByText(/sem nome, e-mail ou telefone/)).toBeInTheDocument()
+    expect(resumo.getByText(/provedor de e-mail/)).toBeInTheDocument()
     expect(resumo.getByText(/baixar uma cópia/i)).toBeInTheDocument()
+  })
+
+  it('diz que as decisões sobre o problema saem por e-mail, e o que vai junto', () => {
+    renderizar()
+
+    expect(
+      screen.getByText(/decisões Revisar, Continuar e Arquivar sobre o problema dela/),
+    ).toBeInTheDocument()
   })
 
   it('o índice leva a cada seção, sem precisar rolar até ela', () => {

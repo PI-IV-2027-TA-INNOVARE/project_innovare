@@ -91,7 +91,9 @@ class MinimizacaoNaPreAnaliseTests(TestCase):
         administrador = UsuarioBuilder().administrador().build()
         self.supervisor = UsuarioBuilder().supervisor().build()
         self.oportunidade = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
-        PropostaEstruturada.objects.create(oportunidade=self.oportunidade, **PROPOSTA)
+        PropostaEstruturada.objects.create(
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
+        )
 
         self.marina = (
             MembroRedeBuilder()
@@ -143,7 +145,7 @@ class MinimizacaoNoMatchingTests(TestCase):
         self.supervisor = UsuarioBuilder().supervisor().build()
         self.oportunidade = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
         )
         CompetenciaNecessaria.objects.create(
             proposta=proposta,

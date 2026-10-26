@@ -16,7 +16,7 @@ const ELEMENTOS = [
 const preenchido = (valor) =>
   Array.isArray(valor) ? valor.length > 0 : Boolean(String(valor ?? '').trim())
 
-export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara }) {
+export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara, aoVerificar }) {
   const [pendente, setPendente] = useState(false)
 
   useEffect(() => {
@@ -26,10 +26,17 @@ export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara }) {
       try {
         const proposta = await obterProposta(oportunidadeId)
         const temConteudo = ELEMENTOS.some((elemento) => preenchido(proposta[elemento]))
+        const agora = temConteudo && !proposta.revisada_por_humano
 
-        if (ativo) setPendente(temConteudo && !proposta.revisada_por_humano)
+        if (ativo) {
+          setPendente(agora)
+          aoVerificar?.(agora)
+        }
       } catch {
-        if (ativo) setPendente(false)
+        if (ativo) {
+          setPendente(false)
+          aoVerificar?.(false)
+        }
       }
     }
 
@@ -38,7 +45,7 @@ export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara }) {
     return () => {
       ativo = false
     }
-  }, [oportunidadeId])
+  }, [oportunidadeId, aoVerificar])
 
   if (!pendente) return null
 
@@ -46,8 +53,8 @@ export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara }) {
     <div className="admin-callout admin-callout--alerta" role="note">
       <Icone icon={appIcons.warning} className="admin-callout__icon" />
       <p className="admin-callout__text">
-        A proposta estruturada ainda não foi revisada. Esta etapa trabalha sobre
-        um texto que pode conter sugestões do Copiloto sem leitura humana.
+        A proposta estruturada ainda não foi revisada. Esta etapa fica liberada
+        depois que você revisa e salva o texto do Copiloto.
       </p>
       {irPara ? (
         <button

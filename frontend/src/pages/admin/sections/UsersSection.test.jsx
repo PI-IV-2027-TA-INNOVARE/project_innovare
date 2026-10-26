@@ -350,6 +350,35 @@ describe('UsersSection — pedido de exclusão', () => {
     expect(await screen.findByText('Pessoa removida')).toBeInTheDocument()
     expect(screen.queryByText('Maria Ferreira')).not.toBeInTheDocument()
   })
+
+  /**
+   * Conta anonimizada não volta a ser usada: reativada ou editada, ela
+   * passaria a outra pessoa com o histórico de quem pediu para sair. A API
+   * recusa; a tela nem oferece.
+   */
+  it('à conta anonimizada só oferece visualizar', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        {
+          ...comoApi(USUARIOS_EXEMPLO[1]),
+          nome: 'Pessoa removida',
+          email: 'removido-2@anonimizado.invalid',
+          situacao: 'inativo',
+          anonimizada: true,
+        },
+        comoApi(USUARIOS_EXEMPLO[0]),
+      ],
+    })
+    render(<UsersSection />)
+
+    await user.click(
+      await screen.findByRole('button', { name: /ações para pessoa removida/i }),
+    )
+
+    const itens = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(itens).toEqual(['Visualizar perfil'])
+  })
 })
 
 describe('UsersSection — convite', () => {

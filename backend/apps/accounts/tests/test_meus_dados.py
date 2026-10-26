@@ -90,6 +90,7 @@ class MeusDadosTests(TestCase):
         dados = self.client.get(reverse('auth-meus-dados')).data
 
         self.assertEqual(dados['perfil_na_rede']['experiencia'], 'Dez anos de bancada.')
+        self.assertEqual(dados['perfil_na_rede']['situacao_na_rede'], 'Ativo')
 
     def test_a_copia_traz_avisos_anexos_cnpj_e_o_que_outros_registraram(self):
         self.organizacao.cnpj = '11222333000181'

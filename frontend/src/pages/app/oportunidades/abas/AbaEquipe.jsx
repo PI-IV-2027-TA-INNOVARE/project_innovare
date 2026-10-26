@@ -64,7 +64,14 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
     <li className={`equipe__membro${membro.incluido ? '' : ' equipe__membro--fora'}`}>
       <div className="equipe__cabeca">
         <div>
-          <p className="equipe__nome">{membro.nome}</p>
+          <p className="equipe__nome">
+            {membro.nome}
+            {membro.inativo ? (
+              <span className="status-badge status-badge--inativo equipe__inativo">
+                Inativo na rede
+              </span>
+            ) : null}
+          </p>
           <p className="equipe__meta">
             {membro.papel_rotulo}
             {membro.titulacao ? ` · ${membro.titulacao}` : ''} ·{' '}
@@ -125,6 +132,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
   const [ocupado, setOcupado] = useState(false)
   const [rodando, setRodando] = useState(false)
   const [confirmarRodada, setConfirmarRodada] = useState(false)
+  const [propostaPendente, setPropostaPendente] = useState(false)
   const [rede, setRede] = useState([])
   const [escolhido, setEscolhido] = useState('')
 
@@ -260,7 +268,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={rodar}
-              disabled={ocupado}
+              disabled={ocupado || propostaPendente}
             >
               <Icone icon={appIcons.users} />
               {rodando ? 'Rodando...' : 'Rodar matching'}
@@ -269,9 +277,11 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body equipe__corpo">
-        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
-
-          <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
 
           {rodando ? (
             <EsperaIA
@@ -322,7 +332,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn admin-btn--outline"
               onClick={() => setConfirmarRodada(true)}
-              disabled={ocupado}
+              disabled={ocupado || propostaPendente}
             >
               <Icone icon={appIcons.reset} />
               {rodando ? 'Rodando...' : 'Rodar de novo'}
@@ -349,6 +359,14 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
       </header>
 
       <div className="perfil-card__body equipe__corpo">
+        {podeConduzir ? (
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
+        ) : null}
+
         {rodando ? (
           <EsperaIA
             titulo="Comparando as competências necessárias com a rede interna."

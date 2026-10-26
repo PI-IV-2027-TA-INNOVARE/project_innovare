@@ -79,6 +79,8 @@ def _perfil_na_rede(membro: MembroRede | None) -> dict[str, Any] | None:
 
     return {
         'papel_na_rede': membro.get_papel_rede_display(),
+        'situacao_na_rede': membro.get_situacao_display(),
+        'instituicao': getattr(membro.organizacao, 'nome', None),
         'titulacao': getattr(membro.titulacao, 'rotulo', None),
         'disponibilidade': membro.get_disponibilidade_display(),
         'experiencia': membro.experiencia,

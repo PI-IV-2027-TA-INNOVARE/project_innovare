@@ -25,6 +25,7 @@ from apps.opportunities.serializers import (
     SolicitacaoComplementoSerializer,
     SolicitacaoRegistradaSerializer,
     OportunidadeSerializer,
+    PrioridadeSerializer,
     RelatorioOportunidadeSerializer,
     RelatorioEquipeSerializer,
     RelatorioPreAnaliseSerializer,
@@ -105,6 +106,7 @@ from apps.opportunities.services import (
     AtualizarContextoService,
     CadastrarOportunidadeService,
     ComplementarOportunidadeService,
+    DefinirPrioridadeService,
     EquipeDaOportunidade,
     FluxoDaOportunidade,
     PreAnaliseDaOportunidade,
@@ -114,6 +116,7 @@ from apps.opportunities.services import (
     fila_de,
     historico_de,
     nomes_de_quem_agiu,
+    por_prioridade,
 )
 from core.exceptions import AcaoNaoPermitida
 from core.permissions import EhSupervisor, TemPapel
@@ -210,6 +213,7 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
 
         if self.action in (
             'decisao',
+            'prioridade',
             'observacoes',
             'solicitar_complemento',
             'partial_update',
@@ -255,6 +259,15 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 criada_em__date__lte=filtro.validated_data['cadastrada_ate']
             )
+
+        if self.request.user.papel == Papel.DEMANDANTE:
+            return queryset
+
+        if 'prioridade' in filtro.validated_data:
+            queryset = queryset.filter(prioridade=filtro.validated_data['prioridade'])
+
+        if filtro.validated_data.get('ordenar') == 'prioridade':
+            queryset = por_prioridade(queryset)
 
         return queryset
 
@@ -314,6 +327,21 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
         )
 
         oportunidade.refresh_from_db()
+        return Response(self.get_serializer(oportunidade).data)
+
+    @extend_schema(request=PrioridadeSerializer, responses=OportunidadeSerializer)
+    @action(detail=True, methods=['post'], url_path='prioridade', url_name='prioridade')
+    def prioridade(self, request, codigo=None):
+        """Alta, Media ou Baixa na fila do Supervisor (PB61)."""
+        serializer = PrioridadeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        oportunidade = DefinirPrioridadeService().execute(
+            oportunidade=self.get_object(),
+            prioridade=serializer.validated_data['prioridade'],
+            ator=request.user,
+        )
+
         return Response(self.get_serializer(oportunidade).data)
 
     @extend_schema(

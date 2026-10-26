@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   executarPreAnalise: null,
   acatarRecomendacao: null,
   obterEquipePotencial: null,
+  obterProposta: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
@@ -34,6 +35,7 @@ vi.mock('../../../../services/pdConnectApi', () => ({
   executarPreAnalise: (...args) => api.executarPreAnalise(...args),
   acatarRecomendacao: (...args) => api.acatarRecomendacao(...args),
   obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
+  obterProposta: (...args) => api.obterProposta(...args),
 }))
 
 const AVISO =
@@ -83,7 +85,14 @@ describe('AbaPreAnalise', () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue(ANALISE)
     api.executarPreAnalise = vi.fn().mockResolvedValue(ANALISE)
     api.acatarRecomendacao = vi.fn().mockResolvedValue({})
-    api.obterEquipePotencial = vi.fn().mockResolvedValue({ id_equipe: 3, membros: [] })
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      id_equipe: 3,
+      membros: [{ id_membro_equipe: 7, incluido: true }],
+    })
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: true,
+    })
   })
 
   it('apresenta o aviso de que o resultado é orientativo', async () => {
@@ -350,11 +359,46 @@ describe('AbaPreAnalise', () => {
     renderizar({ irPara })
 
     expect(
-      await screen.findByText(/equipe potencial ainda não foi definida/i),
+      await screen.findByText(/avalia também a equipe/i),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /executar pré-análise/i })).toBeDisabled()
 
     await userEvent.click(screen.getByRole('button', { name: /ir para equipe potencial/i }))
     expect(irPara).toHaveBeenCalledWith('equipe')
+  })
+
+  /**
+   * PB50 pede "uma equipe potencial definida": a equipe gerada em que o
+   * Supervisor tirou todo mundo não conta, e a API recusa do mesmo jeito.
+   */
+  it('equipe sem ninguém incluído também trava a execução', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      id_equipe: 3,
+      membros: [{ id_membro_equipe: 7, incluido: false }],
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/avalia também a equipe/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toBeDisabled()
+  })
+
+  /**
+   * PB41: texto do Copiloto sem leitura humana não vale como definitivo. A
+   * API recusa a pré-análise; a tela trava o botão e leva à aba Proposta.
+   */
+  it('proposta não revisada trava a reavaliação', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/ainda não foi revisada/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /reavaliar/i })).toBeDisabled(),
+    )
   })
 
   it('mostra a espera enquanto a pré-análise roda', async () => {

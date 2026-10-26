@@ -522,7 +522,13 @@ export default function UsersSection() {
                 <td data-label="Ações" className="admin-table__actions-col">
                   <RowActionsMenu
                     label={usuario.nome}
-                    items={[
+                    items={usuario.anonimizada ? [
+                      {
+                        label: 'Visualizar perfil',
+                        icon: appIcons.view,
+                        onSelect: () => setModal({ tipo: 'ver', usuario }),
+                      },
+                    ] : [
                       {
                         label: 'Visualizar perfil',
                         icon: appIcons.view,

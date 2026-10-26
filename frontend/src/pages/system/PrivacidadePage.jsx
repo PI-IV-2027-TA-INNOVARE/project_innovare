@@ -5,7 +5,7 @@ import { appIcons, Icone } from '../../lib/icons'
 import { lerPrivacidade } from '../../services/pdConnectApi'
 import './PrivacidadePage.scss'
 
-const ATUALIZADO_EM = '25/10/2026'
+const ATUALIZADO_EM = '26/10/2026'
 
 const RESUMO = [
   {
@@ -16,12 +16,12 @@ const RESUMO = [
   {
     icone: appIcons.place,
     termo: 'Onde fica',
-    texto: 'Guardado no Brasil: o banco de dados fica em São Paulo.',
+    texto: 'O banco de dados fica no Brasil, em São Paulo.',
   },
   {
     icone: appIcons.share,
     termo: 'Quem mais recebe',
-    texto: 'Serviços de IA, só com o texto do trabalho, sem nome, e-mail ou telefone.',
+    texto: 'Serviços de IA, só com o texto do trabalho, sem nome, e-mail ou telefone. E o provedor de e-mail, com os avisos que chegam a você.',
   },
   {
     icone: appIcons.export,
@@ -33,7 +33,7 @@ const RESUMO = [
 const DADOS = [
   ['Conta', 'nome, e-mail, perfil de acesso e último acesso.'],
   ['Empresa demandante', 'nome, CNPJ e, se você informar, telefone.'],
-  ['Rede interna', 'formação, titulação, competências, experiência e disponibilidade.'],
+  ['Rede interna', 'formação, titulação, competências, experiência, disponibilidade e se a pessoa está ativa ou inativa na rede. Quem é inativado continua nas equipes já sugeridas.'],
   ['Oportunidades', 'os textos cadastrados e os documentos anexados.'],
   ['Histórico', 'quem fez cada ação e quando.'],
 ]
@@ -227,7 +227,11 @@ export default function PrivacidadePage() {
                   <dt>E-mail</dt>
                   <dd>
                     Os avisos de conta, como convite e redefinição de senha, saem por um
-                    provedor de e-mail.
+                    provedor de e-mail. A empresa demandante também recebe por e-mail as
+                    decisões Revisar, Continuar e Arquivar sobre o problema dela: o aviso
+                    leva o nome da pessoa, o código e o título do problema e, no Revisar, o
+                    pedido de complementação. O provedor pode guardar a mensagem fora do
+                    Brasil.
                   </dd>
                 </div>
               </dl>

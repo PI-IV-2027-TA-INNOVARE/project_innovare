@@ -43,6 +43,7 @@ class MembroEquipeSerializer(serializers.ModelSerializer):
     ajustado_por_nome = serializers.CharField(
         source='ajustado_por.nome', read_only=True, default=None
     )
+    inativo = serializers.SerializerMethodField()
 
     class Meta:
         model = MembroEquipe
@@ -54,6 +55,7 @@ class MembroEquipeSerializer(serializers.ModelSerializer):
             'titulacao',
             'disponibilidade',
             'situacao_na_rede',
+            'inativo',
             'papel',
             'papel_rotulo',
             'score_compatibilidade',
@@ -67,6 +69,10 @@ class MembroEquipeSerializer(serializers.ModelSerializer):
             'ajustado_por_nome',
         ]
         read_only_fields = fields
+
+    def get_inativo(self, indicacao) -> bool:
+        """Quem saiu da rede continua na equipe ja gerada, marcado (P3)."""
+        return indicacao.membro.situacao == SituacaoMembro.INATIVO
 
 
 class LacunaEquipeSerializer(serializers.ModelSerializer):

@@ -17,8 +17,8 @@ elementos da proposta. Quatro regras governam tudo aqui:
 4. **A sintese da entrada e do Supervisor.** A IA resume a entrada ao abrir a
    sessao; o resumo corrigido e o que orienta a estruturacao.
 
-O que este modulo deliberadamente NAO faz: mexer na `situacao` da oportunidade.
-Quais transicoes valem e quem as dispara e a pendencia P13 do plano.
+Tudo o que escreve aqui e trabalho de estruturacao: a oportunidade passa a Em
+estruturacao pelo `fluxo` (P13). Encerrar a sessao nao muda a situacao.
 """
 from __future__ import annotations
 
@@ -45,8 +45,11 @@ from apps.copilot.models import (
     SessaoCopiloto,
     TipoLacuna,
 )
-from apps.opportunities.models import Oportunidade
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services.fluxo import avancar, conferir_avanco
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
+
+ESTRUTURACAO = SituacaoOportunidade.ESTRUTURACAO
 
 ELEMENTOS = (
     'problema_pesquisa',
@@ -345,6 +348,7 @@ class IniciarSessaoService(ComProvedor):
         from apps.copilot.serializers import SinteseIASerializer
 
         _recusar_duplicada(oportunidade)
+        conferir_avanco(oportunidade, ESTRUTURACAO)
         correlation_id = uuid.uuid4()
 
         resultado = self._resolver_provedor().sintetizar_entrada(
@@ -364,6 +368,7 @@ class IniciarSessaoService(ComProvedor):
         with transaction.atomic():
             Oportunidade.objects.select_for_update().filter(pk=oportunidade.pk).first()
             _recusar_duplicada(oportunidade)
+            avancar(oportunidade, ESTRUTURACAO, ator)
 
             return self._abrir(
                 oportunidade=oportunidade,
@@ -462,6 +467,7 @@ class AtualizarSinteseService:
         self, *, sessao: SessaoCopiloto, sintese: str, ator: Usuario
     ) -> SessaoCopiloto:
         _exigir_aberta(sessao)
+        avancar(sessao.oportunidade, ESTRUTURACAO, ator)
 
         sessao.sintese = sintese
         sessao.save(update_fields=['sintese'])
@@ -498,6 +504,7 @@ class ResponderService:
         pergunta: str = '',
     ) -> MensagemCopiloto:
         _exigir_aberta(sessao)
+        avancar(sessao.oportunidade, ESTRUTURACAO, ator)
 
         mensagem = MensagemCopiloto.objects.create(
             sessao=sessao,
@@ -534,6 +541,7 @@ class EstruturarPropostaService(ComProvedor):
         """
         from apps.copilot.serializers import SaidaCopilotoSerializer
 
+        conferir_avanco(oportunidade, ESTRUTURACAO)
         proposta = proposta_para_estruturar(oportunidade)
         sessao = sessao_aberta_de(oportunidade)
         correlation_id = uuid.uuid4()
@@ -557,6 +565,8 @@ class EstruturarPropostaService(ComProvedor):
         dados = dict(saida.validated_data) if aceita else {}
 
         with transaction.atomic():
+            avancar(oportunidade, ESTRUTURACAO, ator)
+
             return self._gravar_rodada(
                 proposta=PropostaEstruturada.objects.select_for_update().get(
                     pk=proposta.pk
@@ -860,6 +870,7 @@ class AceitarSugestaoService:
     def execute(
         self, *, oportunidade: Oportunidade, elemento: str, texto: str, ator: Usuario
     ) -> PropostaEstruturada:
+        avancar(oportunidade, ESTRUTURACAO, ator)
         proposta = (
             PropostaEstruturada.objects.select_for_update()
             .filter(oportunidade=oportunidade)
