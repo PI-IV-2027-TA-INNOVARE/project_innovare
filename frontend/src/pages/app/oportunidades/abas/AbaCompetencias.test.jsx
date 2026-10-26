@@ -96,6 +96,24 @@ describe('AbaCompetencias', () => {
     ).toBeInTheDocument()
   })
 
+  it('explica que o limite de gasto barrou a derivação', async () => {
+    api.derivarCompetencias = vi.fn().mockResolvedValue({
+      criadas: [],
+      fallback_usado: true,
+      motivo_fallback: 'limite_do_mes',
+    })
+
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /derivar da proposta/i }),
+    )
+
+    expect(
+      await screen.findByText(/a ia não foi chamada: o limite mensal de gasto com ia foi atingido/i),
+    ).toBeInTheDocument()
+  })
+
   it('acrescenta competência manualmente', async () => {
     render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
 

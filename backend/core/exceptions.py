@@ -5,8 +5,10 @@ Regra de camada: um `service` levanta `ErroDeDominio`; a `view` nao traduz nada
 a mao - o tratador abaixo converte para a resposta HTTP.
 """
 import logging
+import math
 
 from rest_framework import status
+from rest_framework.exceptions import Throttled
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 from rest_framework.views import set_rollback
@@ -17,6 +19,16 @@ MENSAGEM_ERRO_INTERNO = (
     'O servidor encontrou um erro inesperado. Tente novamente em instantes; '
     'se continuar, avise o suporte.'
 )
+
+
+def mensagem_de_espera(segundos) -> str:
+    """O limite de pedidos em linguagem de tela, com quanto falta para liberar."""
+    if not segundos:
+        return 'Muitos pedidos seguidos. Aguarde um pouco e tente de novo.'
+
+    minutos = max(1, math.ceil(segundos / 60))
+    unidade = 'minuto' if minutos == 1 else 'minutos'
+    return f'Muitos pedidos seguidos. Tente de novo em {minutos} {unidade}.'
 
 
 class ErroDeDominio(Exception):
@@ -46,6 +58,12 @@ class ConflitoDeEstado(ErroDeDominio):
     status_code = status.HTTP_409_CONFLICT
 
 
+class ServicoIndisponivel(ErroDeDominio):
+    """Um servico de fora (e-mail, por exemplo) falhou, e a operacao nao foi feita."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+
 def tratador_de_erro(exc, context):
     """
     Handler do DRF: toda falha sai no contrato de erro da API.
@@ -62,6 +80,9 @@ def tratador_de_erro(exc, context):
         )
 
     resposta = drf_exception_handler(exc, context)
+
+    if isinstance(exc, Throttled) and resposta is not None:
+        resposta.data = {'detail': mensagem_de_espera(exc.wait), 'codigo': 'limite_de_pedidos'}
 
     if resposta is not None:
         return resposta

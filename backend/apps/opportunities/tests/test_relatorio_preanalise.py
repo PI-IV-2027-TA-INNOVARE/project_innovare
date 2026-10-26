@@ -214,3 +214,26 @@ class AcessoAoRelatorioTests(RelatorioPreAnaliseBaseTests):
         self.assertEqual(
             self.client.get(self.url()).status_code, status.HTTP_401_UNAUTHORIZED
         )
+
+
+class ComoLerTests(RelatorioPreAnaliseBaseTests):
+    """O relatorio da pre-analise explica como le-la."""
+
+    def test_explica_os_tres_niveis_e_o_carater_orientativo(self):
+        self.importar()
+        self.analisar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_ler'])
+
+        self.assertIn('Consolidada', texto)
+        self.assertIn('Em desenvolvimento', texto)
+        self.assertIn('Frágil', texto)
+        self.assertIn('não é nota, parecer nem decisão da FAPESP', texto)
+
+    def test_cita_a_versao_dos_criterios_analisada(self):
+        self.importar()
+        analise = self.analisar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_ler'])
+
+        self.assertIn(analise.versao_criterio.versao, texto)

@@ -5,6 +5,7 @@ Um caso de uso por classe, com `execute()`. A view recebe, delega e responde.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.db import transaction
@@ -24,7 +25,9 @@ from apps.network.models import (
     SituacaoMembro,
     TipoCompetencia,
 )
-from core.exceptions import ConflitoDeEstado, ErroDeDominio
+from core.exceptions import ConflitoDeEstado, ErroDeDominio, ServicoIndisponivel
+
+logger = logging.getLogger(__name__)
 
 LISTAS = {
     'competencias': TipoCompetencia.COMPETENCIA,
@@ -196,7 +199,7 @@ class CadastrarMembroService:
 
         if MembroRede.objects.com_email(email).exists():
             raise ConflitoDeEstado(
-                'Ja existe alguem na rede com este e-mail.',
+                'Já existe alguém na rede com este e-mail.',
                 codigo='email_duplicado',
             )
 
@@ -217,7 +220,7 @@ class CadastrarMembroService:
             entidade='membro_rede',
             entidade_id=membro.id_membro,
             ator=getattr(ator, 'email', str(ator)),
-            detalhe={'papel_rede': membro.papel_rede, 'email': membro.email},
+            detalhe={'papel_rede': membro.papel_rede},
         )
         return membro
 
@@ -228,6 +231,9 @@ class AtualizarMembroService:
 
     Nome e e-mail sao gravados onde moram: no membro, enquanto ele nao tem
     conta; na conta, depois do acesso liberado - o e-mail e o login dela.
+
+    A trilha guarda quais campos mudaram, nao o antes e o depois: o valor
+    antigo de nome, e-mail e experiencia ficaria nela para sempre (LGPD).
     """
 
     @transaction.atomic
@@ -272,11 +278,10 @@ class AtualizarMembroService:
         sincronizar_competencias(membro, listas)
         sincronizar_formacoes(membro, formacoes)
 
-        mudou = {
-            campo: {'de': str(antes[campo]), 'para': str(getattr(membro, campo))}
-            for campo in dados
+        mudou = sorted(
+            campo for campo in dados
             if str(antes[campo]) != str(getattr(membro, campo))
-        }
+        )
 
         registrar_evento(
             categoria=CategoriaEvento.REDE,
@@ -298,6 +303,11 @@ class LiberarAcessoMembroService:
 
     A conta nasce sem senha utilizavel e a pessoa define a dela pelo convite -
     mesma mecanica do provisionamento feito pelo Administrador.
+
+    O cadastro e lido de novo, travado, antes de conferir: o envio do convite
+    leva segundos, e um segundo clique nesse meio tempo recebe "acesso ja
+    liberado" em vez de tentar criar a mesma conta. Se o e-mail nao sai, nada
+    fica gravado: acesso liberado sem convite deixaria a pessoa sem como entrar.
     """
 
     def __init__(self, enviador: EnviadorDeEmail | None = None) -> None:
@@ -305,15 +315,17 @@ class LiberarAcessoMembroService:
 
     @transaction.atomic
     def execute(self, *, membro: MembroRede, ator: Usuario) -> MembroRede:
+        membro = MembroRede.objects.select_for_update().get(pk=membro.pk)
+
         if membro.usuario_id:
             raise ConflitoDeEstado(
-                'Esta pessoa ja tem acesso a plataforma.',
+                'Esta pessoa já tem acesso à plataforma.',
                 codigo='acesso_ja_liberado',
             )
 
         if Usuario.objects.filter(email=membro.email).exists():
             raise ConflitoDeEstado(
-                'Ja existe uma conta com este e-mail.',
+                'Já existe uma conta com este e-mail.',
                 codigo='email_em_uso',
             )
 
@@ -321,7 +333,7 @@ class LiberarAcessoMembroService:
 
         if papel is None:
             raise ErroDeDominio(
-                'Papel na rede sem equivalente de acesso.',
+                'Este papel na rede não dá acesso à plataforma.',
                 codigo='papel_sem_acesso',
             )
 
@@ -344,7 +356,19 @@ class LiberarAcessoMembroService:
         )
 
         token = TokenAcesso.emitir(usuario, FinalidadeToken.CONVITE)
-        self._email.convite_acesso(usuario, token)
+
+        try:
+            self._email.convite_acesso(usuario, token)
+        except OSError as erro:
+            logger.warning(
+                'Convite de acesso nao saiu (%s); a liberacao foi desfeita.',
+                type(erro).__name__,
+            )
+            raise ServicoIndisponivel(
+                'O convite não saiu por e-mail, e o acesso não foi liberado. '
+                'Tente de novo em instantes.',
+                codigo='convite_nao_enviado',
+            ) from erro
 
         registrar_evento(
             categoria=CategoriaEvento.REDE,
@@ -352,7 +376,7 @@ class LiberarAcessoMembroService:
             entidade='membro_rede',
             entidade_id=membro.id_membro,
             ator=getattr(ator, 'email', str(ator)),
-            detalhe={'papel': papel, 'email': membro.email},
+            detalhe={'papel': papel},
         )
         return membro
 

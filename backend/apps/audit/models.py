@@ -3,6 +3,13 @@ Trilha de auditoria (RF12) - append-only.
 
 Nunca e atualizada nem apagada pela aplicacao. E a fonte unica da aba Historico
 da oportunidade: duas tabelas para a mesma verdade divergem no primeiro mes.
+
+Unica excecao: a anonimizacao pedida pelo titular (LGPD, art. 18), que troca o
+nome e o e-mail de quem agiu por "pessoa removida", desfaz a ligacao com a conta
+e nao mexe no que aconteceu (`apps/accounts/services/titular.py`).
+
+Quem agiu fica em dois campos: `ator`, o texto que a tela mostra, e
+`conta_do_ator`, a conta. O texto sozinho perde a pessoa quando o e-mail muda.
 """
 import uuid
 
@@ -47,6 +54,14 @@ class EventoAuditoria(models.Model):
     )
     tipo = models.CharField(max_length=60, db_column='tipo_evento')
     ator = models.CharField(max_length=160, db_column='ator')
+    conta_do_ator = models.ForeignKey(
+        'accounts.Usuario',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='eventos_como_ator',
+        db_column='id_ator',
+    )
     entidade = models.CharField(max_length=60, db_column='entidade')
     entidade_id = models.CharField(max_length=60, db_column='id_entidade')
     status = models.CharField(
@@ -95,6 +110,11 @@ class EventoAuditoria(models.Model):
             models.Index(fields=['correlation_id'], name='idx_evento_correlation'),
             models.Index(
                 fields=['categoria', '-ocorrido_em'], name='idx_evento_categoria'
+            ),
+            models.Index(
+                fields=['entidade_id', '-ocorrido_em'],
+                condition=models.Q(tipo='exclusao_solicitada', entidade='usuario'),
+                name='idx_evento_pedido_exclusao',
             ),
         ]
 

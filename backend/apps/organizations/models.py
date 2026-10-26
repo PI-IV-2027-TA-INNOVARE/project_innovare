@@ -10,8 +10,8 @@ from core.models import ModeloComCarimbo, lista_fixa
 
 
 class TipoOrganizacao(models.TextChoices):
-    DEMANDANTE = 'demandante', 'Organizacao demandante'
-    INSTITUICAO = 'instituicao', 'Instituicao de vinculo'
+    DEMANDANTE = 'demandante', 'Empresa demandante'
+    INSTITUICAO = 'instituicao', 'Instituição de vínculo'
 
 
 class Organizacao(ModeloComCarimbo):

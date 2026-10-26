@@ -87,4 +87,5 @@ class ResultadoDerivacaoSerializer(serializers.Serializer):
 
     criadas = CompetenciaNecessariaSerializer(many=True, read_only=True)
     fallback_usado = serializers.BooleanField(read_only=True)
+    motivo_fallback = serializers.CharField(read_only=True, allow_null=True)
     ai_run_id = serializers.UUIDField(read_only=True, allow_null=True)

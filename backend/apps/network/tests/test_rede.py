@@ -3,6 +3,9 @@ Testes da rede interna: cadastro, consulta, liberacao de acesso e perfil.
 
 Nenhum toca banco remoto, SMTP real ou provedor de IA (AGENTS.md 0.1).
 """
+import smtplib
+from unittest import mock
+
 from django.core import mail
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -12,6 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Papel, SituacaoConta, Usuario
+from apps.accounts.services.email import EnviadorEmMemoria
 from apps.audit.models import EventoAuditoria
 from apps.network.models import (
     DeclaradoPor,
@@ -22,6 +26,8 @@ from apps.network.models import (
     TipoCompetencia,
     Titulacao,
 )
+from apps.network.services import LiberarAcessoMembroService
+from core.exceptions import ConflitoDeEstado
 
 SENHA = 'Bioinsumo!2026'
 
@@ -208,6 +214,37 @@ class LiberacaoDeAcessoTests(RedeBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(resposta.data['codigo'], 'email_em_uso')
+
+    def test_clique_repetido_le_o_cadastro_de_novo_antes_de_conferir(self):
+        """
+        O segundo clique chega com o cadastro de antes da liberacao. A conferencia
+        e feita no cadastro gravado, travado, e a resposta e a do acesso ja
+        liberado - e nao a conta duplicada que o banco recusaria com erro 500.
+        """
+        desatualizado = MembroRede.objects.get(pk=self.membro_id)
+        self.client.post(self.url(), {}, format='json')
+
+        with self.assertRaises(ConflitoDeEstado) as erro:
+            LiberarAcessoMembroService(EnviadorEmMemoria()).execute(
+                membro=desatualizado, ator=self.supervisor
+            )
+
+        self.assertEqual(erro.exception.codigo, 'acesso_ja_liberado')
+
+    def test_falha_no_email_nao_libera_pela_metade(self):
+        with mock.patch(
+            'apps.accounts.services.email.EnviadorDjango.convite_acesso',
+            side_effect=smtplib.SMTPServerDisconnected('conexao caiu'),
+        ):
+            resposta = self.client.post(self.url(), {}, format='json')
+
+        self.assertEqual(resposta.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(resposta.data['codigo'], 'convite_nao_enviado')
+        self.assertIn('não foi liberado', resposta.data['detail'])
+        self.assertFalse(
+            Usuario.objects.filter(email='helena.torres@ac2microbiologia.com.br').exists()
+        )
+        self.assertIsNone(MembroRede.objects.get(pk=self.membro_id).usuario_id)
 
     def test_so_o_supervisor_libera(self):
         self.como(self.administrador)

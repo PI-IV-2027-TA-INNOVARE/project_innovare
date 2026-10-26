@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import VerDetalhes from '../../../components/console/VerDetalhes'
+import { OPERACOES_DE_IA } from '../../../lib/glossario'
 import { Icone, appIcons } from '../../../lib/icons'
 import { obterSaudeDaPlataforma } from '../../../services/pdConnectApi'
 
@@ -14,7 +16,7 @@ const ESTADOS = {
     rotulo: 'Custo não calculado',
     tom: 'neutro',
     explicacao:
-      'A IA foi usada, mas o custo não pôde ser calculado: falta configurar no servidor o preço cobrado pelo provedor. O limite de gasto continua valendo.',
+      'A IA foi usada, mas o custo não pôde ser calculado: falta configurar no servidor o preço cobrado pelo provedor.',
   },
   normal: { rotulo: 'Dentro do limite', tom: 'ok', explicacao: '' },
   atencao: {
@@ -30,13 +32,7 @@ const ESTADOS = {
   },
 }
 
-const ROTULOS_DAS_OPERACOES = {
-  copiloto: 'Copiloto',
-  competencias: 'Competências',
-  matching: 'Matching',
-  preanalise: 'Pré-análise',
-  embedding: 'Embedding',
-}
+const ROTULOS_DAS_OPERACOES = OPERACOES_DE_IA
 
 const SITUACOES_DA_EXECUCAO = {
   ok: 'concluído',
@@ -535,6 +531,18 @@ function Consumo({ ia, erro }) {
         {estado.explicacao ? (
           <p className="saude__nota">{estado.explicacao}</p>
         ) : null}
+
+        {!temTabelaDePreco ? (
+          <div className="admin-callout admin-callout--alerta">
+            <Icone icon={appIcons.warning} className="admin-callout__icon" />
+            <p className="admin-callout__text">
+              A tabela de preço da IA está vazia. Sem ela o custo de cada uso não é
+              calculado, e os limites de gasto, do mês e por oportunidade, não
+              bloqueiam nada. Peça a quem mantém o servidor para preencher o preço
+              do provedor.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {gastoPorOperacao.length > 0 ? (
@@ -688,21 +696,12 @@ function DetalhesDaIA({ ia, erro }) {
  * milissegundo, do token e da versao do prompt.
  */
 function DetalhesTecnicos({ dados }) {
-  const [aberto, setAberto] = useState(false)
-
   return (
     <section className="saude__detalhes">
-      <button
-        type="button"
-        className="saude__disclosure"
-        onClick={() => setAberto((atual) => !atual)}
-        aria-expanded={aberto}
+      <VerDetalhes
+        rotulo="Detalhes para o suporte técnico"
+        rotuloAberto="Ocultar detalhes para o suporte técnico"
       >
-        <Icone icon={aberto ? appIcons.disclosure : appIcons.next} />
-        Detalhes para o suporte técnico
-      </button>
-
-      {aberto ? (
         <div className="saude__detalhes-corpo">
           <p className="saude__nota">
             Números exatos, para quem investiga um problema. No dia a dia, as
@@ -732,7 +731,7 @@ function DetalhesTecnicos({ dados }) {
             </div>
           ) : null}
         </div>
-      ) : null}
+      </VerDetalhes>
     </section>
   )
 }

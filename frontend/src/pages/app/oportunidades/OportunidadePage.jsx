@@ -262,7 +262,15 @@ export default function OportunidadePage() {
         ) : null}
 
         {abaAtiva === 'anexos' ? (
-          <AnexosOportunidade codigo={id} podeEnviar={ehSupervisor} />
+          <AnexosOportunidade
+            codigo={id}
+            podeEnviar={ehSupervisor}
+            quemVe={
+              registro.origem === 'externo'
+                ? 'o Supervisor e a equipe indicada. A empresa demandante vê só os documentos que ela mesma enviou.'
+                : 'o Supervisor e a equipe indicada.'
+            }
+          />
         ) : null}
 
         {abaAtiva === 'historico' ? (

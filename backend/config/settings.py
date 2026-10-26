@@ -14,8 +14,8 @@ from decouple import Config, RepositoryEnv, config as env_config
 from core.configuracao import (
     AMBIENTE_PRODUCAO,
     ambiente_declarado,
-    ambiente_incoerente,
     chave_de_assinatura,
+    exigir_ambiente_coerente,
     pool_de_conexoes,
     seguranca_de_transporte,
     vida_da_conexao,
@@ -38,14 +38,7 @@ EM_PRODUCAO = AMBIENTE == AMBIENTE_PRODUCAO
 DEBUG = config('DEBUG', default=False, cast=bool)
 SECRET_KEY = chave_de_assinatura(config('SECRET_KEY', default=''), DEBUG)
 
-if ambiente_incoerente(AMBIENTE, DEBUG) and not RUNNING_TESTS:
-    sys.stderr.write(
-        '[seguranca] AMBIENTE=producao com DEBUG=True. Este host trata o banco '
-        'como de producao e ao mesmo tempo pode devolver traceback e settings '
-        'na resposta de erro. O endurecimento de HTTPS fica desarmado aqui '
-        '(senao o runserver devolveria 301 para um https que nao existe, e o '
-        'navegador cacheia esse 301). Em deploy: DEBUG=False.\n'
-    )
+exigir_ambiente_coerente(AMBIENTE, DEBUG, rodando_testes=RUNNING_TESTS)
 
 globals().update(seguranca_de_transporte(AMBIENTE, DEBUG, RUNNING_TESTS))
 """
@@ -136,6 +129,21 @@ CORS_ALLOWED_ORIGINS = [
     if o.strip()
 ]
 
+CORS_EXPOSE_HEADERS = ['Content-Disposition']
+
+CORS_ALLOW_CREDENTIALS = True
+"""
+O front manda o cookie do token de renovacao para as rotas de acesso. O
+navegador so aceita credencial com origem nomeada, e e a lista acima.
+"""
+
+AUTH_COOKIE_SAMESITE = config('AUTH_COOKIE_SAMESITE', default='') or 'Lax'
+"""
+`Lax` quando front e API ficam no mesmo site (o mesmo dominio, ou o proxy do
+Vite em desenvolvimento). Em dominios diferentes, `None` - que o navegador so
+aceita com HTTPS.
+"""
+
 DB_HOST = config('DB_HOST', default='localhost')
 
 POOL_DO_BANCO = pool_de_conexoes(
@@ -197,6 +205,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
         'rest_framework.throttling.ScopedRateThrottle',
+        'core.limites.LimiteDaIA',
     ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': config('THROTTLE_ANON', default='60/min'),
@@ -206,12 +215,19 @@ REST_FRAMEWORK = {
         'redefinicao': config('THROTTLE_REDEFINICAO', default='10/hour'),
     },
     'NUM_PROXIES': config('NUM_PROXIES', default=0, cast=int),
+    'SCHEMA_COERCE_PATH_PK': False,
 }
+
+LIMITE_DA_IA = config('THROTTLE_IA', default='') or '30/hour'
+"""
+Pedidos que chamam a IA, por pessoa, somados entre as rotas (`core/limites.py`).
+"""
 
 if RUNNING_TESTS:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = dict.fromkeys(
         REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
     )
+    LIMITE_DA_IA = None
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(
@@ -234,6 +250,14 @@ SPECTACULAR_SETTINGS = {
     ),
     'VERSION': '2.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'PapelEnum': 'apps.accounts.models.Papel',
+        'SituacaoContaEnum': 'apps.accounts.models.SituacaoConta',
+        'PapelNaRedeEnum': 'apps.network.models.PapelNaRede',
+        'SituacaoMembroEnum': 'apps.network.models.SituacaoMembro',
+        'SituacaoOportunidadeEnum': 'apps.opportunities.models.SituacaoOportunidade',
+        'NivelDimensaoEnum': 'apps.maturity.models.NivelDimensao',
+    },
 }
 
 AUTH_USER_MODEL = 'accounts.Usuario'
@@ -293,6 +317,7 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 TOKEN_RECUPERACAO_HORAS = config('TOKEN_RECUPERACAO_HORAS', default=2, cast=int)
 TOKEN_CONVITE_HORAS = config('TOKEN_CONVITE_HORAS', default=24, cast=int)
 
+SEARCH_EMBEDDING_ENABLED = config('SEARCH_EMBEDDING_ENABLED', default=True, cast=bool)
 SEARCH_EMBEDDING_DIMENSION = config('SEARCH_EMBEDDING_DIMENSION', default=384, cast=int)
 SEARCH_EMBEDDING_MODEL = config(
     'SEARCH_EMBEDDING_MODEL',
@@ -323,6 +348,9 @@ AI_GEMINI_TENTATIVAS = config('AI_GEMINI_TENTATIVAS', default=2, cast=int)
 AI_GEMINI_ESPERA_INICIAL_S = config(
     'AI_GEMINI_ESPERA_INICIAL_S', default=2.0, cast=float
 )
+AI_GEMINI_ORCAMENTO_RACIOCINIO = config(
+    'AI_GEMINI_ORCAMENTO_RACIOCINIO', default=1024, cast=int
+)
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 AI_CUSTO_TETO_MENSAL_BRL = config('AI_CUSTO_TETO_MENSAL_BRL', default=50.0, cast=float)
 AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL = config(
@@ -339,6 +367,13 @@ AI_CUSTO_SAIDA_BRL_POR_MILHAO = config(
     'AI_CUSTO_SAIDA_BRL_POR_MILHAO', default=0.0, cast=float
 )
 
+PROMPT_SISTEMA_PIPE = Path(
+    config(
+        'PROMPT_SISTEMA_PIPE',
+        default=str(BASE_DIR.parent / 'IA' / 'Prompt_Gemini_PIPE_Jornada_Fase1_v2.txt'),
+    )
+)
+
 BASE_CONHECIMENTO_PIPE = Path(
     config(
         'BASE_CONHECIMENTO_PIPE',
@@ -351,6 +386,7 @@ BASE_CONHECIMENTO_PIPE = Path(
 if RUNNING_TESTS:
     GEMINI_API_KEY = ''
     AI_MATCH_RERANK_ENABLED = False
+    SEARCH_EMBEDDING_ENABLED = False
 
 LOGGING = {
     'version': 1,

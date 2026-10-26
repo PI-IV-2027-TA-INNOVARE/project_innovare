@@ -1,9 +1,10 @@
-import { apiRequest } from '../lib/api'
+import { apiRequest, baixarArquivo } from '../lib/api'
 
 export function requestAuthToken(payload) {
   return apiRequest('/auth/token/', {
     method: 'POST',
     body: payload,
+    credentials: 'include',
     skipAuth: true,
     skipAuthRefresh: true,
   })
@@ -32,7 +33,11 @@ export function resetPassword(payload) {
 }
 
 export function alterarSenha(payload) {
-  return apiRequest('/auth/change-password/', { method: 'POST', body: payload })
+  return apiRequest('/auth/change-password/', {
+    method: 'POST',
+    body: payload,
+    credentials: 'include',
+  })
 }
 
 export function listUsuarios(params = {}) {
@@ -49,6 +54,14 @@ export function updateUsuario(id, payload) {
   return apiRequest(`/usuarios/${id}/`, { method: 'PATCH', body: payload })
 }
 
+export function buscarEmpresaPorCnpj(cnpj) {
+  return apiRequest(`/usuarios/empresa/?${new URLSearchParams({ cnpj })}`)
+}
+
+export function atualizarTelefone(telefone) {
+  return apiRequest('/auth/profile/', { method: 'PATCH', body: { telefone } })
+}
+
 export function setSituacaoUsuario(id, situacao) {
   return apiRequest(`/usuarios/${id}/situacao/`, {
     method: 'POST',
@@ -60,10 +73,11 @@ export function reenviarConvite(id) {
   return apiRequest(`/usuarios/${id}/reenviar-convite/`, { method: 'POST' })
 }
 
-export function encerrarSessao(refresh) {
+export function encerrarSessao() {
   return apiRequest('/auth/logout/', {
     method: 'POST',
-    body: { refresh },
+    body: {},
+    credentials: 'include',
   })
 }
 
@@ -184,6 +198,28 @@ export function listarAnexos(codigo) {
   return apiRequest(`/oportunidades/${codigo}/anexos/`)
 }
 
+export function baixarMeusDados() {
+  return baixarArquivo('/auth/meus-dados/', { nomePadrao: 'meus-dados.json' })
+}
+
+export function obterPedidoDeExclusao() {
+  return apiRequest('/auth/meus-dados/exclusao/')
+}
+
+export function pedirExclusaoDaConta() {
+  return apiRequest('/auth/meus-dados/exclusao/', { method: 'POST' })
+}
+
+export function anonimizarConta(idUsuario) {
+  return apiRequest(`/usuarios/${idUsuario}/anonimizar/`, { method: 'POST' })
+}
+
+export function baixarAnexo(codigo, anexo) {
+  return baixarArquivo(`/oportunidades/${codigo}/anexos/${anexo.id_anexo}/`, {
+    nomePadrao: anexo.nome_original,
+  })
+}
+
 export function enviarAnexo(codigo, arquivo) {
   const corpo = new FormData()
   corpo.append('arquivo', arquivo)
@@ -242,10 +278,24 @@ export function iniciarSessaoCopiloto(codigo) {
   return apiRequest(`/oportunidades/${codigo}/copiloto/`, { method: 'POST' })
 }
 
-export function responderCopiloto(codigo, texto) {
+export function responderCopiloto(codigo, texto, { elemento, pergunta } = {}) {
   return apiRequest(`/oportunidades/${codigo}/copiloto/responder/`, {
     method: 'POST',
-    body: { texto },
+    body: elemento ? { texto, elemento, pergunta: pergunta || '' } : { texto },
+  })
+}
+
+export function atualizarSinteseCopiloto(codigo, sintese) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/sintese/`, {
+    method: 'PATCH',
+    body: { sintese },
+  })
+}
+
+export function aceitarSugestaoCopiloto(codigo, elemento, texto) {
+  return apiRequest(`/oportunidades/${codigo}/copiloto/sugestoes/aceitar/`, {
+    method: 'POST',
+    body: { elemento, texto },
   })
 }
 
@@ -352,6 +402,10 @@ export function listarCriteriosPreAnalise() {
 
 export function importarCriteriosPreAnalise() {
   return apiRequest('/ia/criterios/', { method: 'POST' })
+}
+
+export function lerPrivacidade() {
+  return apiRequest('/privacidade/', { skipAuth: true, skipAuthRefresh: true })
 }
 
 export function lerContatosSuporte() {

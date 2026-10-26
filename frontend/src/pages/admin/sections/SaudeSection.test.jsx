@@ -242,6 +242,18 @@ describe('SaudeSection — consumo de IA', () => {
     expect(screen.queryByText(/por milhão de tokens/i)).not.toBeInTheDocument()
   })
 
+  it('avisa que sem tabela de preço os limites de gasto não bloqueiam nada', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comConsumo({ preco_entrada_brl_por_milhao: 0, preco_saida_brl_por_milhao: 0 }),
+    )
+
+    render(<SaudeSection />)
+
+    expect(
+      await screen.findByText(/a tabela de preço da ia está vazia/i),
+    ).toBeInTheDocument()
+  })
+
   it('mostra onde o gasto do mês foi, não só o total', async () => {
     api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
       comConsumo({
@@ -566,7 +578,7 @@ describe('SaudeSection — detalhes para o suporte técnico', () => {
     })
 
     expect(botao).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText(/tokens enviados/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/tokens enviados/i)).not.toBeVisible()
 
     await abrirDetalhes()
 
@@ -667,11 +679,11 @@ describe('SaudeSection — tarefas em segundo plano', () => {
     render(<SaudeSection />)
 
     await verificacoes()
-    expect(screen.queryByText(SAUDE.jobs.motivo)).not.toBeInTheDocument()
+    expect(screen.getByText(SAUDE.jobs.motivo)).not.toBeVisible()
 
     await abrirDetalhes()
 
-    expect(screen.getByText(SAUDE.jobs.motivo)).toBeInTheDocument()
+    expect(screen.getByText(SAUDE.jobs.motivo)).toBeVisible()
   })
 
   it('ambiente que espera fila e está sem ela ganha cartão e alerta', async () => {

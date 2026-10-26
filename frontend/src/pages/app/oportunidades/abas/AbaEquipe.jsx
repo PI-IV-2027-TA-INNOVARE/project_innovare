@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminModal from '../../../../components/console/AdminModal'
+import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
 import { Icone, appIcons } from '../../../../lib/icons'
+import { PARCELAS_DA_NOTA, TERMOS } from '../../../../lib/glossario'
 import { ROLES } from '../../../../lib/roles'
 import {
   adicionarMembroEquipe,
@@ -20,21 +22,16 @@ import '../OportunidadesPage.scss'
 
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
 
-const ROTULOS_DAS_FEATURES = {
-  semantico: 'Semelhança de conteúdo',
-  lexical: 'Termos em comum',
-  area: 'Área de atuação',
-  disponibilidade: 'Disponibilidade',
-}
+const ROTULOS_DAS_FEATURES = PARCELAS_DA_NOTA
 
 const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
 
 function comoFoiCalculado(execucao) {
   if (execucao.fallback_usado) {
-    return 'Sugestões calculadas por termos em comum, área de atuação e disponibilidade. A comparação por semelhança de conteúdo não estava disponível nesta rodada.'
+    return 'Sugestões calculadas por palavras em comum, área de atuação e disponibilidade. A afinidade com o tema não estava disponível nesta rodada.'
   }
 
-  return `Sugestões calculadas por semelhança de conteúdo, termos em comum, área de atuação e disponibilidade.${execucao.usou_rerank ? ' A ordem foi revisada pela IA.' : ''}`
+  return `Sugestões calculadas por afinidade com o tema, palavras em comum, área de atuação e disponibilidade.${execucao.usou_rerank ? ' A ordem foi revisada pela IA.' : ''}`
 }
 
 function porcentagem(valor) {
@@ -44,7 +41,9 @@ function porcentagem(valor) {
 }
 
 function Features({ features }) {
-  const chaves = Object.keys(ROTULOS_DAS_FEATURES).filter((chave) => chave in features)
+  const chaves = Object.keys(ROTULOS_DAS_FEATURES).filter(
+    (chave) => chave in features && features[chave] !== null
+  )
 
   if (chaves.length === 0) return null
 
@@ -53,9 +52,7 @@ function Features({ features }) {
       {chaves.map((chave) => (
         <div key={chave} className="equipe__feature">
           <dt>{ROTULOS_DAS_FEATURES[chave]}</dt>
-          <dd>
-            {features[chave] === null ? 'indisponível' : porcentagem(features[chave])}
-          </dd>
+          <dd>{porcentagem(features[chave])}</dd>
         </div>
       ))}
     </dl>
@@ -85,14 +82,20 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
       </div>
 
       {membro.match_reasons?.length > 0 ? (
-        <ul className="equipe__motivos">
-          {membro.match_reasons.map((motivo, indice) => (
-            <li key={`${membro.id_membro_equipe}-${indice}`}>{motivo}</li>
-          ))}
-        </ul>
+        <p className="equipe__motivo-principal">{membro.match_reasons[0]}</p>
       ) : null}
 
-      <Features features={membro.score_features || {}} />
+      <VerDetalhes>
+        {membro.match_reasons?.length > 1 ? (
+          <ul className="equipe__motivos" aria-label="Outros motivos da sugestão">
+            {membro.match_reasons.slice(1).map((motivo, indice) => (
+              <li key={`${membro.id_membro_equipe}-${indice}`}>{motivo}</li>
+            ))}
+          </ul>
+        ) : null}
+
+        <Features features={membro.score_features || {}} />
+      </VerDetalhes>
 
       {podeAjustar ? (
         <button
@@ -359,7 +362,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
 
         {(equipe?.membros || []).length === 0 ? (
           <p className="oportunidade-page__vazio">
-            Nenhum perfil alcançou o score mínimo configurado. As lacunas abaixo
+            Nenhum perfil alcançou a {TERMOS.notaMinima}. As lacunas abaixo
             dizem quais competências ficaram sem cobertura.
           </p>
         ) : (

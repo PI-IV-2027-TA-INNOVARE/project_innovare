@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.db import transaction
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import FinalidadeToken, TokenAcesso, Usuario
@@ -16,6 +17,17 @@ from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
 from apps.audit.models import CategoriaEvento, StatusEvento
 from apps.audit.services import registrar_evento
 from core.exceptions import ErroDeDominio
+
+
+def encerrar_sessoes(usuario: Usuario) -> None:
+    """
+    Todo token de renovacao da pessoa para de valer.
+
+    O SimpleJWT troca o token a cada renovacao e o novo nasce com prazo novo:
+    sem isto, um cookie copiado seguiria valendo depois da troca de senha.
+    """
+    for pendente in OutstandingToken.objects.filter(user=usuario):
+        BlacklistedToken.objects.get_or_create(token=pendente)
 
 
 class SolicitarRecuperacaoSenhaService:
@@ -96,11 +108,11 @@ class RedefinirSenhaService:
         ).first()
 
         if token is None:
-            raise ErroDeDominio('Token invalido.', codigo='token_invalido')
+            raise ErroDeDominio('Link inválido. Solicite um novo.', codigo='token_invalido')
 
         if not token.valido:
             raise ErroDeDominio(
-                'Token expirado ou ja utilizado. Solicite um novo link.',
+                'Este link expirou ou já foi usado. Solicite um novo.',
                 codigo='token_expirado',
             )
 
@@ -110,6 +122,7 @@ class RedefinirSenhaService:
             usuario.set_password(nova_senha)
             usuario.save(update_fields=['password', 'atualizado_em'])
             token.consumir()
+            encerrar_sessoes(usuario)
 
         registrar_evento(
             categoria=CategoriaEvento.CONTA,
@@ -126,11 +139,18 @@ class RedefinirSenhaService:
 
 
 class AlterarSenhaService:
-    """Troca de senha com a sessao ativa. A senha atual ja foi conferida no serializer."""
+    """
+    Troca de senha com a sessao ativa. A senha atual ja foi conferida no serializer.
 
+    As sessoes abertas, inclusive a desta, param de valer; quem chama devolve
+    uma renovacao nova para a pessoa seguir onde esta.
+    """
+
+    @transaction.atomic
     def execute(self, usuario: Usuario, nova_senha: str) -> Usuario:
         usuario.set_password(nova_senha)
         usuario.save(update_fields=['password', 'atualizado_em'])
+        encerrar_sessoes(usuario)
 
         registrar_evento(
             categoria=CategoriaEvento.CONTA,
@@ -173,7 +193,7 @@ class EncerrarSessaoService:
             token = RefreshToken(refresh)
         except TokenError as exc:
             raise ErroDeDominio(
-                'Sessao invalida ou ja encerrada.', codigo='refresh_invalido'
+                'Sessão inválida ou já encerrada.', codigo='refresh_invalido'
             ) from exc
 
         if str(token.get(api_settings.USER_ID_CLAIM)) != str(usuario.pk):
@@ -187,14 +207,14 @@ class EncerrarSessaoService:
                 motivo='refresh de outra conta',
             )
             raise ErroDeDominio(
-                'Sessao invalida ou ja encerrada.', codigo='refresh_invalido'
+                'Sessão inválida ou já encerrada.', codigo='refresh_invalido'
             )
 
         try:
             token.blacklist()
         except AttributeError as exc:
             raise ErroDeDominio(
-                'Blacklist de token nao esta habilitada.', codigo='blacklist_desligada'
+                'O encerramento de sessão não está habilitado no servidor.', codigo='blacklist_desligada'
             ) from exc
 
         registrar_evento(

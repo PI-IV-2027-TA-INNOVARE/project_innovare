@@ -4,6 +4,7 @@ import BackLink from '../../../components/console/BackLink'
 import GuardaDeSaida from '../../../components/console/GuardaDeSaida'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
+import { EXTENSOES_ACEITAS, TIPOS_POR_EXTENSO } from '../../../lib/anexos'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { useRascunho } from '../../../lib/rascunho'
@@ -318,7 +319,7 @@ export default function ProblemaFormPage() {
               <h2 className="perfil-card__title">Anexos</h2>
               <p className="perfil-card__description">
                 Laudos, fotos, relatórios de ensaio — o que ajudar a AC2 a
-                entender o problema.
+                entender o problema. {TIPOS_POR_EXTENSO}, até 10 MB por arquivo.
               </p>
             </div>
           </header>
@@ -328,6 +329,7 @@ export default function ProblemaFormPage() {
               <span className="admin-field__label">Selecionar arquivos</span>
               <input
                 type="file"
+                accept={EXTENSOES_ACEITAS}
                 className="admin-input"
                 multiple
                 onChange={escolherAnexos}

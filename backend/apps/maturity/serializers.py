@@ -73,8 +73,36 @@ class PreAnaliseDimensaoSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+def rotulo_do_criterio(criterio) -> str | None:
+    """O nome curto do criterio, sem a pergunta de avaliacao."""
+    if criterio is None:
+        return None
+
+    return criterio.descricao.partition(' — ')[0].strip() or criterio.codigo
+
+
 class RecomendacaoSerializer(serializers.ModelSerializer):
+    """
+    A recomendacao com a lacuna que ela resolve e o criterio de origem.
+
+    `sem_evidencia` e o que a tela mostra quando nao ha criterio a citar.
+    """
+
     origem_rotulo = serializers.CharField(source='get_origem_display', read_only=True)
+    id_lacuna = serializers.IntegerField(source='lacuna_id', read_only=True, allow_null=True)
+    criterio_codigo = serializers.SerializerMethodField()
+    criterio_rotulo = serializers.SerializerMethodField()
+    sem_evidencia = serializers.SerializerMethodField()
+
+    def get_criterio_codigo(self, recomendacao) -> str | None:
+        criterio = getattr(recomendacao.lacuna, 'criterio', None)
+        return criterio.codigo if criterio else None
+
+    def get_criterio_rotulo(self, recomendacao) -> str | None:
+        return rotulo_do_criterio(getattr(recomendacao.lacuna, 'criterio', None))
+
+    def get_sem_evidencia(self, recomendacao) -> bool:
+        return getattr(recomendacao.lacuna, 'criterio', None) is None
 
     class Meta:
         model = Recomendacao
@@ -82,6 +110,10 @@ class RecomendacaoSerializer(serializers.ModelSerializer):
             'id_recomendacao',
             'origem',
             'origem_rotulo',
+            'id_lacuna',
+            'criterio_codigo',
+            'criterio_rotulo',
+            'sem_evidencia',
             'texto',
             'acatada',
             'acatada_em',
@@ -184,8 +216,17 @@ class ItemDimensaoIASerializer(serializers.Serializer):
 
 
 class ItemLacunaIASerializer(serializers.Serializer):
+    id = serializers.CharField(allow_blank=True, required=False)
     dimensao = serializers.CharField(allow_blank=True, required=False)
+    criterio = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     descricao = serializers.CharField()
+
+
+class ItemRecomendacaoIASerializer(serializers.Serializer):
+    lacuna = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    criterio = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    texto = serializers.CharField(allow_blank=True)
+    sem_evidencia = serializers.BooleanField(required=False, default=False)
 
 
 class SaidaPreAnaliseSerializer(serializers.Serializer):
@@ -199,9 +240,7 @@ class SaidaPreAnaliseSerializer(serializers.Serializer):
 
     dimensoes = ItemDimensaoIASerializer(many=True, required=False)
     lacunas = ItemLacunaIASerializer(many=True, required=False)
-    recomendacoes = serializers.ListField(
-        child=serializers.CharField(allow_blank=True), required=False
-    )
+    recomendacoes = ItemRecomendacaoIASerializer(many=True, required=False)
     sintese = serializers.CharField(allow_blank=True, required=False)
 
 

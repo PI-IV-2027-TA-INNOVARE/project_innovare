@@ -5,6 +5,7 @@ O portao real da leitura e `escopo_de()`, que chega aqui dentro de `fila_de()`
 no `get_queryset`; a permissao de rota so decide quem pode tentar.
 """
 from django.db.models import Q
+from django.http import FileResponse
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -43,6 +44,7 @@ from apps.competencies.services import (
 )
 from apps.copilot.models import PropostaEstruturada
 from apps.copilot.serializers import (
+    AceitarSugestaoSerializer,
     EstadoCopilotoSerializer,
     MensagemCopilotoSerializer,
     PropostaEstruturadaSerializer,
@@ -50,9 +52,12 @@ from apps.copilot.serializers import (
     ResultadoEstruturacaoSerializer,
     RespostaCopilotoSerializer,
     SessaoCopilotoSerializer,
+    SinteseCopilotoSerializer,
 )
 from apps.copilot.services import (
+    AceitarSugestaoService,
     AtualizarPropostaService,
+    AtualizarSinteseService,
     ConcluirSessaoService,
     EstruturarPropostaService,
     IniciarPropostaService,
@@ -94,6 +99,9 @@ from apps.maturity.services import (
 from apps.network.models import MembroRede
 from apps.opportunities.services import (
     AnexarDocumentoService,
+    anexos_visiveis,
+    contexto_do_historico,
+    documento_da_oportunidade,
     AtualizarContextoService,
     CadastrarOportunidadeService,
     ComplementarOportunidadeService,
@@ -105,6 +113,7 @@ from apps.opportunities.services import (
     SolicitarComplementoService,
     fila_de,
     historico_de,
+    nomes_de_quem_agiu,
 )
 from core.exceptions import AcaoNaoPermitida
 from core.permissions import EhSupervisor, TemPapel
@@ -114,6 +123,17 @@ class PodeVerOportunidade(TemPapel):
     """Os tres atores do fluxo. O Administrador nao entra (CONTEXT.md secao 3)."""
 
     papeis_permitidos = (Papel.SUPERVISOR, Papel.PESQUISADOR, Papel.DEMANDANTE)
+
+
+class PodeAnexar(TemPapel):
+    """
+    Quem anexa documento: o Demandante Externo e o Supervisor (PB21).
+
+    O Pesquisador da equipe le os anexos da oportunidade que acompanha (PB49),
+    mas nao escreve nela.
+    """
+
+    papeis_permitidos = (Papel.SUPERVISOR, Papel.DEMANDANTE)
 
 
 class PodeVerProposta(TemPapel):
@@ -126,11 +146,25 @@ class PodeVerProposta(TemPapel):
     papeis_permitidos = (Papel.SUPERVISOR, Papel.PESQUISADOR)
 
 
+ACOES_COM_IA = (
+    'copiloto',
+    'copiloto_estruturar',
+    'competencias_derivar',
+    'equipe',
+    'pre_analise',
+)
+"""
+As acoes cujo `POST` chama a IA ou o modelo de embedding: somam no limite
+proprio de pedidos (`core/limites.py`).
+"""
+
 ACOES_DE_TRABALHO_INTERNO = (
     'proposta',
     'copiloto',
     'copiloto_responder',
+    'copiloto_sintese',
     'copiloto_estruturar',
+    'copiloto_aceitar_sugestao',
     'copiloto_concluir',
     'competencias',
     'competencias_derivar',
@@ -162,11 +196,14 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
     serializer_class = OportunidadeSerializer
     lookup_field = 'codigo'
     lookup_value_regex = r'OP-\d{4}-\d{3}'
-    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'delete', 'options']
+    acoes_com_ia = ACOES_COM_IA
 
     def get_permissions(self):
+        escreve = self.request.method not in permissions.SAFE_METHODS
+
         if self.action in ACOES_DE_TRABALHO_INTERNO:
-            if self.request.method in ('POST', 'PATCH', 'PUT', 'DELETE'):
+            if escreve:
                 return [permissions.IsAuthenticated(), EhSupervisor()]
 
             return [permissions.IsAuthenticated(), PodeVerProposta()]
@@ -181,6 +218,9 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             'relatorio_equipe',
         ):
             return [permissions.IsAuthenticated(), EhSupervisor()]
+
+        if self.action == 'anexos' and escreve:
+            return [permissions.IsAuthenticated(), PodeAnexar()]
 
         return [permissions.IsAuthenticated(), PodeVerOportunidade()]
 
@@ -285,7 +325,7 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
         """Resposta do Demandante ao pedido de revisao (PB27)."""
         if request.user.papel != Papel.DEMANDANTE:
             raise AcaoNaoPermitida(
-                'A complementacao e respondida pelo Demandante.',
+                'A complementação é respondida pelo Demandante.',
                 codigo='papel_nao_complementa',
             )
 
@@ -360,21 +400,24 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
         """
         Anexos vinculados a oportunidade (PB21).
 
-        A permissao e a mesma da oportunidade: quem alcanca o registro alcanca
-        os documentos dele. O `get_object` ja aplicou o escopo.
+        Leem os anexos os atores que alcancam a oportunidade (o `get_object` ja
+        aplicou o escopo); o Demandante, so os que a empresa dele enviou (PB71).
+        Enviam o Supervisor e o Demandante; o Pesquisador da equipe so le.
         """
         oportunidade = self.get_object()
 
-        if request.method == 'GET':
+        if request.method != 'POST':
             return Response(
-                AnexoSerializer(oportunidade.anexos.all(), many=True).data
+                AnexoSerializer(
+                    anexos_visiveis(oportunidade, request.user), many=True
+                ).data
             )
 
         arquivo = request.FILES.get('arquivo')
 
         if arquivo is None:
             return Response(
-                {'detail': 'Envie o arquivo no campo `arquivo`.',
+                {'detail': 'Escolha um arquivo para enviar.',
                  'codigo': 'arquivo_ausente'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -387,14 +430,43 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             AnexoSerializer(anexo).data, status=status.HTTP_201_CREATED
         )
 
+    @extend_schema(responses={200: None})
+    @action(detail=True, methods=['get'], url_path=r'anexos/(?P<id_anexo>[0-9]+)',
+            url_name='anexo-download')
+    def anexo_download(self, request, codigo=None, id_anexo=None):
+        """
+        O download do anexo, so para quem alcanca a oportunidade.
+
+        Sai sempre como download, com o nome que a pessoa deu ao arquivo, e com
+        cabecalhos que impedem o navegador de adivinhar o tipo ou rodar o que
+        houver dentro. A pasta dos anexos nao e servida direto: este e o unico
+        caminho.
+        """
+        anexo = documento_da_oportunidade(self.get_object(), id_anexo, request.user)
+
+        resposta = FileResponse(
+            anexo.arquivo.open('rb'),
+            as_attachment=True,
+            filename=anexo.nome_original,
+            content_type=anexo.mime or 'application/octet-stream',
+        )
+        resposta['X-Content-Type-Options'] = 'nosniff'
+        resposta['Content-Security-Policy'] = "default-src 'none'; sandbox"
+        resposta['Cache-Control'] = 'no-store'
+        return resposta
+
     @extend_schema(responses=EventoHistoricoSerializer(many=True))
     @action(detail=True, methods=['get'], url_path='historico',
             url_name='historico')
     def historico(self, request, codigo=None):
         """A trilha da oportunidade (RF12 / PB69, PB70), no recorte de cada ator."""
-        eventos = historico_de(self.get_object(), request.user)
+        eventos = list(historico_de(self.get_object(), request.user))
 
-        return Response(EventoHistoricoSerializer(eventos, many=True).data)
+        return Response(
+            EventoHistoricoSerializer(
+                eventos, many=True, context=contexto_do_historico(eventos, request.user)
+            ).data
+        )
 
     @extend_schema(responses=RelatorioOportunidadeSerializer)
     @action(detail=True, methods=['get'], url_path='relatorio',
@@ -409,9 +481,13 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
 
         A view so orquestra - quem sabe montar o documento e o facade.
         """
-        fluxo = FluxoDaOportunidade(self.get_object())
+        relatorio = FluxoDaOportunidade(self.get_object()).relatorio()
 
-        return Response(RelatorioOportunidadeSerializer(fluxo.relatorio()).data)
+        return Response(
+            RelatorioOportunidadeSerializer(
+                relatorio, context={'nomes': nomes_de_quem_agiu(relatorio.historico)}
+            ).data
+        )
 
     @extend_schema(
         request=PropostaEstruturadaWriteSerializer,
@@ -445,7 +521,7 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
 
         proposta = proposta_de(oportunidade)
 
-        if request.method == 'GET':
+        if request.method != 'PATCH':
             return Response(PropostaEstruturadaSerializer(proposta).data)
 
         serializer = PropostaEstruturadaWriteSerializer(
@@ -584,6 +660,8 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
         mensagem = ResponderService().execute(
             sessao=sessao_atual_de(self.get_object()),
             texto=serializer.validated_data['texto'],
+            elemento=serializer.validated_data.get('elemento', ''),
+            pergunta=serializer.validated_data.get('pergunta', ''),
             ator=request.user,
         )
 
@@ -591,6 +669,28 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             MensagemCopilotoSerializer(mensagem).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(
+        request=SinteseCopilotoSerializer, responses=SessaoCopilotoSerializer
+    )
+    @action(
+        detail=True,
+        methods=['patch'],
+        url_path='copiloto/sintese',
+        url_name='copiloto-sintese',
+    )
+    def copiloto_sintese(self, request, codigo=None):
+        """A correcao humana do resumo da entrada, que orienta a estruturacao."""
+        serializer = SinteseCopilotoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        sessao = AtualizarSinteseService().execute(
+            sessao=sessao_atual_de(self.get_object()),
+            sintese=serializer.validated_data['sintese'],
+            ator=request.user,
+        )
+
+        return Response(SessaoCopilotoSerializer(sessao).data)
 
     @extend_schema(responses=ResultadoEstruturacaoSerializer)
     @action(
@@ -611,13 +711,38 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             ResultadoEstruturacaoSerializer(
                 {
                     'preenchidos': resultado['preenchidos'],
+                    'sugestoes': resultado['sugestoes'],
                     'lacunas': resultado['lacunas'],
                     'fallback_usado': resultado['fallback_usado'],
+                    'motivo_fallback': resultado.get('motivo_fallback'),
                     'ai_run_id': execucao.id_execucao_ia if execucao else None,
                     'proposta': resultado['proposta'],
                 }
             ).data
         )
+
+    @extend_schema(
+        request=AceitarSugestaoSerializer, responses=PropostaEstruturadaSerializer
+    )
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='copiloto/sugestoes/aceitar',
+        url_name='copiloto-aceitar-sugestao',
+    )
+    def copiloto_aceitar_sugestao(self, request, codigo=None):
+        """Grava no elemento o texto que a IA sugeriu e o Supervisor aceitou."""
+        serializer = AceitarSugestaoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        proposta = AceitarSugestaoService().execute(
+            oportunidade=self.get_object(),
+            elemento=serializer.validated_data['elemento'],
+            texto=serializer.validated_data['texto'],
+            ator=request.user,
+        )
+
+        return Response(PropostaEstruturadaSerializer(proposta).data)
 
     @extend_schema(responses=SessaoCopilotoSerializer)
     @action(
@@ -689,6 +814,7 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
                 {
                     'criadas': resultado['criadas'],
                     'fallback_usado': resultado['fallback_usado'],
+                    'motivo_fallback': resultado.get('motivo_fallback'),
                     'ai_run_id': execucao.id_execucao_ia if execucao else None,
                 }
             ).data

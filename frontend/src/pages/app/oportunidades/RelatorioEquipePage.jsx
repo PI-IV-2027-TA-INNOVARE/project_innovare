@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
-import { Icone, appIcons } from '../../../lib/icons'
+import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
+import { PARCELAS_DA_NOTA, TERMOS } from '../../../lib/glossario'
 import { obterRelatorioEquipe } from '../../../services/pdConnectApi'
 import './RelatorioPage.scss'
 
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
 
-const ROTULOS_DAS_FEATURES = {
-  semantico: 'Base semântica',
-  lexical: 'Correspondência de termos',
-  area: 'Área de atuação',
-  disponibilidade: 'Disponibilidade',
-}
+const ROTULOS_DAS_FEATURES = PARCELAS_DA_NOTA
 
 function formatarData(valor) {
   if (!valor) return '—'
@@ -36,16 +32,7 @@ function porcentagem(valor) {
   return `${Math.round(Number(valor) * 100)}%`
 }
 
-function Secao({ titulo, children }) {
-  const id = `equipe-secao-${titulo.toLowerCase().replace(/\s+/g, '-')}`
-
-  return (
-    <section className="relatorio-secao" aria-labelledby={id}>
-      <h2 id={id} className="relatorio-secao__titulo">{titulo}</h2>
-      {children}
-    </section>
-  )
-}
+const Secao = SecaoDoRelatorio
 
 function Campo({ rotulo, children }) {
   return (
@@ -128,19 +115,19 @@ export default function RelatorioEquipePage() {
   }
 
   const { oportunidade, equipe, competencias } = relatorio
+  const identificacao = [
+    { rotulo: 'Código', valor: oportunidade.codigo },
+    { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
+    { rotulo: 'Gerado em', valor: formatarData(relatorio.gerado_em) },
+  ]
   const execucao = equipe.execucao
   const incluidos = equipe.membros.filter((membro) => membro.incluido)
 
   return (
-    <div className="console relatorio-page">
-      <div className="relatorio-page__acoes">
-        <BackLink to={`/oportunidades/${id}`}>Voltar para a oportunidade</BackLink>
-
-        <button type="button" className="admin-btn" onClick={() => window.print()}>
-          <Icone icon={appIcons.view} />
-          Imprimir
-        </button>
-      </div>
+    <LayoutDoRelatorio
+      voltarPara={`/oportunidades/${id}`}
+      identificacao={identificacao}
+    >
 
       <article className="relatorio-documento">
         <header className="relatorio-documento__header">
@@ -159,12 +146,20 @@ export default function RelatorioEquipePage() {
           </p>
         </header>
 
+        {relatorio.como_foi_calculado?.length > 0 ? (
+          <Secao titulo="Como foi calculado">
+            {relatorio.como_foi_calculado.map((paragrafo) => (
+              <p key={paragrafo} className="relatorio-texto">{paragrafo}</p>
+            ))}
+          </Secao>
+        ) : null}
+
         {execucao ? (
           <Secao titulo="Rodada do matching">
             <dl className="relatorio-campos">
               <Campo rotulo="Estratégia">{execucao.estrategia}</Campo>
-              <Campo rotulo="Rerank">{execucao.usou_rerank ? 'sim' : 'não'}</Campo>
-              <Campo rotulo="Base semântica">
+              <Campo rotulo={TERMOS.revisaoDaIa}>{execucao.usou_rerank ? 'sim' : 'não'}</Campo>
+              <Campo rotulo={PARCELAS_DA_NOTA.semantico}>
                 {execucao.fallback_usado ? 'indisponível na rodada' : 'aplicada'}
               </Campo>
               <Campo rotulo="Executada por">{execucao.executado_por}</Campo>
@@ -246,6 +241,6 @@ export default function RelatorioEquipePage() {
           Microbiologia · gerado em {formatarData(relatorio.gerado_em)}
         </footer>
       </article>
-    </div>
+    </LayoutDoRelatorio>
   )
 }

@@ -8,6 +8,7 @@ const estado = vi.hoisted(() => ({
   alterarSenha: null,
   obterMeuPerfil: null,
   atualizarMeuPerfil: null,
+  atualizarTelefone: null,
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -18,6 +19,10 @@ vi.mock('../../../services/pdConnectApi', () => ({
   alterarSenha: (...args) => estado.alterarSenha(...args),
   obterMeuPerfil: (...args) => estado.obterMeuPerfil(...args),
   atualizarMeuPerfil: (...args) => estado.atualizarMeuPerfil(...args),
+  atualizarTelefone: (...args) => estado.atualizarTelefone(...args),
+  baixarMeusDados: vi.fn(),
+  obterPedidoDeExclusao: () => Promise.resolve({ solicitada_em: null }),
+  pedirExclusaoDaConta: vi.fn(),
 }))
 
 const PESQUISADORA = {
@@ -503,6 +508,57 @@ describe('PerfilPage — grade dos cartões', () => {
     const grade = document.querySelector('.perfil-grid')
 
     expect([...grade.children].map((filho) => filho.querySelector('.perfil-card__title').textContent))
-      .toEqual(['Identificação', 'Vínculo', 'Senha'])
+      .toEqual(['Identificação', 'Vínculo', 'Contato', 'Senha', 'Meus dados'])
+  })
+})
+
+describe('PerfilPage — telefone do Demandante Externo', () => {
+  beforeEach(() => {
+    estado.user = {
+      displayName: 'Agroindústria Vale Verde',
+      email: 'contato@valeverde.com.br',
+      role: 'demandante',
+      organizacao: { nome: 'Agroindústria Vale Verde' },
+      telefone: '',
+    }
+    estado.atualizarTelefone = vi.fn().mockResolvedValue({ telefone: '(19) 99876-5432' })
+  })
+
+  it('mostra o campo de telefone só para o Demandante', async () => {
+    render(<PerfilPage />)
+
+    expect(screen.getByLabelText('Telefone')).toBeInTheDocument()
+  })
+
+  it('salva o telefone com máscara', async () => {
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+
+    await user.type(screen.getByLabelText('Telefone'), '19998765432')
+    expect(screen.getByLabelText('Telefone')).toHaveValue('(19) 99876-5432')
+
+    await user.click(screen.getByRole('button', { name: 'Salvar telefone' }))
+
+    expect(estado.atualizarTelefone).toHaveBeenCalledWith('(19) 99876-5432')
+    expect(await screen.findByText('Telefone salvo.')).toBeInTheDocument()
+  })
+
+  it('recusa número incompleto sem chamar a API', async () => {
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+
+    await user.type(screen.getByLabelText('Telefone'), '9988')
+    await user.click(screen.getByRole('button', { name: 'Salvar telefone' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Telefone incompleto')
+    expect(estado.atualizarTelefone).not.toHaveBeenCalled()
+  })
+
+  it('não oferece telefone a quem não é Demandante', async () => {
+    estado.user = { ...PESQUISADORA }
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    expect(screen.queryByLabelText('Telefone')).not.toBeInTheDocument()
   })
 })

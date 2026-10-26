@@ -6,3 +6,6 @@ class AccountsConfig(AppConfig):
     name = 'apps.accounts'
     label = 'accounts'
     verbose_name = 'Contas e acesso'
+
+    def ready(self):
+        from apps.accounts import schema  # noqa: F401

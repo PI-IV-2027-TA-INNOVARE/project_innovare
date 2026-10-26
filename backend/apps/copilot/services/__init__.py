@@ -1,4 +1,6 @@
 from apps.copilot.services.copiloto import (
+    AceitarSugestaoService,
+    AtualizarSinteseService,
     ConcluirSessaoService,
     EstruturarPropostaService,
     IniciarSessaoService,
@@ -16,7 +18,9 @@ from apps.copilot.services.proposta import (
 )
 
 __all__ = [
+    'AceitarSugestaoService',
     'AtualizarPropostaService',
+    'AtualizarSinteseService',
     'ConcluirSessaoService',
     'EstruturarPropostaService',
     'IniciarPropostaService',

@@ -45,6 +45,8 @@ from apps.maturity.models import (
     VersaoCriterio,
 )
 from apps.ai.models import StatusExecucao
+from apps.ai.services.apelidos import Apelidos
+from apps.ai.services.custo import MOTIVO_LIMITE_DA_OPORTUNIDADE, MOTIVO_LIMITE_DO_MES
 from apps.opportunities.models import Oportunidade
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
 
@@ -92,6 +94,8 @@ ORDEM_DAS_DIMENSOES = [
     DimensaoMaturidade.VIABILIDADE,
 ]
 
+MOTIVOS_DE_LIMITE = (MOTIVO_LIMITE_DA_OPORTUNIDADE, MOTIVO_LIMITE_DO_MES)
+
 SEM_EQUIPE = 'Equipe potencial ainda não gerada para esta oportunidade.'
 
 
@@ -116,7 +120,7 @@ def versao_vigente() -> VersaoCriterio:
     if primeiro is None:
         raise ConflitoDeEstado(
             'Nenhuma versão de critérios da pré-análise está cadastrada. '
-            'Importe a baseline em Console › Parâmetros antes de analisar.',
+            'Importe os critérios em Console › Parâmetros antes de analisar.',
             'criterios_ausentes',
         )
 
@@ -128,7 +132,9 @@ def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
     proposta = proposta_de(oportunidade)
     analise = (
         proposta.pre_analises.select_related('versao_criterio')
-        .prefetch_related('dimensoes', 'lacunas', 'recomendacoes')
+        .prefetch_related(
+            'dimensoes', 'lacunas__criterio', 'recomendacoes__lacuna__criterio'
+        )
         .first()
     )
 
@@ -139,6 +145,50 @@ def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
         )
 
     return analise
+
+
+def criterios_para_o_prompt(versao: VersaoCriterio) -> dict[str, Any]:
+    """
+    Os criterios da versao, agrupados pelo mapa criterio x dimensao.
+
+    A pergunta de avaliacao vem do banco (os criterios importados); as ancoras
+    de 0 a 4 vem do mesmo arquivo da Base de Conhecimento PIPE. Nada e
+    digitado a mao no prompt.
+    """
+    base = base_conhecimento()
+    ancoras = (
+        {
+            str(criterio.get('id', '')): [
+                str(criterio.get(f'rubric_{nivel}', '') or '') for nivel in range(5)
+            ]
+            for criterio in base.criterios()
+        }
+        if base.disponivel
+        else {}
+    )
+
+    por_dimensao: dict[str, list[dict[str, Any]]] = {
+        dimensao.value: [] for dimensao in ORDEM_DAS_DIMENSOES
+    }
+
+    for criterio in CriterioPreAnalise.objects.filter(versao_criterio=versao).order_by('codigo'):
+        rotulo, _, pergunta = criterio.descricao.partition(' — ')
+        por_dimensao.setdefault(criterio.dimensao, []).append(
+            {
+                'codigo': criterio.codigo,
+                'rotulo': rotulo.strip(),
+                'pergunta': pergunta.strip(),
+                'ancoras': ancoras.get(criterio.codigo, []),
+            }
+        )
+
+    return {
+        'baseline_id': versao.baseline,
+        'versao': versao.versao,
+        'por_dimensao': [
+            (dimensao.value, por_dimensao[dimensao.value]) for dimensao in ORDEM_DAS_DIMENSOES
+        ],
+    }
 
 
 ORDEM_DO_NIVEL = {
@@ -221,30 +271,35 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
     }
 
 
-def _texto_da_equipe(oportunidade: Oportunidade) -> str:
+def _texto_da_equipe(oportunidade: Oportunidade) -> tuple[str, Apelidos]:
+    """
+    A equipe como a IA a recebe: apelido, papel, titulacao e disponibilidade.
+
+    O nome fica de fora (LGPD, minimizacao), e os apelidos voltam junto para a
+    resposta ser traduzida de volta antes de gravar.
+    """
     equipe = oportunidade.equipes_potenciais.prefetch_related(
         'membros__membro__titulacao', 'membros__membro__usuario'
     ).first()
 
     if equipe is None:
-        return SEM_EQUIPE
+        return SEM_EQUIPE, Apelidos([])
 
+    incluidos = [membro for membro in equipe.membros.all() if membro.incluido]
+    apelidos = Apelidos([membro.membro.nome for membro in incluidos])
     linhas = []
 
-    for membro in equipe.membros.all():
-        if not membro.incluido:
-            continue
-
+    for membro in incluidos:
         titulacao = (
             membro.membro.titulacao.rotulo if membro.membro.titulacao_id else 'N/A'
         )
         linhas.append(
-            f'- {membro.membro.nome} | {membro.get_papel_display()} | '
+            f'- {apelidos.apelido(membro.membro.nome)} | {membro.get_papel_display()} | '
             f'Titulação: {titulacao} | '
             f'Disponibilidade: {membro.membro.get_disponibilidade_display()}'
         )
 
-    return '\n'.join(linhas) if linhas else SEM_EQUIPE
+    return ('\n'.join(linhas) if linhas else SEM_EQUIPE), apelidos
 
 
 class ImportarCriteriosService:
@@ -379,17 +434,22 @@ class PreAnalisarService:
             )
 
         correlation_id = uuid.uuid4()
+        equipe_texto, apelidos = _texto_da_equipe(oportunidade)
         resultado = self._resolver_provedor().pre_analise_pipe(
             oportunidade_id=oportunidade.id_oportunidade,
             proposta_texto=texto,
-            equipe_texto=_texto_da_equipe(oportunidade),
+            equipe_texto=equipe_texto,
+            criterios=criterios_para_o_prompt(versao),
             correlation_id=correlation_id,
             executado_por=ator.email,
         )
 
         execucao_ia = resultado.get('execucao_ia')
         fallback_usado = bool(resultado.get('fallback_usado'))
-        saida = SaidaPreAnaliseSerializer(data=resultado.get('dados') or {})
+        motivo_fallback = resultado.get('motivo_fallback')
+        saida = SaidaPreAnaliseSerializer(
+            data=apelidos.restaurar_em(resultado.get('dados') or {})
+        )
         aceita = saida.is_valid()
         dados = dict(saida.validated_data) if aceita else {}
         dimensoes = dados.get('dimensoes', [])
@@ -403,20 +463,29 @@ class PreAnalisarService:
                 executada_por=ator.email,
                 execucao_ia=execucao_ia,
                 status=StatusExecucao.OK if dimensoes else StatusExecucao.ERRO,
-                erro='' if dimensoes else self._motivo_da_falha(fallback_usado, aceita),
+                erro='' if dimensoes else self._motivo_da_falha(
+                    fallback_usado, aceita, motivo_fallback
+                ),
             )
 
             self._gravar_dimensoes(analise, dimensoes)
+            itens_de_recomendacao = dados.get('recomendacoes', [])
             lacunas = self._gravar_lacunas(
                 analise=analise,
                 itens=dados.get('lacunas', []),
                 execucao_ia=execucao_ia,
+                sem_evidencia={
+                    str(item.get('lacuna'))
+                    for item in itens_de_recomendacao
+                    if item.get('sem_evidencia')
+                },
             )
             recomendacoes = self._gravar_recomendacoes(
                 analise=analise,
                 oportunidade=oportunidade,
-                itens=dados.get('recomendacoes', []),
+                itens=itens_de_recomendacao,
                 execucao_ia=execucao_ia,
+                lacunas=lacunas,
             )
 
             registrar_evento(
@@ -433,6 +502,9 @@ class PreAnalisarService:
                     'versao_proposta': proposta.versao,
                     'dimensoes': len(dimensoes),
                     'lacunas': len(lacunas),
+                    'recomendacoes_ligadas': sum(
+                        1 for recomendacao in recomendacoes if recomendacao.lacuna_id
+                    ),
                     'recomendacoes': len(recomendacoes),
                     'fallback_usado': fallback_usado,
                     'saida_aceita': aceita,
@@ -441,7 +513,12 @@ class PreAnalisarService:
 
             return analise
 
-    def _motivo_da_falha(self, fallback_usado: bool, aceita: bool) -> str:
+    def _motivo_da_falha(
+        self, fallback_usado: bool, aceita: bool, motivo_fallback: str | None = None
+    ) -> str:
+        if fallback_usado and motivo_fallback in MOTIVOS_DE_LIMITE:
+            return motivo_fallback
+
         if fallback_usado:
             return 'provedor_indisponivel'
 
@@ -478,25 +555,40 @@ class PreAnalisarService:
         analise: PreAnalise,
         itens: list[dict[str, Any]],
         execucao_ia,
-    ) -> list[Lacuna]:
+        sem_evidencia: set[str] = frozenset(),
+    ) -> dict[str, Lacuna]:
         """
         A lacuna da pre-analise, no mesmo lugar da lacuna da proposta.
 
-        `severidade` fica nula: o provedor nao a devolve, e preencher por conta
+        Guarda o criterio que ela fere, da versao analisada - salvo quando a
+        recomendacao dela veio marcada "sem evidencia": ai nao ha fonte a citar.
+        Com criterio, a dimensao e a dele, e nao a que a IA escreveu: duas
+        fontes para o mesmo dado divergiriam. `severidade` fica nula: o provedor nao a devolve, e preencher por conta
         propria seria inventar gravidade (AGENTS.md 2.2).
-        """
-        lacunas = []
 
-        for item in itens:
-            lacunas.append(
-                Lacuna.objects.create(
-                    proposta_id=analise.proposta_id,
-                    tipo=TipoLacuna.PRE_ANALISE,
-                    campo_afetado=item.get('dimensao', ''),
-                    descricao=item['descricao'],
-                    pre_analise=analise,
-                    execucao_ia=execucao_ia,
-                )
+        Devolve as lacunas pelo `id` que a resposta deu a cada uma.
+        """
+        criterios = {
+            criterio.codigo: criterio
+            for criterio in CriterioPreAnalise.objects.filter(
+                versao_criterio_id=analise.versao_criterio_id
+            )
+        }
+        lacunas: dict[str, Lacuna] = {}
+
+        for posicao, item in enumerate(itens):
+            chave = str(item.get('id') or f'_{posicao}')
+            codigo = (item.get('criterio') or '').strip()
+            criterio = None if chave in sem_evidencia else criterios.get(codigo)
+
+            lacunas[chave] = Lacuna.objects.create(
+                proposta_id=analise.proposta_id,
+                tipo=TipoLacuna.PRE_ANALISE,
+                campo_afetado=criterio.dimensao if criterio else item.get('dimensao', ''),
+                descricao=item['descricao'],
+                criterio=criterio,
+                pre_analise=analise,
+                execucao_ia=execucao_ia,
             )
 
         return lacunas
@@ -506,20 +598,31 @@ class PreAnalisarService:
         *,
         analise: PreAnalise,
         oportunidade: Oportunidade,
-        itens: list[str],
+        itens: list[dict[str, Any]],
         execucao_ia,
+        lacunas: dict[str, Lacuna],
     ) -> list[Recomendacao]:
+        """Cada recomendacao, ligada a lacuna que ela resolve."""
         recomendacoes = []
 
-        for texto in itens:
-            if not (texto or '').strip():
+        for item in itens:
+            texto = (item.get('texto') or '').strip()
+
+            if not texto:
                 continue
+
+            lacuna = lacunas.get(str(item.get('lacuna')))
+
+            if lacuna is not None and not lacuna.recomendacao:
+                lacuna.recomendacao = texto
+                lacuna.save(update_fields=['recomendacao'])
 
             recomendacoes.append(
                 Recomendacao.objects.create(
                     oportunidade=oportunidade,
                     origem=OrigemRecomendacao.PRE_ANALISE,
                     pre_analise=analise,
+                    lacuna=lacuna,
                     texto=texto,
                     execucao_ia=execucao_ia,
                 )

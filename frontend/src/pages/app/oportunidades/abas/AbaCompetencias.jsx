@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
+import { LIMITES_DE_GASTO, explicarMotivoSemIa } from '../../../../lib/glossario'
 import { Icone, appIcons } from '../../../../lib/icons'
 import { ROLES } from '../../../../lib/roles'
 import {
@@ -182,7 +183,12 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
 
     if (!resultado) return
 
-    if (resultado.fallback_usado) {
+    if (resultado.fallback_usado && LIMITES_DE_GASTO.includes(resultado.motivo_fallback)) {
+      setAviso({
+        tom: 'alerta',
+        texto: `A IA não foi chamada: ${explicarMotivoSemIa(resultado.motivo_fallback)}. Acrescente as competências manualmente abaixo.`,
+      })
+    } else if (resultado.fallback_usado) {
       setAviso({
         tom: 'alerta',
         texto: 'A IA não respondeu e nenhuma competência foi derivada. Tente de novo em alguns minutos ou acrescente as competências manualmente abaixo.',

@@ -36,7 +36,7 @@ class LoginTests(TestCase):
             password=SENHA,
         )
 
-    def test_login_devolve_par_de_tokens_e_papel(self):
+    def test_login_devolve_o_acesso_no_corpo_e_a_renovacao_no_cookie(self):
         resposta = self.client.post(
             reverse('auth-token'),
             {'email': 'rafael.antunes@ac2microbiologia.com.br', 'password': SENHA},
@@ -45,7 +45,7 @@ class LoginTests(TestCase):
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
         self.assertIn('access', resposta.data)
-        self.assertIn('refresh', resposta.data)
+        self.assertIn('pdconnect_refresh', resposta.cookies)
         self.assertEqual(resposta.data['papel'], Papel.SUPERVISOR)
 
     def test_email_e_caso_insensitivo(self):
@@ -377,7 +377,7 @@ class EncerramentoDeSessaoTests(TestCase):
             format='json',
         )
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
-        return resposta.data['access'], resposta.data['refresh']
+        return resposta.data['access'], resposta.cookies['pdconnect_refresh'].value
 
     def test_logout_invalida_o_refresh(self):
         access, refresh = self.autenticar()

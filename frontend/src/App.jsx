@@ -28,6 +28,7 @@ const ProblemaPage = lazy(() => import('./pages/app/problemas/detalhe'))
 const IndicadoresPage = lazy(() => import('./pages/app/indicadores'))
 const AcessoRestritoPage = lazy(() => import('./pages/system'))
 const NaoEncontradaPage = lazy(() => import('./pages/system/naoEncontrada'))
+const PrivacidadePage = lazy(() => import('./pages/system/PrivacidadePage'))
 const RedePage = lazy(() => import('./pages/app/rede'))
 const RedeFormPage = lazy(() => import('./pages/app/rede/form'))
 const AdminPage = lazy(() => import('./pages/admin'))
@@ -66,6 +67,7 @@ function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/privacidade" element={<PrivacidadePage />} />
           <Route path="/esqueci-minha-senha" element={<ForgotPasswordPage />} />
           <Route path="/definir-senha" element={<ResetPasswordPage />} />
           <Route path="/redefinir-senha" element={<ResetPasswordPage />} />

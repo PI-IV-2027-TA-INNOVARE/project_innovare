@@ -12,6 +12,7 @@ import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
 import UserFormModal from './users/UserFormModal'
 import {
+  anonimizarConta,
   createUsuario,
   listUsuarios,
   reenviarConvite,
@@ -27,6 +28,7 @@ import {
   perfilLabel,
   statusLabel,
   usuariosParaCsv,
+  vinculoDe,
 } from './users/usersData'
 
 const COLUNAS = [
@@ -182,6 +184,17 @@ export default function UsersSection() {
       showToast(`${usuario.nome}: acesso ${statusLabel(situacao).toLowerCase()}.`)
     } catch (erro) {
       showToast(erro.message || 'Não foi possível alterar a situação.', 'error')
+    }
+  }
+
+  const anonimizar = async (usuario) => {
+    setModal(null)
+
+    try {
+      substituir(await anonimizarConta(usuario.id))
+      showToast('Conta anonimizada. O histórico agora diz "pessoa removida".')
+    } catch (erro) {
+      showToast(erro.message || 'Não foi possível anonimizar a conta.', 'error')
     }
   }
 
@@ -471,7 +484,7 @@ export default function UsersSection() {
                 <td data-label="Usuário">
                   <BotaoPessoa
                     nome={usuario.nome}
-                    meta={usuario.instituicao}
+                    meta={vinculoDe(usuario)}
                     onClick={() => setModal({ tipo: 'ver', usuario })}
                   />
                 </td>
@@ -491,6 +504,11 @@ export default function UsersSection() {
                     <span className="status-badge__dot" aria-hidden="true" />
                     {statusLabel(usuario.status)}
                   </span>
+                  {usuario.exclusaoSolicitadaEm && !usuario.anonimizada ? (
+                    <span className="user-cell__meta user-cell__pedido">
+                      Pediu exclusão em {new Date(usuario.exclusaoSolicitadaEm).toLocaleDateString('pt-BR')}
+                    </span>
+                  ) : null}
                 </td>
 
                 <td data-label="Último acesso">
@@ -515,6 +533,14 @@ export default function UsersSection() {
                         icon: appIcons.edit,
                         onSelect: () => setModal({ tipo: 'editar', usuario }),
                       },
+                      ...(usuario.exclusaoSolicitadaEm && !usuario.anonimizada
+                        ? [{
+                          label: 'Atender pedido de exclusão',
+                          icon: appIcons.remove,
+                          tone: 'danger',
+                          onSelect: () => setModal({ tipo: 'anonimizar', usuario }),
+                        }]
+                        : []),
                       ...(usuario.aguardandoPrimeiroAcesso
                         ? [{
                           label: 'Reenviar convite',
@@ -681,7 +707,13 @@ export default function UsersSection() {
           )}
           linhas={[
             { rotulo: 'E-mail', valor: modal.usuario.email },
-            { rotulo: 'Instituição', valor: modal.usuario.instituicao || '—' },
+            ...(modal.usuario.perfil === 'demandante'
+              ? [
+                  { rotulo: 'Empresa', valor: vinculoDe(modal.usuario) },
+                  { rotulo: 'CNPJ', valor: modal.usuario.cnpj || '—' },
+                  { rotulo: 'Telefone', valor: modal.usuario.telefone || 'Não informado' },
+                ]
+              : [{ rotulo: 'Instituição', valor: modal.usuario.instituicao || '—' }]),
             {
               rotulo: 'Situação',
               valor: (
@@ -722,6 +754,41 @@ export default function UsersSection() {
               >
                 <Icone icon={appIcons.deactivate} />
                 {modal.alvo === 'suspenso' ? 'Suspender' : 'Inativar'}
+              </button>
+            </>
+          }
+        >
+          <div className="user-cell">
+            <Avatar nome={modal.usuario.nome} />
+            <span className="user-cell__text">
+              <span className="user-cell__name">{modal.usuario.nome}</span>
+              <span className="user-cell__meta">{modal.usuario.email}</span>
+            </span>
+          </div>
+        </AdminModal>
+      ) : null}
+
+      {modal?.tipo === 'anonimizar' ? (
+        <AdminModal
+          title="Atender pedido de exclusão"
+          description={
+            'O nome, o e-mail, o telefone e o perfil na rede deixam de identificar a pessoa, e a conta não entra mais. ' +
+            'O histórico das oportunidades continua, com "pessoa removida" no lugar dela. Isso não tem volta.'
+          }
+          size="sm"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button type="button" className="admin-btn admin-btn--outline" onClick={() => setModal(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--danger"
+                onClick={() => anonimizar(modal.usuario)}
+              >
+                <Icone icon={appIcons.remove} />
+                Anonimizar
               </button>
             </>
           }

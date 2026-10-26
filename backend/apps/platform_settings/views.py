@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from apps.platform_settings.serializers import (
     ConfiguracaoSerializer,
     ContatoSuporteSerializer,
+    PrivacidadeSerializer,
     TemaPatchSerializer,
     secao_vazia,
 )
@@ -17,6 +18,7 @@ from apps.platform_settings.services.contatos import (
     RestaurarContatosService,
     SubstituirContatosService,
     contatos_vigentes,
+    encarregado_de_dados,
 )
 from apps.platform_settings.services.configuracoes import (
     SECAO_TEMA,
@@ -60,6 +62,25 @@ class TemaView(views.APIView):
         )
 
         return Response(ConfiguracaoSerializer(configuracao).data)
+
+
+class PrivacidadeView(views.APIView):
+    """
+    `GET /api/privacidade/` - o contato do encarregado de dados, para o aviso.
+
+    Publico como o aviso: quem ainda nao tem conta tambem precisa saber como
+    os dados sao tratados e com quem falar.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    @extend_schema(responses=PrivacidadeSerializer)
+    def get(self, request):
+        return Response(
+            PrivacidadeSerializer(
+                {'encarregado': encarregado_de_dados(), 'contatos': contatos_vigentes()}
+            ).data
+        )
 
 
 class ContatosSuporteView(views.APIView):

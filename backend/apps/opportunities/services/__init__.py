@@ -13,10 +13,14 @@ from apps.opportunities.services.oportunidade import (
     RegistrarDecisaoService,
     RegistrarObservacaoService,
     SolicitarComplementoService,
+    anexos_visiveis,
+    contexto_do_historico,
+    documento_da_oportunidade,
     ha_pedido_de_complemento_aberto,
     escopo_de,
     fila_de,
     historico_de,
+    nomes_de_quem_agiu,
 )
 
 __all__ = [
@@ -32,8 +36,12 @@ __all__ = [
     'RegistrarDecisaoService',
     'RegistrarObservacaoService',
     'SolicitarComplementoService',
+    'anexos_visiveis',
+    'contexto_do_historico',
+    'documento_da_oportunidade',
     'ha_pedido_de_complemento_aberto',
     'escopo_de',
     'fila_de',
     'historico_de',
+    'nomes_de_quem_agiu',
 ]

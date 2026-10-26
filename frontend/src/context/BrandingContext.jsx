@@ -238,7 +238,7 @@ export function BrandingProvider({ children }) {
 
       return { ok: true }
     } catch (problema) {
-      const mensagem = problema?.message || 'Nao foi possivel salvar a aparencia.'
+      const mensagem = problema?.message || 'Não foi possível salvar a aparência.'
 
       setErroAoSalvar(mensagem)
       return { ok: false, message: mensagem }

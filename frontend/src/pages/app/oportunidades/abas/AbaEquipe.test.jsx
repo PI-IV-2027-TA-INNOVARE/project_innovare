@@ -93,6 +93,29 @@ describe('AbaEquipe', () => {
     })
   })
 
+  it('o cartão fechado traz nome, nota e o motivo principal; o resto fica a um clique', async () => {
+    const user = userEvent.setup()
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: [
+        {
+          ...EQUIPE.membros[0],
+          match_reasons: ['Motivo principal da sugestão.', 'Segundo motivo da sugestão.'],
+        },
+      ],
+    })
+    renderizar()
+
+    expect(await screen.findByText('Motivo principal da sugestão.')).toBeVisible()
+    expect(screen.getByText('Segundo motivo da sugestão.')).not.toBeVisible()
+    expect(screen.getByText('Palavras em comum')).not.toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Ver detalhes' }))
+
+    expect(screen.getByText('Segundo motivo da sugestão.')).toBeVisible()
+    expect(screen.getByText('Palavras em comum')).toBeVisible()
+  })
+
   it('mostra a sugestão com score e justificativa visível', async () => {
     renderizar()
 
@@ -103,14 +126,14 @@ describe('AbaEquipe', () => {
     ).toBeInTheDocument()
   })
 
-  it('declara que a semelhança de conteúdo não entrou no score', async () => {
+  it('explica no topo que a afinidade com o tema não entrou na nota e tira a linha do cartão', async () => {
     renderizar()
 
     expect(
-      await screen.findByText(/semelhança de conteúdo não estava disponível/i),
+      await screen.findByText(/afinidade com o tema não estava disponível/i),
     ).toBeInTheDocument()
     expect(screen.queryByText(/hibrido_v1/)).not.toBeInTheDocument()
-    expect(screen.getByText('indisponível')).toBeInTheDocument()
+    expect(screen.queryByText('indisponível')).not.toBeInTheDocument()
   })
 
   it('deixa explícito que não há convite nem aceite', async () => {

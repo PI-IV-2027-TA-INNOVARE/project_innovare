@@ -165,6 +165,39 @@ describe('RedePage', () => {
     expect(await screen.findByText(/acesso liberado para carla nogueira/i)).toBeInTheDocument()
   })
 
+  /**
+   * O convite sai por e-mail e leva segundos. Sem aviso, a pessoa clicava de
+   * novo: o segundo pedido chegava com a conta ainda sendo criada e voltava como
+   * erro, embora o primeiro tivesse liberado o acesso.
+   */
+  it('enquanto o convite sai, avisa e não aceita um segundo clique', async () => {
+    let concluir
+    api.liberarAcessoMembro = vi.fn(
+      () => new Promise((resolve) => {
+        concluir = () => resolve({ ...CARLA, situacao: 'ativo', tem_acesso: true })
+      })
+    )
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Carla Nogueira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para carla nogueira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /liberar acesso/i }))
+
+    expect(await screen.findByText(/liberando o acesso de carla nogueira/i)).toBeInTheDocument()
+
+    await user.click(within(linha).getByRole('button', { name: /ações para carla nogueira/i }))
+    const emAndamento = screen.getByRole('menuitem', { name: /liberando acesso/i })
+    expect(emAndamento).toBeDisabled()
+    await user.click(emAndamento)
+
+    expect(api.liberarAcessoMembro).toHaveBeenCalledTimes(1)
+
+    concluir()
+    expect(await screen.findByText(/acesso liberado para carla nogueira/i)).toBeInTheDocument()
+  })
+
   it('não oferece liberar acesso a quem já tem login', async () => {
     const user = userEvent.setup()
     renderRede()

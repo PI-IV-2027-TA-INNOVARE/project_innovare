@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaCopiloto from './AbaCopiloto'
@@ -16,6 +16,8 @@ const api = vi.hoisted(() => ({
   responderCopiloto: null,
   estruturarComCopiloto: null,
   concluirSessaoCopiloto: null,
+  atualizarSinteseCopiloto: null,
+  aceitarSugestaoCopiloto: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
@@ -24,6 +26,8 @@ vi.mock('../../../../services/pdConnectApi', () => ({
   responderCopiloto: (...args) => api.responderCopiloto(...args),
   estruturarComCopiloto: (...args) => api.estruturarComCopiloto(...args),
   concluirSessaoCopiloto: (...args) => api.concluirSessaoCopiloto(...args),
+  atualizarSinteseCopiloto: (...args) => api.atualizarSinteseCopiloto(...args),
+  aceitarSugestaoCopiloto: (...args) => api.aceitarSugestaoCopiloto(...args),
 }))
 
 const SEM_SESSAO = {
@@ -36,6 +40,7 @@ const SEM_SESSAO = {
       pergunta: 'Qual problema real você quer resolver?',
       motivo: 'Define a dor central.',
       campo: 'problema_mercado',
+      origem: 'base_pipe',
     },
   ],
   lacunas: [],
@@ -56,7 +61,12 @@ const SEM_SESSAO = {
 
 const COM_SESSAO = {
   ...SEM_SESSAO,
-  sessao: { id_sessao: 'abc', estado: 'aberta', estado_rotulo: 'Aberta' },
+  sessao: {
+    id_sessao: 'abc',
+    estado: 'aberta',
+    estado_rotulo: 'Aberta',
+    sintese: 'Problema: lotes perdidos por contaminação.\nContexto: linha de envase.',
+  },
   mensagens: [
     {
       id_mensagem: 1,
@@ -70,6 +80,9 @@ const COM_SESSAO = {
   lacunas: [
     {
       id_lacuna: 7,
+      campo_afetado: 'metodologia',
+      natureza: 'ausente',
+      natureza_rotulo: 'Ausente',
       descricao: 'A proposta não descreve a metodologia.',
       recomendacao: 'Como o método será validado?',
       severidade: 'alta',
@@ -88,6 +101,8 @@ describe('AbaCopiloto', () => {
       .fn()
       .mockResolvedValue({ preenchidos: ['metodologia'], fallback_usado: false })
     api.concluirSessaoCopiloto = vi.fn().mockResolvedValue({})
+    api.atualizarSinteseCopiloto = vi.fn().mockResolvedValue({})
+    api.aceitarSugestaoCopiloto = vi.fn().mockResolvedValue({})
   })
 
   it('mostra a contagem de elementos e as perguntas da baseline', async () => {
@@ -134,12 +149,13 @@ describe('AbaCopiloto', () => {
       await screen.findByLabelText(/sua resposta/i),
       'A perda média é de 4% do lote.',
     )
-    await userEvent.click(screen.getByRole('button', { name: /registrar resposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /responder e atualizar/i }))
 
     await waitFor(() =>
       expect(api.responderCopiloto).toHaveBeenCalledWith(
         'OP-2026-001',
         'A perda média é de 4% do lote.',
+        {},
       ),
     )
     expect(api.iniciarSessaoCopiloto).toHaveBeenCalledWith('OP-2026-001')
@@ -152,10 +168,28 @@ describe('AbaCopiloto', () => {
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
     await userEvent.type(await screen.findByLabelText(/sua resposta/i), 'Mais contexto.')
-    await userEvent.click(screen.getByRole('button', { name: /registrar resposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /responder e atualizar/i }))
 
     await waitFor(() => expect(api.responderCopiloto).toHaveBeenCalled())
     expect(api.iniciarSessaoCopiloto).not.toHaveBeenCalled()
+  })
+
+  it('explica que o limite de gasto barrou a chamada', async () => {
+    api.estruturarComCopiloto = vi.fn().mockResolvedValue({
+      preenchidos: [],
+      fallback_usado: true,
+      motivo_fallback: 'limite_da_oportunidade',
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /estruturar com o copiloto/i }),
+    )
+
+    expect(
+      await screen.findByText(/o copiloto não foi chamado: esta oportunidade atingiu o limite de gasto com ia/i),
+    ).toBeInTheDocument()
   })
 
   /**
@@ -206,7 +240,7 @@ describe('AbaCopiloto', () => {
     expect(irPara).toHaveBeenCalledWith('proposta')
   })
 
-  it('registra a resposta humana na conversa', async () => {
+  it('a resposta atualiza a proposta na mesma hora', async () => {
     api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
@@ -215,14 +249,160 @@ describe('AbaCopiloto', () => {
       await screen.findByLabelText(/sua resposta/i),
       'A perda média é de 4% do lote.',
     )
-    await userEvent.click(screen.getByRole('button', { name: /registrar resposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /responder e atualizar/i }))
+
+    await waitFor(() => expect(api.estruturarComCopiloto).toHaveBeenCalledWith('OP-2026-001'))
+    expect(await screen.findByText(/o copiloto preencheu metodologia/i)).toBeInTheDocument()
+  })
+
+  it('responde a pergunta escolhida, com o elemento e a pergunta', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const pergunta = (await screen.findByText('Qual problema real você quer resolver?')).closest('li')
+    await userEvent.click(within(pergunta).getByRole('button', { name: /responder/i }))
+
+    expect(screen.getByText(/respondendo: qual problema real/i)).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText(/sua resposta/i), 'Perda de lotes de suco.')
+    await userEvent.click(screen.getByRole('button', { name: /responder e atualizar/i }))
 
     await waitFor(() =>
-      expect(api.responderCopiloto).toHaveBeenCalledWith(
+      expect(api.responderCopiloto).toHaveBeenCalledWith('OP-2026-001', 'Perda de lotes de suco.', {
+        elemento: 'problema_pesquisa',
+        pergunta: 'Qual problema real você quer resolver?',
+      }),
+    )
+  })
+
+  it('mostra o resumo da entrada e deixa o Supervisor corrigir', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByText(/lotes perdidos por contaminação/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /corrigir o resumo/i }))
+    const campo = screen.getByLabelText(/resumo da entrada/i)
+    await userEvent.clear(campo)
+    await userEvent.type(campo, 'Problema: perda de 4% dos lotes.')
+    await userEvent.click(screen.getByRole('button', { name: /salvar o resumo/i }))
+
+    await waitFor(() =>
+      expect(api.atualizarSinteseCopiloto).toHaveBeenCalledWith(
         'OP-2026-001',
-        'A perda média é de 4% do lote.',
+        'Problema: perda de 4% dos lotes.',
       ),
     )
+  })
+
+  it('sem conversa, oferece ler a entrada antes de estruturar', async () => {
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /ler a entrada/i }))
+
+    await waitFor(() => expect(api.iniciarSessaoCopiloto).toHaveBeenCalledWith('OP-2026-001'))
+  })
+
+  it('mostra a sugestão para o elemento escrito e grava só ao aceitar', async () => {
+    const aoEstruturar = vi.fn()
+    api.estruturarComCopiloto = vi.fn().mockResolvedValue({
+      preenchidos: [],
+      fallback_usado: false,
+      sugestoes: [
+        {
+          elemento: 'metodologia',
+          elemento_rotulo: 'Metodologia',
+          texto_sugerido: 'PCR em tempo real com controle positivo.',
+          motivo: 'A resposta trouxe o controle.',
+        },
+      ],
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" aoEstruturar={aoEstruturar} />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /estruturar com o copiloto/i }),
+    )
+
+    const sugestao = (await screen.findByText('PCR em tempo real com controle positivo.')).closest('li')
+    expect(sugestao).toHaveTextContent('A resposta trouxe o controle.')
+    expect(api.aceitarSugestaoCopiloto).not.toHaveBeenCalled()
+
+    await userEvent.click(within(sugestao).getByRole('button', { name: /aceitar/i }))
+
+    await waitFor(() =>
+      expect(api.aceitarSugestaoCopiloto).toHaveBeenCalledWith(
+        'OP-2026-001',
+        'metodologia',
+        'PCR em tempo real com controle positivo.',
+      ),
+    )
+    await waitFor(() =>
+      expect(screen.queryByText('PCR em tempo real com controle positivo.')).not.toBeInTheDocument(),
+    )
+    expect(aoEstruturar).toHaveBeenCalled()
+  })
+
+  it('recusar a sugestão tira da tela sem gravar', async () => {
+    api.estruturarComCopiloto = vi.fn().mockResolvedValue({
+      preenchidos: [],
+      fallback_usado: false,
+      sugestoes: [
+        { elemento: 'metodologia', elemento_rotulo: 'Metodologia', texto_sugerido: 'Outra.', motivo: '' },
+      ],
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /estruturar com o copiloto/i }),
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /recusar/i }))
+
+    expect(screen.queryByText('Outra.')).not.toBeInTheDocument()
+    expect(api.aceitarSugestaoCopiloto).not.toHaveBeenCalled()
+  })
+
+  it('cada lacuna diz o tipo e o que fazer, também no elemento já escrito', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...COM_SESSAO,
+      elementos_vazios: [],
+      perguntas: [
+        {
+          id: 'lacuna-9',
+          elemento: 'metodologia',
+          pergunta: 'Quais controles serão usados?',
+          motivo: 'Faltam os controles.',
+          campo: '',
+          origem: 'copiloto',
+        },
+      ],
+      lacunas: [
+        {
+          id_lacuna: 9,
+          campo_afetado: 'metodologia',
+          natureza: 'pouco_desenvolvido',
+          natureza_rotulo: 'Pouco desenvolvido',
+          descricao: 'Faltam os controles.',
+          recomendacao: 'Descreva o controle positivo e o negativo.',
+          severidade: 'media',
+          severidade_rotulo: 'Média',
+        },
+      ],
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const lacuna = (await screen.findByText('Descreva o controle positivo e o negativo.')).closest('li')
+    expect(lacuna).toHaveTextContent('Pouco desenvolvido')
+    expect(lacuna).toHaveTextContent('Metodologia')
+
+    const pergunta = screen.getByText('Quais controles serão usados?').closest('li')
+    expect(pergunta).toHaveTextContent('Pergunta do Copiloto')
+
+    expect(screen.getByRole('button', { name: /reavaliar a proposta/i })).toBeEnabled()
   })
 
   it('diz que nada foi preenchido quando o provedor cai no fallback', async () => {

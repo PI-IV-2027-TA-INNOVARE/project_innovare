@@ -155,11 +155,30 @@ describe('AbaProposta — somente leitura', () => {
     auth.user = { role: ROLES.PESQUISADOR, name: 'Maria Ferreira' }
   })
 
-  it('desabilita os campos para quem não é Supervisor', async () => {
+  it('deixa só ler os campos para quem não é Supervisor', async () => {
     renderAba()
 
-    expect(await screen.findByLabelText(/problema de pesquisa/i)).toBeDisabled()
+    expect(await screen.findByLabelText(/problema de pesquisa/i)).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: /salvar/i })).toBeNull()
+  })
+
+  it('mostra cada elemento preenchido recolhido nas duas primeiras linhas', async () => {
+    renderAba()
+
+    const campo = await screen.findByLabelText(/problema de pesquisa/i)
+
+    expect(campo).toHaveAttribute('rows', '2')
+    expect(campo).toHaveClass('proposta__texto--recolhido')
+  })
+
+  it('quem só lê também abre o texto inteiro clicando nele', async () => {
+    const user = userEvent.setup()
+    renderAba()
+
+    const campo = await screen.findByLabelText(/problema de pesquisa/i)
+    await user.click(campo)
+
+    expect(campo).not.toHaveClass('proposta__texto--recolhido')
   })
 })
 

@@ -13,6 +13,38 @@ MVP acadêmico — Projeto Integrador IV, Innovare. Prazo: dezembro de 2026.
 
 ---
 
+## Subir com Docker
+
+Só precisa do Docker (no Windows e no Mac, o Docker Desktop aberto). Python,
+Node e as dependências ficam dentro dos containers.
+
+```bash
+cp backend/.env.example backend/.env    # e preencha; o banco usado é o deste arquivo
+docker compose up --build               # a primeira vez demora: baixa o torch e o modelo de IA
+```
+
+| | |
+|---|---|
+| Front | http://localhost:5173/ |
+| API | http://127.0.0.1:8000/api/ |
+| Swagger | http://127.0.0.1:8000/api/docs/ |
+
+- O código fica montado nos containers: salvar um arquivo recarrega a API e o front.
+- O `backend/.env` é lido direto pela API, como fora do Docker. O `frontend/.env`
+  não é usado: o compose já aponta o front para a API.
+- O compose não sobe banco nem aplica migration. Num banco novo:
+  `docker compose run --rm backend python manage.py migrate`.
+- Dentro do container, `localhost` é o próprio container. Para um Postgres
+  desta máquina, use `DB_HOST=host.docker.internal`.
+- Mudou o `requirements.txt` ou o `package.json`: `docker compose up --build -V`.
+- As portas 8000 e 5173 precisam estar livres: pare o `runserver` e o Vite
+  antes.
+- Testes do front no container: `docker compose run --rm frontend npm test -- --testTimeout=30000`.
+  Com o código montado do Windows os testes ficam mais lentos, e o limite padrão
+  de 5 s por teste não basta.
+
+---
+
 ## Subir tudo
 
 Uma vez, para preparar o ambiente:

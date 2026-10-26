@@ -228,3 +228,14 @@
     break-inside: avoid;
   }
 }
+
+.relatorio-lacuna__origem {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.relatorio-lacuna__texto {
+  display: block;
+}

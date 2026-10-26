@@ -62,6 +62,7 @@ export default function RedePage() {
   const [situacaoFiltro, setSituacaoFiltro] = useState('todos')
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
   const [detalhe, setDetalhe] = useState(null)
+  const [liberando, setLiberando] = useState(() => new Set())
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -127,7 +128,21 @@ export default function RedePage() {
     setSituacaoFiltro('todos')
   }
 
+  const marcarLiberando = (id, emAndamento) => {
+    setLiberando((atual) => {
+      const proximo = new Set(atual)
+      if (emAndamento) proximo.add(id)
+      else proximo.delete(id)
+      return proximo
+    })
+  }
+
   const liberarAcesso = async (pessoa) => {
+    if (liberando.has(pessoa.id)) return
+
+    marcarLiberando(pessoa.id, true)
+    showToast(`Liberando o acesso de ${pessoa.nome} e enviando o convite por e-mail...`)
+
     try {
       const atualizado = membroDaApi(await liberarAcessoMembro(pessoa.id))
 
@@ -137,6 +152,8 @@ export default function RedePage() {
       showToast(`Acesso liberado para ${pessoa.nome}. O convite saiu por e-mail.`)
     } catch (falha) {
       showToast(falha?.message || `Não foi possível liberar o acesso de ${pessoa.nome}.`)
+    } finally {
+      marcarLiberando(pessoa.id, false)
     }
   }
 
@@ -359,11 +376,18 @@ export default function RedePage() {
                       },
                       ...(pessoa.temAcesso
                         ? []
-                        : [{
-                            label: 'Liberar acesso',
-                            icon: appIcons.activate,
-                            onSelect: () => liberarAcesso(pessoa),
-                          }]),
+                        : [liberando.has(pessoa.id)
+                          ? {
+                              label: 'Liberando acesso...',
+                              icon: appIcons.activate,
+                              disabled: true,
+                              onSelect: () => {},
+                            }
+                          : {
+                              label: 'Liberar acesso',
+                              icon: appIcons.activate,
+                              onSelect: () => liberarAcesso(pessoa),
+                            }]),
                     ]}
                   />
                 </td>

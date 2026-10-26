@@ -129,6 +129,7 @@ class DerivarCompetenciasService:
 
         execucao_ia = resultado.get('execucao_ia')
         fallback_usado = bool(resultado.get('fallback_usado'))
+        motivo_fallback = resultado.get('motivo_fallback') if fallback_usado else None
         saida = SaidaCompetenciasSerializer(data=resultado.get('dados') or {})
         aceita = saida.is_valid()
         itens = saida.validated_data.get('competencias', []) if aceita else []
@@ -181,6 +182,7 @@ class DerivarCompetenciasService:
             return {
                 'criadas': criadas,
                 'fallback_usado': fallback_usado,
+                'motivo_fallback': motivo_fallback,
                 'execucao_ia': execucao_ia,
             }
 

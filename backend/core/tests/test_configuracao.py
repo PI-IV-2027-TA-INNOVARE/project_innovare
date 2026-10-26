@@ -16,6 +16,7 @@ from core.configuracao import (
     ambiente_declarado,
     ambiente_incoerente,
     chave_de_assinatura,
+    exigir_ambiente_coerente,
     pool_de_conexoes,
     seguranca_de_transporte,
     vida_da_conexao,
@@ -248,6 +249,7 @@ class EndurecimentoDeTransporteTests(SimpleTestCase):
     def test_producao_exige_https_cookie_seguro_e_hsts(self):
         endurecimento = seguranca_de_transporte(AMBIENTE_PRODUCAO, debug=False)
 
+        self.assertTrue(endurecimento['AUTH_COOKIE_SECURE'])
         self.assertTrue(endurecimento['SECURE_SSL_REDIRECT'])
         self.assertTrue(endurecimento['SESSION_COOKIE_SECURE'])
         self.assertTrue(endurecimento['CSRF_COOKIE_SECURE'])
@@ -268,6 +270,7 @@ class EndurecimentoDeTransporteTests(SimpleTestCase):
     def test_local_nao_redireciona_nem_exige_cookie_seguro(self):
         endurecimento = seguranca_de_transporte(AMBIENTE_LOCAL, debug=False)
 
+        self.assertFalse(endurecimento['AUTH_COOKIE_SECURE'])
         self.assertFalse(endurecimento['SECURE_SSL_REDIRECT'])
         self.assertFalse(endurecimento['SESSION_COOKIE_SECURE'])
         self.assertFalse(endurecimento['CSRF_COOKIE_SECURE'])
@@ -355,3 +358,27 @@ class AvisoDeAmbienteIncoerenteTests(SimpleTestCase):
 
     def test_local_sem_debug_e_coerente(self):
         self.assertFalse(ambiente_incoerente(AMBIENTE_LOCAL, debug=False))
+
+
+class RecusaDeAmbienteIncoerenteTests(SimpleTestCase):
+    """
+    Producao com `DEBUG=True` para de subir, em vez de so avisar.
+
+    Era a combinacao do `.env` de desenvolvimento apontado para o Neon: a pagina
+    de erro detalhada saia para quem pedisse, e os anexos ficavam abertos.
+    """
+
+    def test_producao_com_debug_impede_a_subida(self):
+        with self.assertRaises(ImproperlyConfigured) as erro:
+            exigir_ambiente_coerente(AMBIENTE_PRODUCAO, debug=True)
+
+        self.assertIn('banco local', str(erro.exception))
+
+    def test_producao_sem_debug_sobe(self):
+        exigir_ambiente_coerente(AMBIENTE_PRODUCAO, debug=False)
+
+    def test_local_com_debug_sobe(self):
+        exigir_ambiente_coerente(AMBIENTE_LOCAL, debug=True)
+
+    def test_a_suite_nao_e_barrada(self):
+        exigir_ambiente_coerente(AMBIENTE_PRODUCAO, debug=True, rodando_testes=True)

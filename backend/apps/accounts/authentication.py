@@ -16,7 +16,7 @@ class AutenticacaoJWTComSituacao(JWTAuthentication):
 
         if usuario.situacao != 'ativo':
             raise AuthenticationFailed(
-                _('Esta conta esta %(situacao)s. Procure a administracao da '
+                _('Esta conta está %(situacao)s. Procure quem administra a '
                   'plataforma.') % {'situacao': usuario.get_situacao_display().lower()},
                 code='conta_nao_ativa',
             )

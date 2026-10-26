@@ -8,11 +8,14 @@ e nao precisa ler o gateway do Gemini para descobrir o formato.
 
 As quatro operacoes devolvem sempre o mesmo envelope:
 
-    {'dados': dict, 'execucao_ia': ExecucaoIA | None, 'fallback_usado': bool}
+    {'dados': dict, 'execucao_ia': ExecucaoIA | None, 'fallback_usado': bool,
+     'motivo_fallback': str | None}
 
 `fallback_usado` e parte do contrato, nao detalhe de implementacao: o AGENTS.md
 0.2 exige fallback seguro em todo componente de IA, e quem consome precisa saber
-que caiu nele para nao apresentar ausencia como resultado.
+que caiu nele para nao apresentar ausencia como resultado. `motivo_fallback`
+diz por que - IA indisponivel, falha do provedor ou limite de gasto -, para a
+tela explicar em vez de culpar o provedor.
 """
 from __future__ import annotations
 
@@ -29,11 +32,23 @@ class ProvedorDeIA(Protocol):
         """Falso quando nao ha credencial: toda operacao cai no fallback."""
         ...
 
+    def sintetizar_entrada(
+        self,
+        oportunidade_id: int,
+        entrada: str,
+        correlation_id: uuid.UUID,
+        executado_por: str,
+    ) -> dict[str, Any]:
+        ...
+
     def estruturar_proposta(
         self,
         oportunidade_id: int,
-        entrada_bruta: str,
-        contexto: str,
+        entrada: str,
+        sintese: str,
+        preenchidos: dict[str, str],
+        vazios: list[str],
+        respostas: list[str],
         correlation_id: uuid.UUID,
         executado_por: str,
     ) -> dict[str, Any]:
@@ -63,6 +78,7 @@ class ProvedorDeIA(Protocol):
         oportunidade_id: int,
         proposta_texto: str,
         equipe_texto: str,
+        criterios: dict[str, Any],
         correlation_id: uuid.UUID,
         executado_por: str,
     ) -> dict[str, Any]:

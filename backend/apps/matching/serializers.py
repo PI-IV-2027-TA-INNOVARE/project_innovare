@@ -168,6 +168,7 @@ class InclusaoMembroSerializer(serializers.Serializer):
 
 class ItemMatchingIASerializer(serializers.Serializer):
     candidato_index = serializers.IntegerField()
+    apelido = serializers.CharField(required=False, allow_blank=True)
     nome = serializers.CharField(required=False, allow_blank=True)
     score_compatibilidade = serializers.FloatField(required=False)
     match_reasons = serializers.ListField(

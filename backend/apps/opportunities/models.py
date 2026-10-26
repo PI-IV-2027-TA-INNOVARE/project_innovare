@@ -4,9 +4,23 @@ Oportunidade - o registro central do sistema (RF01).
 Substitui a `pesquisa` do modelo antigo, que era um projeto publicado por
 empresa com orcamento e prazo, e nao a Oportunidade da baseline v1.2.
 """
+import uuid
+from pathlib import Path
+
 from django.db import models, transaction
 
 from core.models import ModeloComCarimbo, lista_fixa
+
+
+def caminho_do_anexo(_anexo, nome_original: str) -> str:
+    """
+    Onde o arquivo e gravado: um codigo aleatorio, sem o nome nem a data.
+
+    O caminho antigo (ano, mes e nome original) era adivinhavel. O nome que a
+    pessoa deu ao arquivo fica em `nome_original` e volta no download.
+    """
+    extensao = Path(nome_original).suffix.lower()[:10]
+    return f'anexos/{uuid.uuid4().hex}{extensao}'
 
 
 class OrigemOportunidade(models.TextChoices):
@@ -23,11 +37,11 @@ class SituacaoOportunidade(models.TextChoices):
     """
 
     ENTRADA = 'entrada', 'Entrada'
-    ESTRUTURACAO = 'estruturacao', 'Em estruturacao'
-    COMPETENCIAS = 'competencias', 'Competencias'
+    ESTRUTURACAO = 'estruturacao', 'Em estruturação'
+    COMPETENCIAS = 'competencias', 'Competências'
     MATCHING = 'matching', 'Matching'
-    PRE_ANALISE = 'pre_analise', 'Pre-analise'
-    AGUARDANDO_DECISAO = 'aguardando_decisao', 'Aguardando decisao'
+    PRE_ANALISE = 'pre_analise', 'Pré-análise'
+    AGUARDANDO_DECISAO = 'aguardando_decisao', 'Aguardando decisão'
     CONTINUAR = 'continuar', 'Continuar'
     REVISAR = 'revisar', 'Revisar'
     ARQUIVADA = 'arquivada', 'Arquivada'
@@ -148,7 +162,7 @@ class AnexoOportunidade(models.Model):
         related_name='anexos',
         db_column='id_oportunidade',
     )
-    arquivo = models.FileField(upload_to='anexos/%Y/%m/', db_column='arquivo')
+    arquivo = models.FileField(upload_to=caminho_do_anexo, db_column='arquivo')
     nome_original = models.CharField(max_length=255, db_column='nome_original')
     mime = models.CharField(max_length=120, db_column='mime')
     tamanho_bytes = models.BigIntegerField(db_column='tamanho_bytes')

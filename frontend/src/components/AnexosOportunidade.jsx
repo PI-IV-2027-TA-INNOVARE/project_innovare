@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { EXTENSOES_ACEITAS, TIPOS_POR_EXTENSO, salvarNoComputador } from '../lib/anexos'
 import { Icone, appIcons } from '../lib/icons'
 import { formatarUltimoAcesso } from '../lib/people'
-import { enviarAnexo, listarAnexos } from '../services/pdConnectApi'
+import { baixarAnexo, enviarAnexo, listarAnexos } from '../services/pdConnectApi'
+import './AnexosOportunidade.scss'
 
 const TETO_BYTES = 10 * 1024 * 1024
 
@@ -11,6 +13,18 @@ function tamanhoLegivel(bytes) {
   const kb = bytes / 1024
 
   return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
+}
+
+function tipoDoArquivo(nome) {
+  const extensao = (nome || '').split('.').pop()
+
+  if (!extensao || extensao === nome) return 'ARQ'
+
+  return extensao === 'jpeg' ? 'JPG' : extensao.toUpperCase().slice(0, 4)
+}
+
+function quantos(total) {
+  return total === 1 ? '1 documento' : `${total} documentos`
 }
 
 /**
@@ -25,11 +39,14 @@ export default function AnexosOportunidade({
   podeEnviar = false,
   titulo = 'Anexos e documentos',
   descricao = 'Laudos, relatórios e material de apoio da oportunidade. Cada envio fica registrado no histórico.',
+  quemVe = '',
 }) {
   const [anexos, setAnexos] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
-  const [enviando, setEnviando] = useState(false)
+  const [enviando, setEnviando] = useState('')
+  const [baixando, setBaixando] = useState(null)
+  const [arrastando, setArrastando] = useState(false)
 
   const campo = useRef(null)
 
@@ -48,18 +65,28 @@ export default function AnexosOportunidade({
     carregar()
   }, [carregar])
 
-  const escolher = async (event) => {
-    const arquivo = event.target.files?.[0]
+  const baixar = async (anexo) => {
+    setBaixando(anexo.id_anexo)
+    setErro('')
 
-    if (campo.current) campo.current.value = ''
-    if (!arquivo) return
+    try {
+      salvarNoComputador(await baixarAnexo(codigo, anexo))
+    } catch (falha) {
+      setErro(falha?.message || 'Não foi possível baixar o documento.')
+    } finally {
+      setBaixando(null)
+    }
+  }
+
+  const enviar = async (arquivo) => {
+    if (!arquivo || enviando) return
 
     if (arquivo.size > TETO_BYTES) {
       setErro(`"${arquivo.name}" passa de 10 MB. Envie um arquivo menor.`)
       return
     }
 
-    setEnviando(true)
+    setEnviando(arquivo.name)
     setErro('')
 
     try {
@@ -68,36 +95,88 @@ export default function AnexosOportunidade({
     } catch (problema) {
       setErro(problema.message || 'Não foi possível enviar o documento.')
     } finally {
-      setEnviando(false)
+      setEnviando('')
     }
   }
 
+  const escolher = (event) => {
+    const arquivo = event.target.files?.[0]
+
+    if (campo.current) campo.current.value = ''
+    enviar(arquivo)
+  }
+
+  const arrastarSobre = (event) => {
+    event.preventDefault()
+    if (!enviando) setArrastando(true)
+  }
+
+  const soltar = (event) => {
+    event.preventDefault()
+    setArrastando(false)
+    enviar(event.dataTransfer?.files?.[0])
+  }
+
   return (
-    <section className="perfil-card">
+    <section className="perfil-card anexos">
       <header className="perfil-card__header">
         <div>
           <h2 className="perfil-card__title">{titulo}</h2>
           <p className="perfil-card__description">{descricao}</p>
         </div>
+        {!carregando && anexos.length > 0 ? (
+          <span className="anexos__total">{quantos(anexos.length)}</span>
+        ) : null}
       </header>
 
       <div className="perfil-card__body">
+        {quemVe ? (
+          <p className="anexos__quem-ve">
+            <Icone icon={appIcons.lock} />
+            <span>
+              <strong>Quem vê:</strong> {quemVe}
+            </span>
+          </p>
+        ) : null}
+
         {podeEnviar ? (
-          <div className="console-form__field">
-            <label className="form-label" htmlFor="anexo-arquivo">
-              Anexar documento
-            </label>
+          <div
+            data-testid="anexo-envio"
+            className={`anexos__envio${arrastando ? ' is-arrastando' : ''}${enviando ? ' is-enviando' : ''}`}
+            onDragOver={arrastarSobre}
+            onDragLeave={() => setArrastando(false)}
+            onDrop={soltar}
+          >
+            <span className="anexos__envio-icone" aria-hidden="true">
+              <Icone icon={appIcons.folder} />
+            </span>
+
+            {enviando ? (
+              <p className="anexos__envio-texto" role="status">
+                Enviando {enviando}...
+              </p>
+            ) : (
+              <p className="anexos__envio-texto">Arraste um arquivo para cá ou</p>
+            )}
+
             <input
               id="anexo-arquivo"
               ref={campo}
               type="file"
-              className="form-input"
+              accept={EXTENSOES_ACEITAS}
+              className="sr-only anexos__campo"
+              aria-label="Anexar documento"
               onChange={escolher}
-              disabled={enviando}
+              disabled={Boolean(enviando)}
             />
-            <p className="console-form__hint">
-              Até 10 MB por arquivo.
-            </p>
+            <label
+              htmlFor="anexo-arquivo"
+              className={`admin-btn anexos__escolher${enviando ? ' is-desabilitado' : ''}`}
+            >
+              Escolher arquivo
+            </label>
+
+            <p className="anexos__envio-dica">{TIPOS_POR_EXTENSO} · até 10 MB por arquivo</p>
           </div>
         ) : null}
 
@@ -113,13 +192,15 @@ export default function AnexosOportunidade({
           <ul className="anexo-lista">
             {anexos.map((anexo) => (
               <li className="anexo-lista__item" key={anexo.id_anexo}>
-                <span className="anexo-lista__icone" aria-hidden="true">
-                  <Icone icon={appIcons.folder} />
+                <span className="anexo-lista__tipo" aria-hidden="true">
+                  {tipoDoArquivo(anexo.nome_original)}
                 </span>
 
                 <div className="anexo-lista__corpo">
-                  <p className="anexo-lista__nome">{anexo.nome_original}</p>
-                  <p className="trilha__meta">
+                  <p className="anexo-lista__nome" title={anexo.nome_original}>
+                    {anexo.nome_original}
+                  </p>
+                  <p className="anexo-lista__meta">
                     <span>{tamanhoLegivel(anexo.tamanho_bytes)}</span>
                     <span aria-hidden="true">·</span>
                     <span>{anexo.enviado_por_nome || 'Sistema'}</span>
@@ -129,13 +210,29 @@ export default function AnexosOportunidade({
                     </time>
                   </p>
                 </div>
+
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--sm admin-btn--outline"
+                  onClick={() => baixar(anexo)}
+                  disabled={baixando === anexo.id_anexo}
+                  aria-label={`Baixar ${anexo.nome_original}`}
+                >
+                  <Icone icon={appIcons.export} />
+                  {baixando === anexo.id_anexo ? 'Baixando...' : 'Baixar'}
+                </button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="oportunidade-bloco__vazio">
-            Nenhum documento anexado a esta oportunidade.
-          </p>
+          <div className="anexos__vazio">
+            <p className="anexos__vazio-titulo">Nenhum documento anexado a esta oportunidade.</p>
+            <p className="anexos__vazio-texto">
+              {podeEnviar
+                ? 'Anexe o primeiro laudo, relatório ou foto pela área acima.'
+                : 'Quando um documento for anexado, ele aparece aqui.'}
+            </p>
+          </div>
         )}
       </div>
     </section>

@@ -501,6 +501,18 @@ class ComplementacaoTests(OportunidadeBaseTests):
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
         self.assertIn('Laudos anexados', resposta.data['contexto'])
 
+    def test_o_contexto_marca_a_complementacao_sem_o_nome_de_quem_enviou(self):
+        """O contexto vai para a IA; quem respondeu ja esta na trilha."""
+        self.pedir_revisao()
+        self.como(self.demandante)
+
+        contexto = self.client.post(
+            self.url(), {'texto': 'Laudos anexados.'}, format='json'
+        ).data['contexto']
+
+        self.assertIn('[Complementação do Demandante]', contexto)
+        self.assertNotIn(self.demandante.nome, contexto)
+
     def test_complementar_sem_pedido_aberto_e_conflito(self):
         self.como(self.demandante)
         resposta = self.client.post(
@@ -780,6 +792,23 @@ class ObservacaoTests(OportunidadeBaseTests):
         )
         self.assertEqual(evento['categoria'], 'observacao')
         self.assertIn('contaminacao', evento['detalhe']['texto'])
+
+    def test_o_nome_de_quem_escreveu_vem_da_conta_e_nao_da_trilha(self):
+        """
+        A trilha guarda o e-mail de quem agiu, nao o nome: o nome e lido da
+        conta, e a anonimizacao da conta vale tambem para o historico.
+        """
+        self.como(self.supervisor)
+        self.registrar()
+
+        evento = next(
+            e for e in self.client.get(
+                reverse('oportunidade-historico', args=[self.codigo])
+            ).data
+            if e['tipo'] == 'observacao_registrada'
+        )
+        self.assertNotIn('autor_nome', evento['detalhe'])
+        self.assertEqual(evento['ator_nome'], self.supervisor.nome)
 
     def test_so_o_supervisor_registra_observacao(self):
         for usuario in (self.demandante, self.pesquisador, self.administrador):

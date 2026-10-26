@@ -12,6 +12,7 @@ from uuid import UUID
 
 from django.utils import timezone
 
+from apps.accounts.models import Usuario
 from apps.audit.models import EventoAuditoria, StatusEvento
 
 if TYPE_CHECKING:
@@ -23,13 +24,27 @@ if TYPE_CHECKING:
 ATOR_SISTEMA = '__sistema__'
 
 
+def _texto(ator: str | Usuario) -> str:
+    return ator.email if isinstance(ator, Usuario) else str(ator)
+
+
+def _conta(ator: str | Usuario) -> int | None:
+    if isinstance(ator, Usuario):
+        return ator.pk
+
+    if ator == ATOR_SISTEMA:
+        return None
+
+    return Usuario.objects.filter(email=str(ator)).values_list('pk', flat=True).first()
+
+
 def registrar_evento(
     *,
     categoria: str,
     tipo: str,
     entidade: str,
     entidade_id: int | str,
-    ator: str = ATOR_SISTEMA,
+    ator: str | Usuario = ATOR_SISTEMA,
     status: str = StatusEvento.OK,
     motivo: str = '',
     detalhe: dict[str, Any] | None = None,
@@ -50,12 +65,18 @@ def registrar_evento(
     tem oportunidade nenhuma - o diagrama a poe NOT NULL e nao cabe a trilha
     inteira. `entidade`/`entidade_id` seguem sendo a referencia duravel: eles
     sobrevivem ao dia em que a oportunidade for apagada.
+
+    `ator` chega como conta ou como e-mail, e o texto gravado e sempre o
+    e-mail. O e-mail de uma conta liga o evento a ela; o do sistema e o
+    digitado num formulario publico podem nao ser de ninguem, e o evento fica
+    so com o texto.
     """
     return EventoAuditoria.objects.create(
         ocorrido_em=ocorrido_em or timezone.now(),
         categoria=categoria,
         tipo=tipo,
-        ator=str(ator),
+        ator=_texto(ator),
+        conta_do_ator_id=_conta(ator),
         entidade=entidade,
         entidade_id=str(entidade_id),
         status=status,

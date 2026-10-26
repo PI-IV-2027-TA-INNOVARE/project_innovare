@@ -18,17 +18,17 @@ from core.models import lista_fixa
 
 
 class TipoExecucaoIA(models.TextChoices):
-    COPILOTO = 'copiloto', 'Copiloto de estruturacao'
-    COMPETENCIAS = 'competencias', 'Derivacao de competencias'
+    COPILOTO = 'copiloto', 'Copiloto de estruturação'
+    COMPETENCIAS = 'competencias', 'Derivação de competências'
     MATCHING = 'matching', 'Matching'
-    PREANALISE = 'preanalise', 'Pre-analise de maturidade'
-    EMBEDDING = 'embedding', 'Geracao de embedding'
+    PREANALISE = 'preanalise', 'Pré-análise de maturidade'
+    EMBEDDING = 'embedding', 'Cálculo de afinidade com o tema'
 
 
 class StatusExecucao(models.TextChoices):
     PENDENTE = 'pendente', 'Pendente'
     EXECUTANDO = 'executando', 'Executando'
-    OK = 'ok', 'Concluida'
+    OK = 'ok', 'Concluída'
     ERRO = 'erro', 'Erro'
 
 

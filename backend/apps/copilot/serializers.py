@@ -4,13 +4,14 @@ Contrato da Proposta Estruturada (RF04) e Sessao do Copiloto.
 from rest_framework import serializers
 
 from apps.copilot.models import (
-    EstadoSessao,
     Lacuna,
     MensagemCopiloto,
     PropostaEstruturada,
     SessaoCopiloto,
 )
-from apps.opportunities.models import Oportunidade
+from apps.copilot.services.copiloto import ELEMENTOS, TITULOS
+
+SITUACOES_DO_ELEMENTO = ('ausente', 'inconsistente', 'pouco_desenvolvido', 'adequado')
 
 
 class PropostaEstruturadaSerializer(serializers.ModelSerializer):
@@ -98,6 +99,7 @@ class SessaoCopilotoSerializer(serializers.ModelSerializer):
             'iniciada_por_nome',
             'estado',
             'estado_rotulo',
+            'sintese',
             'criado_em',
             'encerrado_em',
         ]
@@ -130,6 +132,19 @@ class LacunaSerializer(serializers.ModelSerializer):
     severidade_rotulo = serializers.CharField(
         source='get_severidade_display', read_only=True, default=None
     )
+    natureza_rotulo = serializers.CharField(
+        source='get_natureza_display', read_only=True, default=None
+    )
+    criterio_codigo = serializers.CharField(
+        source='criterio.codigo', read_only=True, default=None
+    )
+    criterio_rotulo = serializers.SerializerMethodField()
+
+    def get_criterio_rotulo(self, lacuna) -> str | None:
+        if lacuna.criterio_id is None:
+            return None
+
+        return lacuna.criterio.descricao.partition(' — ')[0].strip() or lacuna.criterio.codigo
 
     class Meta:
         model = Lacuna
@@ -140,6 +155,11 @@ class LacunaSerializer(serializers.ModelSerializer):
             'campo_afetado',
             'descricao',
             'recomendacao',
+            'natureza',
+            'natureza_rotulo',
+            'pergunta',
+            'criterio_codigo',
+            'criterio_rotulo',
             'severidade',
             'severidade_rotulo',
             'resolvida',
@@ -149,15 +169,29 @@ class LacunaSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class SaidaCopilotoSerializer(serializers.Serializer):
+class TextoOuLista(serializers.Field):
     """
-    A fronteira com o provedor de IA (AGENTS.md 2.2).
+    Texto, ou lista de textos juntada por linha.
 
-    O que o Gemini devolve nao entra no banco sem passar por aqui: campo com
-    tipo errado invalida a rodada inteira, e a execucao fica registrada como
-    saida nao aceita em vez de gravar meia proposta. Chave desconhecida - o
-    `_erro_parse` do gateway, por exemplo - e ignorada.
+    A sugestao para os objetivos especificos pode vir como lista; a tela mostra
+    um objetivo por linha, e e por linha que ela volta ao aceitar.
     """
+
+    def to_internal_value(self, valor):
+        if isinstance(valor, list) and all(isinstance(item, str) for item in valor):
+            return '\n'.join(item.strip() for item in valor if item.strip())
+
+        if isinstance(valor, str):
+            return valor.strip()
+
+        raise serializers.ValidationError('Esperava texto ou lista de textos.')
+
+    def to_representation(self, valor):
+        return valor
+
+
+class PreenchimentosSerializer(serializers.Serializer):
+    """O texto que a IA escreveu para os elementos vazios."""
 
     problema_pesquisa = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
@@ -185,6 +219,57 @@ class SaidaCopilotoSerializer(serializers.Serializer):
     )
 
 
+class SugestaoIASerializer(serializers.Serializer):
+    elemento = serializers.ChoiceField(choices=ELEMENTOS)
+    texto_sugerido = TextoOuLista()
+    motivo = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
+    )
+
+
+class AvaliacaoIASerializer(serializers.Serializer):
+    elemento = serializers.ChoiceField(choices=ELEMENTOS)
+    situacao = serializers.ChoiceField(choices=SITUACOES_DO_ELEMENTO)
+    o_que_falta = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
+    )
+    recomendacao = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
+    )
+    pergunta = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
+    )
+
+
+class SaidaCopilotoSerializer(serializers.Serializer):
+    """
+    A fronteira com o provedor de IA (AGENTS.md 2.2).
+
+    O que o Gemini devolve nao entra no banco sem passar por aqui: campo com
+    tipo errado invalida a rodada inteira, e a execucao fica registrada como
+    saida nao aceita em vez de gravar meia proposta. Chave desconhecida - o
+    `_erro_parse` do gateway, por exemplo - e ignorada.
+    """
+
+    preenchimentos = PreenchimentosSerializer(required=False)
+    sugestoes = SugestaoIASerializer(many=True, required=False)
+    avaliacao = AvaliacaoIASerializer(many=True, required=False)
+
+
+class SinteseIASerializer(serializers.Serializer):
+    """A interpretacao inicial da entrada, como a IA devolve."""
+
+    problema = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
+    )
+    contexto = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
+    )
+    o_que_falta = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False, default=list
+    )
+
+
 class PerguntaOrientadoraSerializer(serializers.Serializer):
     """Uma pergunta do banco da baseline PIPE, ligada ao elemento que falta."""
 
@@ -193,6 +278,7 @@ class PerguntaOrientadoraSerializer(serializers.Serializer):
     pergunta = serializers.CharField(read_only=True)
     motivo = serializers.CharField(read_only=True)
     campo = serializers.CharField(read_only=True)
+    origem = serializers.ChoiceField(choices=('base_pipe', 'copiloto'), read_only=True)
 
 
 class EstadoCopilotoSerializer(serializers.Serializer):
@@ -211,9 +297,56 @@ class EstadoCopilotoSerializer(serializers.Serializer):
 
 
 class RespostaCopilotoSerializer(serializers.Serializer):
-    """A resposta humana a uma pergunta orientadora."""
+    """
+    A resposta humana a uma pergunta orientadora.
 
-    texto = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    `elemento` e `pergunta` dizem a qual pergunta ela responde: e o que deixa a
+    proxima estruturacao saber onde usar o texto.
+    """
+
+    texto = serializers.CharField(
+        allow_blank=False, trim_whitespace=True, max_length=4000
+    )
+    elemento = serializers.ChoiceField(
+        choices=ELEMENTOS, required=False, allow_blank=True
+    )
+    pergunta = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=True, max_length=1000
+    )
+
+
+class SinteseCopilotoSerializer(serializers.Serializer):
+    """A sintese da entrada, corrigida pelo Supervisor."""
+
+    sintese = serializers.CharField(
+        allow_blank=True, trim_whitespace=True, max_length=4000
+    )
+
+
+class AceitarSugestaoSerializer(serializers.Serializer):
+    """A sugestao que o Supervisor aceitou, com o texto que ele viu."""
+
+    elemento = serializers.ChoiceField(choices=ELEMENTOS)
+    texto = serializers.CharField(
+        allow_blank=False, trim_whitespace=True, max_length=8000
+    )
+
+
+class SugestaoSerializer(serializers.Serializer):
+    """
+    O que a IA mudaria num elemento ja escrito.
+
+    Nao fica gravada: vale para a rodada que a produziu, e so entra na proposta
+    se o Supervisor aceitar.
+    """
+
+    elemento = serializers.CharField(read_only=True)
+    elemento_rotulo = serializers.SerializerMethodField()
+    texto_sugerido = serializers.CharField(read_only=True)
+    motivo = serializers.CharField(read_only=True)
+
+    def get_elemento_rotulo(self, sugestao) -> str:
+        return TITULOS.get(sugestao['elemento'], sugestao['elemento'])
 
 
 class ResultadoEstruturacaoSerializer(serializers.Serializer):
@@ -227,7 +360,9 @@ class ResultadoEstruturacaoSerializer(serializers.Serializer):
     preenchidos = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
+    sugestoes = SugestaoSerializer(many=True, read_only=True)
     lacunas = LacunaSerializer(many=True, read_only=True)
     fallback_usado = serializers.BooleanField(read_only=True)
+    motivo_fallback = serializers.CharField(read_only=True, allow_null=True)
     ai_run_id = serializers.UUIDField(read_only=True, allow_null=True)
     proposta = PropostaEstruturadaSerializer(read_only=True)

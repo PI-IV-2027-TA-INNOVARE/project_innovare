@@ -114,7 +114,7 @@ class MembroRedeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id_membro', 'situacao', 'criado_em', 'atualizado_em']
 
-    def get_tem_acesso(self, membro):
+    def get_tem_acesso(self, membro) -> bool:
         return membro.usuario_id is not None
 
     def _nomes(self, membro, tipo):

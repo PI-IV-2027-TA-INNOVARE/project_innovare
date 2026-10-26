@@ -207,6 +207,25 @@ describe('AbaPreAnalise', () => {
     expect(screen.queryByText('Desafio tecnológico')).not.toBeInTheDocument()
   })
 
+  it('explica que o limite de gasto barrou a pré-análise', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'erro',
+      erro: 'limite_da_oportunidade',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    expect(
+      await screen.findByText(/esta oportunidade atingiu o limite de gasto com ia/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/tente reavaliar em alguns minutos/i)).not.toBeInTheDocument()
+  })
+
   /**
    * O motivo chegava como código (`provedor_indisponivel`) colado a uma
    * justificativa de engenharia. O Supervisor precisa do que aconteceu e do
@@ -253,7 +272,7 @@ describe('AbaPreAnalise', () => {
     expect(screen.queryByText('Fragil')).not.toBeInTheDocument()
   })
 
-  it('resume as dimensões por nível e põe a lacuna dentro da dimensão dela', async () => {
+  it('resume as dimensões por nível e conta as lacunas de cada uma', async () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue({
       ...ANALISE,
       lacunas: [
@@ -267,10 +286,56 @@ describe('AbaPreAnalise', () => {
 
     renderizar()
 
-    const dimensao = (await screen.findByText('Desafio tecnológico')).closest('li')
-    expect(dimensao).toHaveTextContent('Falta quantificar a perda atual.')
+    const dimensao = (
+      await screen.findByRole('heading', { name: 'Desafio tecnológico' })
+    ).closest('li')
+    expect(dimensao).toHaveTextContent('1 lacuna em O que melhorar')
     expect(screen.getByText('1 consolidada')).toBeInTheDocument()
-    expect(screen.queryByText('Outras lacunas')).not.toBeInTheDocument()
+  })
+
+  it('mostra cada lacuna com o critério e a recomendação logo abaixo', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      lacunas: [
+        {
+          id_lacuna: 8,
+          campo_afetado: 'plano_pesquisa',
+          descricao: 'Falta o controle negativo.',
+          criterio_codigo: 'A3',
+          criterio_rotulo: 'Metodologia adequada',
+        },
+        {
+          id_lacuna: 9,
+          campo_afetado: 'viabilidade',
+          descricao: 'Não há prazo.',
+          criterio_codigo: null,
+        },
+      ],
+      recomendacoes: [
+        { id_recomendacao: 20, id_lacuna: 8, texto: 'Defina o controle negativo.', acatada: false },
+        { id_recomendacao: 21, id_lacuna: 9, texto: 'Monte um cronograma.', acatada: false },
+        { id_recomendacao: 22, id_lacuna: null, texto: 'Revise o resumo.', acatada: true },
+      ],
+    })
+
+    renderizar()
+
+    const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
+    expect(ligada).toHaveTextContent('Plano de pesquisa')
+    expect(ligada).toHaveTextContent('A3 · Metodologia adequada')
+    expect(within(ligada).getByText('Defina o controle negativo.')).toBeInTheDocument()
+
+    await userEvent.click(within(ligada).getByRole('button', { name: /marcar como acatada/i }))
+    await waitFor(() =>
+      expect(api.acatarRecomendacao).toHaveBeenCalledWith('OP-2026-001', 20, true),
+    )
+
+    const semCriterio = screen.getByText('Não há prazo.').closest('li')
+    expect(semCriterio).toHaveTextContent('Sem evidência na proposta')
+    expect(within(semCriterio).getByText('Monte um cronograma.')).toBeInTheDocument()
+
+    expect(screen.getByText('Outras recomendações')).toBeInTheDocument()
+    expect(screen.getByText(/1 de 3 acatadas/)).toBeInTheDocument()
   })
 
   it('avisa que falta a equipe antes de executar sem ela', async () => {
@@ -364,5 +429,17 @@ describe('AbaPreAnalise', () => {
     expect(
       screen.queryByRole('button', { name: /reavaliar/i }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('AbaPreAnalise — resumo na tela', () => {
+  it('separa a primeira frase da avaliação do que vai para os detalhes', async () => {
+    const { primeiraFrase } = await import('./AbaPreAnalise')
+
+    expect(primeiraFrase('O desafio está descrito. Falta o estado da arte.')).toEqual({
+      frase: 'O desafio está descrito.',
+      resto: 'Falta o estado da arte.',
+    })
+    expect(primeiraFrase('Sem ponto final')).toEqual({ frase: 'Sem ponto final', resto: '' })
   })
 })

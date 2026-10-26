@@ -1,0 +1,36 @@
+# P&D Connect em containers, para desenvolvimento: `docker compose up`.
+# Precisa so do Docker e do backend/.env (copie de backend/.env.example).
+# O banco e o do backend/.env; o compose nao sobe Postgres nem aplica migration.
+#
+# O backend le o backend/.env pela pasta montada, como fora do Docker. Nao use
+# `env_file`: o Compose interpreta `$` nos valores e corromperia a SECRET_KEY.
+#
+# As portas ficam presas a 127.0.0.1: o runserver nao e servidor para a rede, e
+# a API fala com o banco do .env. Quem esta na mesma rede nao chega aqui.
+
+name: pdconnect
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./IA:/app/IA:ro
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE_URL: /api
+      VITE_API_PROXY_TARGET: http://backend:8000
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    depends_on:
+      - backend

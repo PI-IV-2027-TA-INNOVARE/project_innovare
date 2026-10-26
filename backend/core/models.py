@@ -51,7 +51,7 @@ class CoerenteComAPreAnalise:
 
         if divergem:
             raise ErroDeDominio(
-                'A pre-analise informada pertence a outra oportunidade.',
+                'A pré-análise informada pertence a outra oportunidade.',
                 codigo='referencias_divergentes',
             )
 

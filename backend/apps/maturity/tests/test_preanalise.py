@@ -275,6 +275,21 @@ class ExecucaoDaPreAnaliseTests(PreAnaliseBaseTests):
         self.assertEqual(analise.dimensoes.count(), 0)
         self.assertEqual(analise.sintese, '')
 
+    def test_execucao_barrada_pelo_limite_de_gasto_diz_o_motivo(self):
+        self.importar_criterios()
+
+        analise = self.analisar(provedor=ProvedorIndisponivel(motivo='limite_da_oportunidade'))
+
+        self.assertEqual(analise.status, StatusExecucao.ERRO)
+        self.assertEqual(analise.erro, 'limite_da_oportunidade')
+
+    def test_execucao_barrada_pelo_limite_do_mes_diz_o_motivo(self):
+        self.importar_criterios()
+
+        analise = self.analisar(provedor=ProvedorIndisponivel(motivo='limite_do_mes'))
+
+        self.assertEqual(analise.erro, 'limite_do_mes')
+
     def test_reavaliacao_cria_execucao_nova_sem_apagar_a_anterior(self):
         """RF10: reavaliar depois das melhorias e o caso previsto."""
         self.importar_criterios()
@@ -429,7 +444,7 @@ class TextoDaEquipeTests(PreAnaliseBaseTests):
 
     def _consultas_para(self, oportunidade):
         with CaptureQueriesContext(connection) as consultas:
-            texto = _texto_da_equipe(oportunidade)
+            texto, _ = _texto_da_equipe(oportunidade)
 
         return len(consultas), texto
 
@@ -438,7 +453,8 @@ class TextoDaEquipeTests(PreAnaliseBaseTests):
         cinco, texto = self._consultas_para(self._equipe_com(5))
 
         self.assertEqual(uma, cinco)
-        self.assertEqual(texto.count('Pessoa'), 5)
+        self.assertEqual(texto.count('- Pesquisador '), 5)
+        self.assertNotIn('Pessoa', texto)
 
 
 def _preanalise_com(niveis, lacunas=1):
@@ -453,10 +469,13 @@ def _preanalise_com(niveis, lacunas=1):
             for dimensao, nivel in niveis.items()
         ],
         'lacunas': [
-            {'dimensao': 'infraestrutura', 'descricao': f'Lacuna {indice}.'}
+            {'id': f'L{indice}', 'dimensao': 'infraestrutura', 'descricao': f'Lacuna {indice}.'}
             for indice in range(lacunas)
         ],
-        'recomendacoes': ['Descrever a infraestrutura disponivel.'],
+        'recomendacoes': [
+            {'lacuna': f'L{indice}', 'texto': 'Descrever a infraestrutura disponivel.'}
+            for indice in range(lacunas)
+        ],
         'sintese': 'Sintese da rodada.',
     }
 

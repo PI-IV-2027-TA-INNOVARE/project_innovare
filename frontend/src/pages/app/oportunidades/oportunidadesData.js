@@ -220,7 +220,7 @@ export function eventoDaApi(evento, indice) {
     id: `${evento.ocorrido_em}-${indice}`,
     em: Date.parse(evento.ocorrido_em),
     categoria: evento.categoria,
-    ator: detalhe.autor_nome || evento.ator || 'Sistema',
+    ator: evento.ator_nome || detalhe.autor_nome || evento.ator || 'Sistema',
     texto:
       detalhe.texto ||
       TEXTO_DO_EVENTO[evento.tipo] ||

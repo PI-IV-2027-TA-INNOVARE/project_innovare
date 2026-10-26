@@ -326,6 +326,12 @@ export default function ParametrosSection() {
               esbarra numa área fora do seu perfil. Sem contato ali, a pessoa fica
               sem saída.
             </p>
+            <p className="perfil-card__description">
+              O encarregado de dados é um Administrador da AC2. Para publicar o nome
+              e o e-mail dele, escreva &quot;Encarregado de dados&quot; em{' '}
+              <strong>Do que cuida</strong>. O contato passa a aparecer na página de
+              privacidade.
+            </p>
           </div>
 
           <button

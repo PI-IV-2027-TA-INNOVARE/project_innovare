@@ -31,6 +31,35 @@ class TetoDeCustoExcedido(ErroDeDominio):
     """O mes bateu no teto configurado. A chamada ao provedor nao sai."""
 
 
+MOTIVO_SEM_IA = 'ia_indisponivel'
+MOTIVO_FALHA_DO_PROVEDOR = 'falha_do_provedor'
+MOTIVO_LIMITE_DA_OPORTUNIDADE = 'limite_da_oportunidade'
+MOTIVO_LIMITE_DO_MES = 'limite_do_mes'
+
+MOTIVO_DO_ESTOURO = {
+    'teto_por_oportunidade_excedido': MOTIVO_LIMITE_DA_OPORTUNIDADE,
+    'teto_de_custo_excedido': MOTIVO_LIMITE_DO_MES,
+}
+
+EXPLICACAO_DO_MOTIVO = {
+    MOTIVO_SEM_IA: 'o serviço de IA está indisponível',
+    MOTIVO_FALHA_DO_PROVEDOR: 'o serviço de IA não respondeu',
+    MOTIVO_LIMITE_DA_OPORTUNIDADE: (
+        'esta oportunidade atingiu o limite de gasto com IA. Quem administra '
+        'a plataforma pode rever o limite'
+    ),
+    MOTIVO_LIMITE_DO_MES: (
+        'o limite mensal de gasto com IA foi atingido. A IA volta no próximo '
+        'mês ou quando o limite for aumentado'
+    ),
+}
+
+
+def explicar_motivo(motivo: str | None) -> str:
+    """Por que a IA nao foi chamada, em linguagem de tela."""
+    return EXPLICACAO_DO_MOTIVO.get(motivo or MOTIVO_SEM_IA, EXPLICACAO_DO_MOTIVO[MOTIVO_SEM_IA])
+
+
 def precos() -> tuple[float, float]:
     """Os precos vigentes por milhao de tokens, entrada e saida."""
     return (

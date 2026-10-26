@@ -92,7 +92,9 @@ COLUNAS_DO_DIAGRAMA = {
     'Lacuna_Proposta': [
         'campo_afetado', 'descricao', 'recomendacao', 'id_proposta',
     ],
-    'Historico_Evento': ['id_oportunidade', 'tipo_evento', 'data_hora', 'descricao'],
+    'Historico_Evento': [
+        'id_oportunidade', 'id_ator', 'tipo_evento', 'data_hora', 'descricao',
+    ],
     'Membro_Rede': ['experiencia_profissional'],
     'Oportunidade': ['status', 'data_criacao'],
     'Proposta_Estruturada': ['problema', 'inovacao', 'infraestrutura'],

@@ -5,9 +5,11 @@ import { useAuth } from '../../../context/AuthContext'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES, roleLabel } from '../../../lib/roles'
+import { mascararTelefone, telefoneValido } from '../../../lib/telefone'
 import {
   alterarSenha,
   atualizarMeuPerfil,
+  atualizarTelefone,
   obterMeuPerfil,
 } from '../../../services/pdConnectApi'
 import {
@@ -21,6 +23,7 @@ import {
 } from '../rede/redeData'
 import ListaDeFormacoes from '../rede/ListaDeFormacoes'
 import ListaEditavel from './ListaEditavel'
+import MeusDados from './MeusDados'
 import './PerfilPage.scss'
 
 const PAPEIS_DA_REDE = [ROLES.PESQUISADOR, ROLES.SUPERVISOR]
@@ -159,6 +162,66 @@ function TrocaDeSenha({ onConcluido }) {
       <button type="submit" className="admin-btn" disabled={salvando}>
         <Icone icon={appIcons.done} />
         {salvando ? 'Alterando...' : 'Alterar senha'}
+      </button>
+    </form>
+  )
+}
+
+function TelefoneDeContato({ inicial, onConcluido }) {
+  const [telefone, setTelefone] = useState(() => mascararTelefone(inicial))
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const enviar = async (event) => {
+    event.preventDefault()
+
+    if (!telefoneValido(telefone)) {
+      setErro('Telefone incompleto. Informe o DDD e o número, como (19) 99876-5432.')
+      return
+    }
+
+    setSalvando(true)
+
+    try {
+      const dados = await atualizarTelefone(telefone)
+      setTelefone(mascararTelefone(dados?.telefone ?? telefone))
+      onConcluido(telefone ? 'Telefone salvo.' : 'Telefone removido.')
+    } catch (problema) {
+      setErro(problema?.message || 'Não foi possível salvar o telefone.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={enviar} noValidate>
+      <div className="admin-field">
+        <label className="admin-field__label" htmlFor="campo-telefone">Telefone</label>
+        <input
+          id="campo-telefone"
+          type="tel"
+          inputMode="numeric"
+          className="admin-input"
+          placeholder="(00) 00000-0000"
+          value={telefone}
+          onChange={(event) => {
+            setTelefone(mascararTelefone(event.target.value))
+            setErro('')
+          }}
+          aria-describedby="dica-telefone"
+        />
+        <span id="dica-telefone" className="admin-field__hint">
+          Opcional. Só você e quem administra as contas veem este número.
+        </span>
+      </div>
+
+      {erro ? (
+        <p className="admin-field__error" role="alert">{erro}</p>
+      ) : null}
+
+      <button type="submit" className="admin-btn" disabled={salvando}>
+        <Icone icon={appIcons.save} />
+        {salvando ? 'Salvando...' : 'Salvar telefone'}
       </button>
     </form>
   )
@@ -332,11 +395,27 @@ export default function PerfilPage() {
           </label>
         </Secao>
 
+        {user?.role === ROLES.DEMANDANTE ? (
+          <Secao
+            title="Contato"
+            description="Um telefone para a equipe da AC2 falar com a sua empresa."
+          >
+            <TelefoneDeContato inicial={user?.telefone || ''} onConcluido={showToast} />
+          </Secao>
+        ) : null}
+
         <Secao
           title="Senha"
           description="Troque quando quiser. A nova senha vale no próximo acesso."
         >
           <TrocaDeSenha onConcluido={showToast} />
+        </Secao>
+
+        <Secao
+          title="Meus dados"
+          description="Baixe uma cópia do que a plataforma guarda sobre você, ou peça a exclusão da conta."
+        >
+          <MeusDados aoConcluir={showToast} />
         </Secao>
 
         {carregandoPerfil ? (

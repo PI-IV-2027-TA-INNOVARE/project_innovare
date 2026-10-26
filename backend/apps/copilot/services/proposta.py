@@ -34,7 +34,7 @@ def proposta_de(oportunidade: Oportunidade) -> PropostaEstruturada:
 
     if proposta is None:
         raise RecursoNaoEncontrado(
-            'Esta oportunidade ainda nao tem proposta estruturada.',
+            'Esta oportunidade ainda não tem proposta estruturada.',
             CODIGO_INEXISTENTE,
         )
 
@@ -50,7 +50,7 @@ class IniciarPropostaService:
     ) -> PropostaEstruturada:
         if getattr(oportunidade, 'proposta', None) is not None:
             raise ConflitoDeEstado(
-                'Esta oportunidade ja tem proposta estruturada.',
+                'Esta oportunidade já tem proposta estruturada.',
                 'proposta_duplicada',
             )
 

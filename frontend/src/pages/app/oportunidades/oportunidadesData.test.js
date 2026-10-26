@@ -40,6 +40,22 @@ describe('eventoDaApi — observação do Supervisor (PB65)', () => {
     expect(evento.ator).toBe('Rafael Antunes')
   })
 
+  it('prefere o nome lido da conta ao que um evento antigo gravou', () => {
+    const evento = eventoDaApi(
+      {
+        ocorrido_em: '2026-09-22T10:00:00.000Z',
+        categoria: 'observacao',
+        tipo: 'observacao_registrada',
+        ator: 'supervisor@ac2.example',
+        ator_nome: 'Pessoa removida',
+        detalhe: { texto: 'Nota.', autor_nome: 'Rafael Antunes' },
+      },
+      0
+    )
+
+    expect(evento.ator).toBe('Pessoa removida')
+  })
+
   it('não mexe no texto dos eventos que já tinham rótulo', () => {
     const evento = eventoDaApi(
       {

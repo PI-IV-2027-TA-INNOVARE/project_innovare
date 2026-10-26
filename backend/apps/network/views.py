@@ -155,7 +155,7 @@ class PerfilProprioView(views.APIView):
 
         if membro is None:
             raise RecursoNaoEncontrado(
-                'Sua conta nao esta vinculada a um cadastro na rede interna.',
+                'Sua conta ainda não está ligada a um cadastro na rede interna. Fale com o Supervisor.',
                 codigo='sem_membro_rede',
             )
 
