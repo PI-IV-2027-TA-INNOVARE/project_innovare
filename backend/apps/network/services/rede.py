@@ -482,7 +482,9 @@ class InativarMembroService:
     @transaction.atomic
     def execute(self, *, membro: MembroRede, ator: Usuario) -> MembroRede:
         membro = (
-            MembroRede.objects.select_for_update().select_related('usuario').get(pk=membro.pk)
+            MembroRede.objects.select_for_update(of=('self',))
+            .select_related('usuario')
+            .get(pk=membro.pk)
         )
 
         if membro.situacao == SituacaoMembro.INATIVO:
@@ -530,7 +532,9 @@ class ReativarMembroService:
     @transaction.atomic
     def execute(self, *, membro: MembroRede, ator: Usuario) -> MembroRede:
         membro = (
-            MembroRede.objects.select_for_update().select_related('usuario').get(pk=membro.pk)
+            MembroRede.objects.select_for_update(of=('self',))
+            .select_related('usuario')
+            .get(pk=membro.pk)
         )
 
         if membro.situacao != SituacaoMembro.INATIVO:
