@@ -112,6 +112,19 @@ export default function AuthNav() {
           Meu perfil
         </button>
 
+        <button
+          type="button"
+          className="profile-menu__item"
+          role="menuitem"
+          onClick={() => {
+            setProfileOpen(false)
+            navigate('/privacidade')
+          }}
+        >
+          <Icone icon={appIcons.lock} />
+          Privacidade e seus dados
+        </button>
+
         {isAdministrador(user) ? (
           <button
             type="button"
@@ -212,6 +225,12 @@ export default function AuthNav() {
                 {item.label}
               </NavLink>
             ))}
+            <NavLink
+              to="/privacidade"
+              className={({ isActive }) => `auth-nav__drawer-link${isActive ? ' active' : ''}`}
+            >
+              Privacidade e seus dados
+            </NavLink>
           </nav>
 
           <div className="auth-nav__drawer-footer">

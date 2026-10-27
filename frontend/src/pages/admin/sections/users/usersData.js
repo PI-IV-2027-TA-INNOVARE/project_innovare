@@ -134,7 +134,11 @@ export const PERFIS_PROVISIONAVEIS = Object.freeze(
   PERFIS.filter((perfil) => perfil.id !== 'pesquisador')
 )
 
+export const SEM_EMPRESA = 'Sem empresa vinculada'
+
 export function daApi(registro) {
+  const demandante = registro.papel === 'demandante'
+
   return {
     id: registro.id_usuario,
     nome: registro.nome,
@@ -142,17 +146,42 @@ export function daApi(registro) {
     perfil: registro.papel,
     status: registro.situacao,
     instituicao: registro.instituicao || '',
+    cnpj: registro.cnpj || '',
+    nomeEmpresa: demandante ? registro.instituicao || '' : '',
+    telefone: registro.telefone || '',
+    semEmpresa: demandante && !registro.instituicao,
     ultimoAcesso: registro.ultimo_acesso ? Date.parse(registro.ultimo_acesso) : null,
     aguardandoPrimeiroAcesso: Boolean(registro.aguardando_primeiro_acesso),
+    exclusaoSolicitadaEm: registro.exclusao_solicitada_em
+      ? Date.parse(registro.exclusao_solicitada_em)
+      : null,
+    anonimizada: Boolean(registro.anonimizada),
   }
 }
 
 export function paraApi(valores) {
+  if (valores.perfil === 'demandante') {
+    return {
+      email: valores.email,
+      papel: valores.perfil,
+      cnpj: valores.cnpj,
+      nome_empresa: valores.nomeEmpresa,
+    }
+  }
+
   return {
     nome: valores.nome,
     email: valores.email,
     papel: valores.perfil,
   }
+}
+
+export function vinculoDe(usuario) {
+  if (usuario.perfil === 'demandante' && usuario.semEmpresa) {
+    return SEM_EMPRESA
+  }
+
+  return usuario.instituicao
 }
 
 export function perfilLabel(id) {

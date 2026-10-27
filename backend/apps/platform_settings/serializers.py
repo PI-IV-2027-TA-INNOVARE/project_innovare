@@ -75,7 +75,7 @@ class TemaPatchSerializer(serializers.Serializer):
         if not isinstance(data, dict):
             raise serializers.ValidationError({
                 api_settings.NON_FIELD_ERRORS_KEY: [
-                    'O corpo do merge patch precisa ser um objeto.'
+                    'As alterações precisam vir como um objeto.'
                 ]
             })
 
@@ -111,7 +111,7 @@ class TemaPatchSerializer(serializers.Serializer):
     def _recusa(self, token, valor):
         """O motivo da recusa, ou `None` quando o par token/cor passa."""
         if not NOME_DE_TOKEN.match(str(token)):
-            return 'Nome de token invalido.'
+            return 'Nome de cor inválido.'
 
         if valor is None:
             return None
@@ -129,6 +129,22 @@ class ContatoSuporteSerializer(serializers.Serializer):
     nome = serializers.CharField(max_length=160)
     email = serializers.EmailField()
     papel = serializers.CharField(max_length=120, allow_blank=True, required=False, default='')
+
+
+class EncarregadoSerializer(serializers.Serializer):
+    nome = serializers.CharField()
+    email = serializers.EmailField()
+
+
+class RetencaoSerializer(serializers.Serializer):
+    eventos_conta_meses = serializers.IntegerField()
+    anexos_apos_arquivamento_meses = serializers.IntegerField()
+
+
+class PrivacidadeSerializer(serializers.Serializer):
+    encarregado = EncarregadoSerializer(allow_null=True)
+    contatos = ContatoSuporteSerializer(many=True)
+    retencao = RetencaoSerializer()
 
 
 def secao_vazia(secao):

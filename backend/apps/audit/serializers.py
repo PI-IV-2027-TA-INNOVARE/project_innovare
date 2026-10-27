@@ -36,7 +36,7 @@ class FiltroTrilhaSerializer(serializers.Serializer):
 
         if desde and ate and desde > ate:
             raise serializers.ValidationError(
-                {'desde': 'O inicio do periodo e posterior ao fim.'}
+                {'desde': 'O início do período vem depois do fim.'}
             )
 
         return dados

@@ -14,12 +14,22 @@ psycopg[binary,pool]==3.3.6
 psycopg-pool==3.3.3
 python-decouple==3.8
 
+# --- Seguranca ----------------------------------------------------------------
+#
+# Cifra dos backups do banco (scripts/backup_cifrado.py). Ja vinha instalada
+# como dependencia do google-auth; a linha fixa a versao em uso. Aprovada em
+# 24/10/2026 (L5 do plano de integracao).
+cryptography==50.0.2
+
 # --- IA e Assincrono (Fases 3.2/3.3) ------------------------------------------
 #
 # `pgvector` nao esta aqui de proposito: o embedding fica em coluna `float[]` e
 # a similaridade e cosseno em `numpy`, dentro do servico de matching - ver
 # PLANO_IMPLEMENTACAO.md 8.3. Reintroduzir a extensao e portao de decisao (3.2).
-google-generativeai==0.8.5
+# `google-genai` substituiu a `google-generativeai` em 24/10/2026 (SPEC-08): so
+# ela limita o raciocinio do modelo. Exige Python 3.11+ na pratica - o projeto
+# roda em 3.12.
+google-genai==2.33.0
 sentence-transformers==5.5.0
 celery==5.5.3
 redis==6.1.1

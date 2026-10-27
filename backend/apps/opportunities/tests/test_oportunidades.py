@@ -275,10 +275,9 @@ class EscopoDeLeituraTests(OportunidadeBaseTests):
 
 class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
     """
-    PB61: a fila mostra "as oportunidades que aguardam sua atuacao". Sem campo
-    de prioridade (decisao do PO), o que da para dizer com o que existe e
-    onde a vez e do Supervisor: a oportunidade que ninguem comecou, a que
-    espera a decisao e a que voltou de Revisar com a resposta do Demandante.
+    PB61: a fila mostra "as oportunidades que aguardam sua atuacao". A vez e
+    do Supervisor na oportunidade que ninguem comecou, na que espera a decisao
+    e na que voltou de Revisar com a resposta do Demandante.
     So conta a que ele conduz ou que ainda nao tem responsavel.
     """
 
@@ -312,6 +311,7 @@ class AguardandoMinhaAtuacaoTests(OportunidadeBaseTests):
         self.assertTrue(self.marca())
 
     def test_revisar_so_aguarda_depois_da_resposta_do_demandante(self):
+        self.mudar(situacao=SituacaoOportunidade.AGUARDANDO_DECISAO)
         self.client.post(
             reverse('oportunidade-decisao', args=[self.codigo]),
             {'tipo': TipoDecisao.REVISAR, 'justificativa': 'Falta descrever o processo.'},
@@ -412,7 +412,8 @@ class DecisaoTests(OportunidadeBaseTests):
         self.codigo = self.criar_externo().data['codigo']
         self.oportunidade = Oportunidade.objects.get(codigo=self.codigo)
         self.oportunidade.responsavel = self.membro_supervisor
-        self.oportunidade.save(update_fields=['responsavel'])
+        self.oportunidade.situacao = SituacaoOportunidade.AGUARDANDO_DECISAO
+        self.oportunidade.save(update_fields=['responsavel', 'situacao'])
 
     def url(self):
         return reverse('oportunidade-decisao', args=[self.codigo])
@@ -477,7 +478,8 @@ class ComplementacaoTests(OportunidadeBaseTests):
         self.codigo = self.criar_externo().data['codigo']
         self.oportunidade = Oportunidade.objects.get(codigo=self.codigo)
         self.oportunidade.responsavel = self.membro_supervisor
-        self.oportunidade.save(update_fields=['responsavel'])
+        self.oportunidade.situacao = SituacaoOportunidade.AGUARDANDO_DECISAO
+        self.oportunidade.save(update_fields=['responsavel', 'situacao'])
 
     def url(self):
         return reverse('oportunidade-complementar', args=[self.codigo])
@@ -500,6 +502,18 @@ class ComplementacaoTests(OportunidadeBaseTests):
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
         self.assertIn('Laudos anexados', resposta.data['contexto'])
+
+    def test_o_contexto_marca_a_complementacao_sem_o_nome_de_quem_enviou(self):
+        """O contexto vai para a IA; quem respondeu ja esta na trilha."""
+        self.pedir_revisao()
+        self.como(self.demandante)
+
+        contexto = self.client.post(
+            self.url(), {'texto': 'Laudos anexados.'}, format='json'
+        ).data['contexto']
+
+        self.assertIn('[Complementação do Demandante]', contexto)
+        self.assertNotIn(self.demandante.nome, contexto)
 
     def test_complementar_sem_pedido_aberto_e_conflito(self):
         self.como(self.demandante)
@@ -618,6 +632,9 @@ class HistoricoTests(OportunidadeBaseTests):
             {'contexto': 'Ocorre no lote de verao.'},
             format='json',
         )
+        Oportunidade.objects.filter(codigo=self.codigo).update(
+            situacao=SituacaoOportunidade.AGUARDANDO_DECISAO
+        )
         self.client.post(
             reverse('oportunidade-decisao', args=[self.codigo]),
             {'tipo': TipoDecisao.CONTINUAR, 'justificativa': 'Maturidade suficiente.'},
@@ -691,6 +708,9 @@ class UltimaDecisaoNaLeituraTests(OportunidadeBaseTests):
     def setUp(self):
         super().setUp()
         self.codigo = self.criar_externo().data['codigo']
+        Oportunidade.objects.filter(codigo=self.codigo).update(
+            situacao=SituacaoOportunidade.AGUARDANDO_DECISAO
+        )
 
     def decidir(self, tipo, justificativa):
         self.como(self.supervisor)
@@ -780,6 +800,23 @@ class ObservacaoTests(OportunidadeBaseTests):
         )
         self.assertEqual(evento['categoria'], 'observacao')
         self.assertIn('contaminacao', evento['detalhe']['texto'])
+
+    def test_o_nome_de_quem_escreveu_vem_da_conta_e_nao_da_trilha(self):
+        """
+        A trilha guarda o e-mail de quem agiu, nao o nome: o nome e lido da
+        conta, e a anonimizacao da conta vale tambem para o historico.
+        """
+        self.como(self.supervisor)
+        self.registrar()
+
+        evento = next(
+            e for e in self.client.get(
+                reverse('oportunidade-historico', args=[self.codigo])
+            ).data
+            if e['tipo'] == 'observacao_registrada'
+        )
+        self.assertNotIn('autor_nome', evento['detalhe'])
+        self.assertEqual(evento['ator_nome'], self.supervisor.nome)
 
     def test_so_o_supervisor_registra_observacao(self):
         for usuario in (self.demandante, self.pesquisador, self.administrador):

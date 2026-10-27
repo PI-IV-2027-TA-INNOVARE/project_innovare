@@ -162,3 +162,22 @@
     flex-basis: 100%;
   }
 }
+
+.meus-dados {
+  display: grid;
+  gap: 12px;
+}
+
+.meus-dados__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meus-dados__confirmacao {
+  flex-wrap: wrap;
+
+  .meus-dados__acoes {
+    flex-basis: 100%;
+  }
+}

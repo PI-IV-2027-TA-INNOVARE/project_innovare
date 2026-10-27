@@ -144,7 +144,9 @@ export function RowActionsMenu({ label, items }) {
               type="button"
               role="menuitem"
               className={`row-menu__item${item.tone === 'danger' ? ' row-menu__item--danger' : ''}`}
+              disabled={item.disabled}
               onClick={() => {
+                if (item.disabled) return
                 setAberto(false)
                 item.onSelect()
               }}

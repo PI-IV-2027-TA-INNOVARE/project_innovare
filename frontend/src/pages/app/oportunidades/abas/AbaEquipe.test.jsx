@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   adicionarMembroEquipe: null,
   validarEquipe: null,
   listarRede: null,
+  obterProposta: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
@@ -38,6 +39,7 @@ vi.mock('../../../../services/pdConnectApi', () => ({
   adicionarMembroEquipe: (...args) => api.adicionarMembroEquipe(...args),
   validarEquipe: (...args) => api.validarEquipe(...args),
   listarRede: (...args) => api.listarRede(...args),
+  obterProposta: (...args) => api.obterProposta(...args),
 }))
 
 const SEM_EQUIPE = { data: { codigo: 'equipe_inexistente' }, message: 'sem equipe' }
@@ -91,6 +93,63 @@ describe('AbaEquipe', () => {
     api.listarRede = vi.fn().mockResolvedValue({
       results: [{ id_membro: 9, nome: 'Clara Nunes', papel_rede: 'pesquisador' }],
     })
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: true,
+    })
+  })
+
+  /**
+   * Quem saiu da rede continua na equipe que já foi gerada, marcado: a
+   * composição daquela rodada precisa continuar legível, e o Supervisor
+   * precisa saber que a pessoa não está mais disponível.
+   */
+  it('marca quem ficou inativo na rede', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: [{ ...EQUIPE.membros[0], inativo: true }],
+    })
+
+    renderizar()
+
+    expect(await screen.findByText('Inativo na rede')).toBeInTheDocument()
+  })
+
+  it('trava nova rodada enquanto a proposta não foi revisada', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/ainda não foi revisada/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /rodar de novo/i })).toBeDisabled(),
+    )
+  })
+
+  it('o cartão fechado traz nome, nota e o motivo principal; o resto fica a um clique', async () => {
+    const user = userEvent.setup()
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: [
+        {
+          ...EQUIPE.membros[0],
+          match_reasons: ['Motivo principal da sugestão.', 'Segundo motivo da sugestão.'],
+        },
+      ],
+    })
+    renderizar()
+
+    expect(await screen.findByText('Motivo principal da sugestão.')).toBeVisible()
+    expect(screen.getByText('Segundo motivo da sugestão.')).not.toBeVisible()
+    expect(screen.getByText('Palavras em comum')).not.toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Ver detalhes' }))
+
+    expect(screen.getByText('Segundo motivo da sugestão.')).toBeVisible()
+    expect(screen.getByText('Palavras em comum')).toBeVisible()
   })
 
   it('mostra a sugestão com score e justificativa visível', async () => {
@@ -103,14 +162,14 @@ describe('AbaEquipe', () => {
     ).toBeInTheDocument()
   })
 
-  it('declara que a semelhança de conteúdo não entrou no score', async () => {
+  it('explica no topo que a afinidade com o tema não entrou na nota e tira a linha do cartão', async () => {
     renderizar()
 
     expect(
-      await screen.findByText(/semelhança de conteúdo não estava disponível/i),
+      await screen.findByText(/afinidade com o tema não estava disponível/i),
     ).toBeInTheDocument()
     expect(screen.queryByText(/hibrido_v1/)).not.toBeInTheDocument()
-    expect(screen.getByText('indisponível')).toBeInTheDocument()
+    expect(screen.queryByText('indisponível')).not.toBeInTheDocument()
   })
 
   it('deixa explícito que não há convite nem aceite', async () => {

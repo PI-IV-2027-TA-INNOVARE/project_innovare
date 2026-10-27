@@ -13,10 +13,10 @@ Supervisor.
 
 | Camada | Tecnologia |
 |---|---|
-| Linguagem | Python 3.10+ |
+| Linguagem | Python 3.12 |
 | Framework | Django 5.2 · Django REST Framework 3.17 |
 | Auth | SimpleJWT (`/api/auth/token/`) |
-| Banco | PostgreSQL 14+ (sem extensão: o embedding do matching fica em coluna `float[]` — plano §8.3) |
+| Banco | PostgreSQL 14+ (sem extensão: o embedding do matching fica em coluna `jsonb` — plano §8.3) |
 | Docs | drf-spectacular · Swagger em `/api/docs/` |
 
 O driver do Postgres é o **psycopg 3** (`psycopg[binary,pool]`), que traz o pool
@@ -114,6 +114,29 @@ o canal único (`AGENTS.md` §2.2). Assim que a 5432 estiver acessível, use
 > só o Django admin. Um `manage.py migrate` de uma rede sem bloqueio popula as
 > duas tabelas sem reaplicar schema nenhum.
 
+### Backup antes de mexer no Neon
+
+O Neon é homologação: desenvolvimento é no Postgres local, e `AMBIENTE=producao`
+com `DEBUG=True` impede a API de subir. Antes de qualquer escrita no Neon,
+backup e ensaio da migration num restore local desse backup. A cópia nunca fica
+em texto aberto:
+
+```bash
+python scripts/backup_cifrado.py copiar ../backups/neon/neondb_AAAA-MM-DD.dump -- pg_dump -Fc -h ... -U ... -d ...
+python scripts/backup_cifrado.py restaurar <arquivo>.cifrado -- pg_restore -h localhost -U ... -d ensaio
+python scripts/backup_cifrado.py descartar <arquivo>.cifrado --motivo "ensaio concluído"
+```
+
+`copiar` cifra a saída do `pg_dump` na memória e `restaurar` entrega o
+conteúdo decifrado ao `pg_restore` pela entrada padrão: nenhuma cópia aberta
+passa pelo disco. Dump que já existe em claro: `cifrar <arquivo>.dump`. A pasta
+de backups fica num disco cifrado, porque apagar arquivo em SSD não garante que
+o conteúdo some.
+
+A senha vem de `PDCONNECT_BACKUP_SENHA` ou é pedida no terminal, e nunca vai
+para arquivo. O backup é guardado só até o ensaio dar certo; cada ação fica em
+`REGISTRO_DE_BACKUPS.md`, na pasta do backup.
+
 ---
 
 ## Estrutura
@@ -150,8 +173,8 @@ Camadas dentro de cada app: `models` → `serializers` → `views` → `services
 
 | Rota | Faz | Quem |
 |---|---|---|
-| `POST /api/auth/token/` | Login; devolve `access`, `refresh` e `papel` | público |
-| `POST /api/auth/token/refresh/` | Renova o acesso | público |
+| `POST /api/auth/token/` | Login; devolve `access` e `papel` no corpo e o `refresh` num cookie `HttpOnly` | público |
+| `POST /api/auth/token/refresh/` | Renova o acesso pelo cookie (ou pelo corpo, para cliente de API) | público |
 | `GET /api/auth/profile/` | Usuário autenticado + `papel` + permissões efetivas | autenticado |
 | `POST /api/auth/forgot-password/` | Emite token e envia o e-mail | público |
 | `POST /api/auth/reset-password/` | Define a senha (recuperação **e** primeiro acesso) | público |
@@ -171,6 +194,21 @@ As tabelas das demais fases já existem no banco; as rotas entram com cada fase.
   não cadastrado" transformaria o formulário público num verificador de contas.
 - **Não existe rota de autocadastro** (RN-A04 / D06). A conta nasce sem senha
   utilizável e a pessoa a define pelo token de convite.
+
+### Retenção de dados (LGPD)
+
+Eventos de conta (`login`, `login_recusado`, `logout`) são anonimizados depois
+de 12 meses; anexos de oportunidade arquivada são descartados 24 meses após o
+arquivamento. Os prazos vêm de `RETENCAO_EVENTOS_CONTA_MESES` e
+`RETENCAO_ANEXOS_MESES`.
+
+```bash
+python manage.py aplicar_retencao             # simulação (padrão)
+python manage.py aplicar_retencao --aplicar   # executa e grava `retencao_aplicada`
+```
+
+A task `audit.aplicar_retencao` está no `CELERY_BEAT_SCHEDULE` diário às 3h.
+Sem broker configurado, o comando continua sendo o caminho de execução.
 
 ---
 

@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   adicionarCompetencia: null,
   atualizarCompetencia: null,
   removerCompetencia: null,
+  obterProposta: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
@@ -24,6 +25,7 @@ vi.mock('../../../../services/pdConnectApi', () => ({
   adicionarCompetencia: (...args) => api.adicionarCompetencia(...args),
   atualizarCompetencia: (...args) => api.atualizarCompetencia(...args),
   removerCompetencia: (...args) => api.removerCompetencia(...args),
+  obterProposta: (...args) => api.obterProposta(...args),
 }))
 
 const DERIVADA = {
@@ -59,6 +61,36 @@ describe('AbaCompetencias', () => {
     api.adicionarCompetencia = vi.fn().mockResolvedValue(MANUAL)
     api.atualizarCompetencia = vi.fn().mockResolvedValue(DERIVADA)
     api.removerCompetencia = vi.fn().mockResolvedValue(undefined)
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: true,
+    })
+  })
+
+  /**
+   * PB41: a derivação parte da proposta, e texto do Copiloto sem leitura
+   * humana não vale como definitivo. A API recusa; a tela trava o botão e
+   * diz o que falta.
+   */
+  it('trava a derivação enquanto a proposta não foi revisada', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByText(/ainda não foi revisada/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /derivar da proposta/i })).toBeDisabled(),
+    )
+  })
+
+  it('com a proposta revisada, a derivação fica liberada', async () => {
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
+
+    await waitFor(() => expect(api.obterProposta).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: /derivar da proposta/i })).toBeEnabled()
   })
 
   it('distingue o que a IA derivou do que foi informado à mão', async () => {
@@ -93,6 +125,24 @@ describe('AbaCompetencias', () => {
 
     expect(
       await screen.findByText(/nenhuma competência foi derivada/i),
+    ).toBeInTheDocument()
+  })
+
+  it('explica que o limite de gasto barrou a derivação', async () => {
+    api.derivarCompetencias = vi.fn().mockResolvedValue({
+      criadas: [],
+      fallback_usado: true,
+      motivo_fallback: 'limite_do_mes',
+    })
+
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /derivar da proposta/i }),
+    )
+
+    expect(
+      await screen.findByText(/a ia não foi chamada: o limite mensal de gasto com ia foi atingido/i),
     ).toBeInTheDocument()
   })
 

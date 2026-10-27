@@ -59,7 +59,9 @@ class CompetenciasBaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA_PREENCHIDA
+            oportunidade=self.oportunidade,
+            revisada_por_humano=True,
+            **PROPOSTA_PREENCHIDA,
         )
 
         self.como(self.supervisor)
@@ -145,6 +147,12 @@ class DerivacaoTests(CompetenciasBaseTests):
 
         self.assertEqual(resultado['criadas'], [])
         self.assertTrue(resultado['fallback_usado'])
+
+    def test_derivacao_barrada_pelo_limite_devolve_o_motivo(self):
+        resultado = self.derivar(provedor=ProvedorIndisponivel(motivo='limite_da_oportunidade'))
+
+        self.assertEqual(resultado['criadas'], [])
+        self.assertEqual(resultado['motivo_fallback'], 'limite_da_oportunidade')
 
     def test_proposta_vazia_e_conflito_explicado(self):
         """Nao se deriva competencia de proposta sem texto."""

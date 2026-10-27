@@ -13,7 +13,7 @@ from core.models import CoerenteComAPreAnalise, ModeloComCarimbo, lista_fixa
 
 class EstadoSessao(models.TextChoices):
     ABERTA = 'aberta', 'Aberta'
-    CONCLUIDA = 'concluida', 'Concluida'
+    CONCLUIDA = 'concluida', 'Concluída'
     ABANDONADA = 'abandonada', 'Abandonada'
 
 
@@ -29,12 +29,25 @@ class TipoLacuna(models.TextChoices):
     oportunidade - a mesma proposta produz equipes com lacunas diferentes."""
 
     PROPOSTA = 'proposta', 'Lacuna da proposta'
-    PRE_ANALISE = 'pre_analise', 'Lacuna da pre-analise'
+    PRE_ANALISE = 'pre_analise', 'Lacuna da pré-análise'
+
+
+class NaturezaLacuna(models.TextChoices):
+    """
+    Por que o elemento da proposta e lacuna (PB38 e PB39).
+
+    Nao so campo vazio: o texto pode estar la e ser inconsistente ou pouco
+    desenvolvido. E o Copiloto que avalia; a pessoa revisa.
+    """
+
+    AUSENTE = 'ausente', 'Ausente'
+    INCONSISTENTE = 'inconsistente', 'Inconsistente'
+    POUCO_DESENVOLVIDO = 'pouco_desenvolvido', 'Pouco desenvolvido'
 
 
 class Severidade(models.TextChoices):
     ALTA = 'alta', 'Alta'
-    MEDIA = 'media', 'Media'
+    MEDIA = 'media', 'Média'
     BAIXA = 'baixa', 'Baixa'
 
 
@@ -197,6 +210,7 @@ class SessaoCopiloto(models.Model):
         default=EstadoSessao.ABERTA,
         db_column='estado',
     )
+    sintese = models.TextField(blank=True, default='', db_column='sintese')
     criado_em = models.DateTimeField(auto_now_add=True, db_column='criado_em')
     encerrado_em = models.DateTimeField(
         null=True, blank=True, db_column='encerrado_em'
@@ -260,6 +274,9 @@ class Lacuna(CoerenteComAPreAnalise, models.Model):
 
     Pende da proposta, como no diagrama: a lacuna e calculada sobre ela (um
     elemento vazio ou fraco), e a proposta ja existe quando a lacuna nasce.
+
+    Cada tipo tem os seus campos, e o banco recusa a troca: a `natureza` e da
+    lacuna que o Copiloto aponta, o `criterio` e da lacuna da pre-analise.
     """
 
     pende_da_proposta = True
@@ -284,6 +301,19 @@ class Lacuna(CoerenteComAPreAnalise, models.Model):
     severidade = models.CharField(
         max_length=6, choices=Severidade.choices, null=True, blank=True,
         db_column='severidade',
+    )
+    natureza = models.CharField(
+        max_length=20, choices=NaturezaLacuna.choices, null=True, blank=True,
+        db_column='natureza',
+    )
+    pergunta = models.TextField(blank=True, default='', db_column='pergunta')
+    criterio = models.ForeignKey(
+        'maturity.CriterioPreAnalise',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='lacunas',
+        db_column='id_criterio',
     )
     pre_analise = models.ForeignKey(
         'maturity.PreAnalise',
@@ -312,6 +342,21 @@ class Lacuna(CoerenteComAPreAnalise, models.Model):
         constraints = [
             lista_fixa('lacuna_proposta', 'tipo', TipoLacuna),
             lista_fixa('lacuna_proposta', 'severidade', Severidade),
+            lista_fixa('lacuna_proposta', 'natureza', NaturezaLacuna),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(natureza__isnull=True)
+                    | models.Q(tipo=TipoLacuna.PROPOSTA)
+                ),
+                name='ck_lacuna_proposta_natureza_do_copiloto',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(criterio__isnull=True)
+                    | models.Q(tipo=TipoLacuna.PRE_ANALISE)
+                ),
+                name='ck_lacuna_proposta_criterio_da_pre_analise',
+            ),
         ]
         verbose_name_plural = 'lacunas'
         indexes = [

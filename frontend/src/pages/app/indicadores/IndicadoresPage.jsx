@@ -5,6 +5,8 @@ import {
 } from '../../../services/pdConnectApi'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { useAuth } from '../../../context/AuthContext'
+import VerDetalhes from '../../../components/console/VerDetalhes'
+import { TERMOS } from '../../../lib/glossario'
 import { Icone, appIcons } from '../../../lib/icons'
 import { ROLES } from '../../../lib/roles'
 import './IndicadoresPage.scss'
@@ -27,8 +29,24 @@ function Bloco({ titulo, descricao, total, grupos, icon }) {
         )}
       </header>
 
-      {grupos.map((grupo) => (
-        <div className="indicador-grupo" key={grupo.titulo}>
+      {grupos.slice(0, 1).map((grupo) => (
+        <Grupo key={grupo.titulo} grupo={grupo} />
+      ))}
+
+      {grupos.length > 1 ? (
+        <VerDetalhes rotulo="Ver mais números" rotuloAberto="Ocultar números">
+          {grupos.slice(1).map((grupo) => (
+            <Grupo key={grupo.titulo} grupo={grupo} />
+          ))}
+        </VerDetalhes>
+      ) : null}
+    </section>
+  )
+}
+
+function Grupo({ grupo }) {
+  return (
+        <div className="indicador-grupo">
           <h3 className="indicador-grupo__titulo">{grupo.titulo}</h3>
 
           <ul className="indicador-grupo__lista">
@@ -47,8 +65,6 @@ function Bloco({ titulo, descricao, total, grupos, icon }) {
             ))}
           </ul>
         </div>
-      ))}
-    </section>
   )
 }
 
@@ -122,8 +138,8 @@ function BlocoMatching({ dados }) {
           itens: [
             medida('Executadas', dados.execucoes),
             medida('Concluídas', dados.execucoes_concluidas),
-            medida('Sem base semântica', dados.execucoes_sem_base_semantica),
-            medida('Com rerank', dados.execucoes_com_rerank),
+            medida(TERMOS.semAfinidade, dados.execucoes_sem_base_semantica),
+            medida(`Com ${TERMOS.revisaoDaIa.toLowerCase()}`, dados.execucoes_com_rerank),
             medida('Equipes geradas', dados.equipes_geradas),
           ],
         },

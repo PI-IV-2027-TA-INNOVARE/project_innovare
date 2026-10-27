@@ -804,6 +804,12 @@
   color: var(--text-muted);
 }
 
+.user-cell__pedido {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent-primary-text);
+}
+
 .user-cell__email {
   font-size: 0.875rem;
   color: var(--text-muted);
@@ -929,6 +935,22 @@
   }
 }
 
+.prioridade-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+
+  &--alta {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
 .row-menu {
   position: relative;
   display: inline-flex;
@@ -1015,6 +1037,16 @@
 
     svg {
       color: var(--accent-primary-text);
+    }
+  }
+
+  &:disabled {
+    color: var(--text-muted);
+    background: transparent;
+    cursor: progress;
+
+    svg {
+      color: var(--text-muted);
     }
   }
 
@@ -1702,4 +1734,31 @@
   margin: 0 0 var(--admin-gap);
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.ver-detalhes {
+  margin-top: 8px;
+}
+
+.ver-detalhes__botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-primary-text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: 4px;
+  }
+}
+
+.ver-detalhes__conteudo {
+  margin-top: 8px;
 }

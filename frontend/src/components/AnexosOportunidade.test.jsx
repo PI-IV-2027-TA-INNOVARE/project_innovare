@@ -1,13 +1,14 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AnexosOportunidade from './AnexosOportunidade'
 
-const api = vi.hoisted(() => ({ listarAnexos: null, enviarAnexo: null }))
+const api = vi.hoisted(() => ({ listarAnexos: null, enviarAnexo: null, baixarAnexo: null }))
 
 vi.mock('../services/pdConnectApi', () => ({
   listarAnexos: (...args) => api.listarAnexos(...args),
   enviarAnexo: (...args) => api.enviarAnexo(...args),
+  baixarAnexo: (...args) => api.baixarAnexo(...args),
 }))
 
 const LAUDO = {
@@ -110,5 +111,108 @@ describe('AnexosOportunidade — envio', () => {
     await screen.findByText('laudo-lote-42.pdf')
 
     expect(screen.queryByLabelText(/anexar documento/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('AnexosOportunidade — download protegido', () => {
+  it('baixa o documento pela API, com a sessão, e não por endereço público', async () => {
+    const user = userEvent.setup()
+    const conteudo = new Blob(['%PDF'], { type: 'application/pdf' })
+    api.baixarAnexo = vi.fn().mockResolvedValue({ conteudo, nome: 'laudo.pdf' })
+    URL.createObjectURL = vi.fn(() => 'blob:local')
+    URL.revokeObjectURL = vi.fn()
+
+    render(<AnexosOportunidade codigo="OP-2026-001" />)
+
+    await user.click(await screen.findByRole('button', { name: `Baixar ${LAUDO.nome_original}` }))
+
+    expect(api.baixarAnexo).toHaveBeenCalledWith('OP-2026-001', LAUDO)
+    expect(URL.createObjectURL).toHaveBeenCalledWith(conteudo)
+  })
+
+  it('avisa quando o documento não pode ser baixado', async () => {
+    const user = userEvent.setup()
+    api.baixarAnexo = vi.fn().mockRejectedValue(new Error('Documento não encontrado nesta oportunidade.'))
+
+    render(<AnexosOportunidade codigo="OP-2026-001" />)
+
+    await user.click(await screen.findByRole('button', { name: `Baixar ${LAUDO.nome_original}` }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Documento não encontrado nesta oportunidade.')
+  })
+})
+
+describe('AnexosOportunidade — tela', () => {
+  /**
+   * O botão nativo do campo de arquivo saía cinza e apagado, sem o estilo do
+   * app. O botão agora é do app e abre o mesmo seletor: o campo nativo segue
+   * na página, escondido só da vista, para o teclado e o leitor de tela.
+   */
+  it('o botão de escolher arquivo é do app e abre o seletor', async () => {
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    const campo = screen.getByLabelText(/anexar documento/i)
+    const botao = screen.getByText('Escolher arquivo')
+
+    expect(botao.closest('label')).toHaveAttribute('for', campo.id)
+    expect(botao.closest('label')).toHaveClass('admin-btn')
+  })
+
+  it('arrastar um arquivo para a área envia igual a escolher', async () => {
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    fireEvent.drop(screen.getByTestId('anexo-envio'), {
+      dataTransfer: { files: [arquivo('foto-do-lote.png')] },
+    })
+
+    await waitFor(() => expect(api.enviarAnexo).toHaveBeenCalledTimes(1))
+    expect(api.enviarAnexo.mock.calls[0][1].name).toBe('foto-do-lote.png')
+  })
+
+  it('enquanto envia, diz qual arquivo está subindo', async () => {
+    const user = userEvent.setup()
+    api.enviarAnexo = vi.fn(() => new Promise(() => {}))
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    await user.upload(screen.getByLabelText(/anexar documento/i), arquivo())
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Enviando novo-laudo.pdf...')
+    expect(screen.getByLabelText(/anexar documento/i)).toBeDisabled()
+  })
+
+  it('mostra o tipo de cada documento e quantos são', async () => {
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    expect(screen.getByText('PDF')).toBeInTheDocument()
+    expect(screen.getByText('1 documento')).toBeInTheDocument()
+  })
+
+  it('diz quem vê os documentos antes de a pessoa anexar', async () => {
+    renderizar({ quemVe: 'O Supervisor, a empresa demandante e a equipe indicada.' })
+    await screen.findByText('laudo-lote-42.pdf')
+
+    expect(
+      screen.getByText('O Supervisor, a empresa demandante e a equipe indicada.')
+    ).toBeInTheDocument()
+  })
+
+  it('diz por quanto tempo os documentos ficam guardados', async () => {
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    expect(
+      screen.getByText(/até 24 meses após o arquivamento da oportunidade/i)
+    ).toBeInTheDocument()
+  })
+
+  it('sem documento, quem pode enviar é convidado a anexar o primeiro', async () => {
+    api.listarAnexos = vi.fn().mockResolvedValue([])
+    renderizar()
+
+    expect(await screen.findByText(/anexe o primeiro/i)).toBeInTheDocument()
   })
 })

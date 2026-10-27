@@ -44,6 +44,8 @@ class CriteriosPreAnaliseView(views.APIView):
     pela tela - ele vem da Base de Conhecimento versionada (P4).
     """
 
+    serializer_class = CriterioPreAnaliseSerializer
+
     def get_permissions(self):
         if self.request.method == 'POST':
             return [permissions.IsAuthenticated(), EhAdministrador()]

@@ -114,7 +114,7 @@ class MembroRedeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id_membro', 'situacao', 'criado_em', 'atualizado_em']
 
-    def get_tem_acesso(self, membro):
+    def get_tem_acesso(self, membro) -> bool:
         return membro.usuario_id is not None
 
     def _nomes(self, membro, tipo):
@@ -147,11 +147,19 @@ class MembroRedeSerializer(serializers.ModelSerializer):
         return valor
 
 
+CAMPOS_DO_SUPERVISOR = ('nome', 'email', 'papel_rede', 'organizacao', 'situacao')
+"""Cadastro, nao perfil: so o Supervisor muda (P10 / RN-A04)."""
+
+
 class PerfilProprioSerializer(MembroRedeSerializer):
     """
     RN-A05: o Pesquisador mantem o proprio perfil *dentro dos campos
-    definidos*. Nome, e-mail, papel na rede e situacao nao estao entre eles -
-    mexer neles e cadastro, e cadastro e do Supervisor (RN-A04).
+    definidos*, os do RF03: formacao, titulacao, competencias, tecnicas,
+    linhas de pesquisa, experiencia e disponibilidade (P10).
+
+    Nome, e-mail, papel na rede, instituicao e situacao sao cadastro, e
+    cadastro e do Supervisor (RN-A04). Mandar um deles e recusado, e nao
+    ignorado: ignorado, a tela diria "salvo" sem ter salvo.
     """
 
     nome = serializers.CharField(read_only=True)
@@ -162,6 +170,25 @@ class PerfilProprioSerializer(MembroRedeSerializer):
             'id_membro', 'papel_rede', 'organizacao',
             'situacao', 'criado_em', 'atualizado_em',
         ]
+
+    def validate(self, dados):
+        travados = sorted(
+            campo for campo in CAMPOS_DO_SUPERVISOR if campo in self.initial_data
+        )
+
+        if travados:
+            raise serializers.ValidationError(
+                {
+                    campo: 'Este campo do cadastro é mantido pelo Supervisor.'
+                    for campo in travados
+                }
+            )
+
+        return super().validate(dados)
+
+
+class MudancaDeSituacaoSerializer(serializers.Serializer):
+    """Sem corpo: inativar e reativar sao a propria rota."""
 
 
 class LiberarAcessoSerializer(serializers.Serializer):

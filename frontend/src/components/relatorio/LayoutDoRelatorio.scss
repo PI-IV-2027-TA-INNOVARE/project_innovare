@@ -1,0 +1,148 @@
+.relatorio-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'painel'
+    'documento';
+  gap: var(--admin-pad);
+  align-items: start;
+}
+
+.relatorio-layout__documento {
+  grid-area: documento;
+  min-width: 0;
+
+  .relatorio-documento {
+    max-width: 960px;
+    margin-inline: auto;
+  }
+
+  .relatorio-texto,
+  .relatorio-nota,
+  .relatorio-lista {
+    max-width: 80ch;
+  }
+
+  .relatorio-campos {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  .relatorio-campos--coluna {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relatorio-secao:focus {
+    outline: none;
+  }
+
+  .relatorio-secao:focus-visible .relatorio-secao__titulo {
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.relatorio-painel {
+  grid-area: painel;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-pad);
+  padding: var(--admin-pad);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+}
+
+.relatorio-painel__bloco {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.relatorio-painel__titulo {
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.relatorio-painel__sumario {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.875rem;
+
+  a {
+    color: var(--accent-primary-text);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    &:focus-visible {
+      outline: none;
+      border-radius: 4px;
+      box-shadow: var(--shadow-focus);
+    }
+  }
+}
+
+.relatorio-painel__identificacao {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.875rem;
+
+  dt {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+}
+
+.relatorio-painel__acoes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 220px;
+}
+
+@media (min-width: 1200px) {
+  .relatorio-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-areas: 'documento painel';
+  }
+
+  .relatorio-layout__documento .relatorio-documento {
+    max-width: none;
+  }
+
+  .relatorio-painel {
+    position: sticky;
+    top: 24px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .relatorio-painel__bloco,
+  .relatorio-painel__acoes {
+    flex: 0 0 auto;
+  }
+}
+
+@media print {
+  .relatorio-layout {
+    display: block;
+  }
+
+  .relatorio-painel {
+    display: none;
+  }
+}

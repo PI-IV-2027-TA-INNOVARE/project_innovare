@@ -67,7 +67,7 @@ class MatchingBaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
         )
 
         self.essencial = CompetenciaNecessaria.objects.create(
@@ -142,7 +142,7 @@ class MotorTests(MatchingBaseTests):
 
         self.assertIsNone(avaliacao.features['semantico'])
         self.assertTrue(
-            any('semântica indisponível' in motivo for motivo in avaliacao.motivos)
+            any('Afinidade com o tema indisponível' in motivo for motivo in avaliacao.motivos)
         )
 
     def test_score_fica_na_escala_zero_um(self):
@@ -294,7 +294,7 @@ class ExecucaoDoMatchingTests(MatchingBaseTests):
         self.assertTrue(execucao.usou_rerank)
         self.assertEqual(len(membros), 2)
         self.assertTrue(
-            any('Rerank' in ' '.join(membro.match_reasons) for membro in membros)
+            any('Segundo a IA' in ' '.join(membro.match_reasons) for membro in membros)
         )
 
 

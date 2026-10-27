@@ -52,7 +52,7 @@ class RelatorioEquipeBaseTests(TestCase):
             .build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
         )
 
         self.essencial = CompetenciaNecessaria.objects.create(
@@ -180,3 +180,39 @@ class AcessoAoRelatorioDaEquipeTests(RelatorioEquipeBaseTests):
         self.assertEqual(
             self.client.get(self.url()).status_code, status.HTTP_401_UNAUTHORIZED
         )
+
+
+class ComoFoiCalculadoTests(RelatorioEquipeBaseTests):
+    """O relatorio guarda a explicacao que saiu da tela."""
+
+    def test_explica_as_quatro_parcelas_com_os_pesos_da_rodada(self):
+        self.rodar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_foi_calculado'])
+
+        self.assertIn('afinidade com o tema (45%)', texto)
+        self.assertIn('palavras em comum (20%)', texto)
+        self.assertIn('área de atuação (25%)', texto)
+        self.assertIn('disponibilidade (10%)', texto)
+
+    def test_avisa_quando_a_afinidade_com_o_tema_ficou_de_fora(self):
+        self.rodar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_foi_calculado'])
+
+        self.assertIn('a afinidade com o tema não estava disponível', texto)
+
+    def test_lembra_que_a_sugestao_nao_e_convocacao(self):
+        self.rodar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_foi_calculado'])
+
+        self.assertIn('o Supervisor valida e ajusta', texto)
+
+    def test_nao_usa_jargao(self):
+        self.rodar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_foi_calculado']).lower()
+
+        for termo in ('score', 'rerank', 'fallback', 'embedding'):
+            self.assertNotIn(termo, texto)

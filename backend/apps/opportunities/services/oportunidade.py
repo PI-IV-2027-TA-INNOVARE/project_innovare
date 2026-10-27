@@ -6,6 +6,7 @@ tela de Historico le.
 """
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
@@ -15,6 +16,7 @@ from django.db.models import (
     Case,
     Count,
     Exists,
+    IntegerField,
     OuterRef,
     Prefetch,
     Q,
@@ -30,18 +32,73 @@ from apps.audit.models import CategoriaEvento, EventoAuditoria
 from apps.audit.services import registrar_evento
 from apps.decisions.models import Decisao, TipoDecisao
 from apps.notifications.services import notificar
+from apps.notifications.services.email import avisar_decisao_por_email
 from apps.opportunities.models import (
     CATEGORIAS_VISIVEIS_AO_DEMANDANTE,
     AnexoOportunidade,
     Oportunidade,
     OrigemOportunidade,
+    PrioridadeOportunidade,
     SequenciaCodigo,
     SituacaoOportunidade,
 )
-from core.exceptions import AcaoNaoPermitida, ConflitoDeEstado, ErroDeDominio
+from apps.opportunities.services.fluxo import mover
+from apps.opportunities.services.tipo_do_anexo import tipo_conferido
+from core.exceptions import (
+    AcaoNaoPermitida,
+    ConflitoDeEstado,
+    ErroDeDominio,
+    RecursoNaoEncontrado,
+)
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
+
+QUEM_AGIU_PELA_AC2 = 'Núcleo de P&D da AC2'
+"""Como o historico do Demandante nomeia quem agiu pela AC2, sem o e-mail (PB71)."""
+
+TIPO_PRIORIDADE_DEFINIDA = 'prioridade_definida'
+
+TIPOS_INTERNOS_DA_OPORTUNIDADE = (TIPO_PRIORIDADE_DEFINIDA,)
+"""
+Eventos da categoria `oportunidade` que o Demandante nao le. A prioridade e
+trabalho interno da fila do Supervisor (PB61), como a observacao (PB71).
+"""
+
+
+def _do_demandante(usuario: Usuario) -> bool:
+    return usuario.papel == Papel.DEMANDANTE
+
+
+def _enviado_pela_empresa(usuario: Usuario, prefixo: str) -> Q:
+    """
+    O que um Demandante da empresa do ator fez. O papel conta tanto quanto a
+    organizacao: um ator interno com a organizacao errada continua sendo a AC2.
+    """
+    return Q(**{
+        f'{prefixo}__organizacao_id': usuario.organizacao_id,
+        f'{prefixo}__papel': Papel.DEMANDANTE,
+    })
+
+
+def anexos_visiveis(oportunidade: Oportunidade, usuario: Usuario) -> QuerySet[AnexoOportunidade]:
+    """
+    Os anexos que o ator le (PB21 e PB71).
+
+    O Demandante ve o que a empresa dele enviou: o que a AC2 anexa e trabalho
+    interno, e PB71 o deixa so com o andamento. Os outros atores que alcancam
+    a oportunidade veem todos.
+    """
+    anexos = oportunidade.anexos.all()
+
+    if not _do_demandante(usuario):
+        return anexos
+
+    if usuario.organizacao_id is None:
+        return anexos.none()
+
+    return anexos.filter(_enviado_pela_empresa(usuario, 'enviado_por'))
+
 
 SITUACAO_POR_DECISAO = {
     TipoDecisao.CONTINUAR: SituacaoOportunidade.CONTINUAR,
@@ -96,8 +153,7 @@ def _aguarda_atuacao_de(usuario: Usuario):
     - complementar nao muda a situacao (quem reconduz e o Supervisor), entao a
     resposta so aparece na trilha, depois da ultima decisao *Revisar*.
 
-    "Minha" e a que ele conduz ou que ainda nao tem responsavel. Prioridade
-    nao entra: e campo que o PO ainda precisa definir.
+    "Minha" e a que ele conduz ou que ainda nao tem responsavel.
     """
     if usuario.papel != Papel.SUPERVISOR:
         return Value(False, output_field=BooleanField())
@@ -158,12 +214,29 @@ def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     unico - dois registros salvos no mesmo instante ficariam a merce do plano
     de execucao.
     """
+    visiveis = (
+        _enviado_pela_empresa(usuario, 'anexos__enviado_por')
+        if _do_demandante(usuario)
+        else None
+    )
+
     return escopo_de(usuario).annotate(
-        total_anexos=Count('anexos', distinct=True),
+        total_anexos=Count('anexos', filter=visiveis, distinct=True),
         aguarda_minha_atuacao=_aguarda_atuacao_de(usuario),
     ).prefetch_related(
         Prefetch('decisoes', queryset=Decisao.objects.select_related('responsavel'))
     ).order_by('-atualizada_em', '-codigo')
+
+
+def por_prioridade(fila: QuerySet[Oportunidade]) -> QuerySet[Oportunidade]:
+    """Alta, Media e Baixa nessa ordem; dentro de cada uma, a mais recente antes."""
+    ordem = Case(
+        When(prioridade=PrioridadeOportunidade.ALTA, then=Value(0)),
+        When(prioridade=PrioridadeOportunidade.MEDIA, then=Value(1)),
+        default=Value(2),
+        output_field=IntegerField(),
+    )
+    return fila.order_by(ordem, '-atualizada_em', '-codigo')
 
 
 def historico_de(
@@ -179,16 +252,53 @@ def historico_de(
 
     O evento entra pela FK ou pela referencia textual: a FK e opcional, e ha
     evento registrado so com `entidade`/`entidade_id`.
+
+    O anexo enviado pela AC2 tambem sai da trilha do Demandante: o evento
+    guarda o nome do arquivo, e o arquivo ele nao ve (`anexos_visiveis`).
     """
     eventos = EventoAuditoria.objects.filter(
         Q(oportunidade=oportunidade)
         | Q(entidade='oportunidade', entidade_id=oportunidade.codigo)
-    ).order_by('-ocorrido_em')
+    ).select_related('conta_do_ator').order_by('-ocorrido_em')
 
-    if usuario.papel == Papel.DEMANDANTE:
-        return eventos.filter(categoria__in=CATEGORIAS_VISIVEIS_AO_DEMANDANTE)
+    if _do_demandante(usuario):
+        if usuario.organizacao_id is None:
+            return eventos.none()
+
+        anexo_interno = Q(tipo='anexo_enviado') & ~_enviado_pela_empresa(usuario, 'conta_do_ator')
+        return eventos.filter(categoria__in=CATEGORIAS_VISIVEIS_AO_DEMANDANTE).exclude(
+            anexo_interno | Q(tipo__in=TIPOS_INTERNOS_DA_OPORTUNIDADE)
+        )
 
     return eventos
+
+
+def nomes_de_quem_agiu(eventos) -> dict[str, str]:
+    """
+    O nome de cada e-mail da trilha, lido da conta na hora.
+
+    A trilha guarda o e-mail, nao o nome: se a pessoa muda de nome, ou a conta
+    e anonimizada, o historico mostra o que vale hoje.
+    """
+    emails = {evento.ator for evento in eventos}
+
+    return dict(Usuario.objects.filter(email__in=emails).values_list('email', 'nome'))
+
+
+def contexto_do_historico(eventos, usuario: Usuario) -> dict[str, Any]:
+    """
+    O que o serializer da trilha precisa para nomear quem agiu.
+
+    Para o Demandante, quem agiu fora da empresa dele aparece como a AC2, sem
+    e-mail: e quem trabalha na oportunidade por dentro (PB71).
+    """
+    contexto: dict[str, Any] = {'nomes': nomes_de_quem_agiu(eventos)}
+
+    if _do_demandante(usuario):
+        contexto['organizacao_do_demandante'] = usuario.organizacao_id
+        contexto['quem_agiu_pela_ac2'] = QUEM_AGIU_PELA_AC2
+
+    return contexto
 
 
 class CadastrarOportunidadeService:
@@ -208,7 +318,7 @@ class CadastrarOportunidadeService:
 
             if demandante is None:
                 raise ErroDeDominio(
-                    'Sua conta nao esta vinculada a uma organizacao demandante.',
+                    'Sua conta ainda não está ligada a uma empresa. Fale com o administrador.',
                     codigo='sem_organizacao',
                 )
         elif ator.papel == Papel.SUPERVISOR:
@@ -216,7 +326,7 @@ class CadastrarOportunidadeService:
             demandante = None
         else:
             raise AcaoNaoPermitida(
-                'Seu perfil nao cadastra oportunidade.',
+                'Seu perfil não cadastra oportunidade.',
                 codigo='papel_nao_cadastra',
             )
 
@@ -276,6 +386,43 @@ class AtualizarContextoService:
         return oportunidade
 
 
+class DefinirPrioridadeService:
+    """
+    A prioridade na fila do Supervisor (PB61 / P4).
+
+    Grava por `update` para nao mexer em `atualizada_em`: o Demandante ve
+    quando a oportunidade mudou, e a prioridade nao e mudanca que ele acompanha.
+    """
+
+    @transaction.atomic
+    def execute(
+        self, *, oportunidade: Oportunidade, prioridade: str, ator: Usuario
+    ) -> Oportunidade:
+        anterior = (
+            Oportunidade.objects.select_for_update()
+            .filter(pk=oportunidade.pk)
+            .values_list('prioridade', flat=True)
+            .first()
+        )
+
+        if anterior == prioridade:
+            return oportunidade
+
+        Oportunidade.objects.filter(pk=oportunidade.pk).update(prioridade=prioridade)
+        oportunidade.prioridade = prioridade
+
+        registrar_evento(
+            categoria=CategoriaEvento.OPORTUNIDADE,
+            tipo=TIPO_PRIORIDADE_DEFINIDA,
+            entidade='oportunidade',
+            entidade_id=oportunidade.codigo,
+            oportunidade=oportunidade,
+            ator=ator.email,
+            detalhe={'de': anterior, 'para': prioridade},
+        )
+        return oportunidade
+
+
 class RegistrarDecisaoService:
     """
     O fecho do fluxo (RF11 / RN-A07 / D03).
@@ -283,6 +430,10 @@ class RegistrarDecisaoService:
     Quando o desfecho e *Revisar*, o Demandante precisa saber que a bola voltou
     para ele: PB26 exige a notificacao, e sem ela o pedido so aparece se a
     pessoa por acaso abrir a tela.
+
+    A situacao muda pelo `fluxo`: Continuar e Revisar so depois da pre-analise,
+    Arquivar em qualquer etapa em curso. As tres decisoes tambem saem por
+    e-mail para a empresa demandante, depois de gravadas (P17).
     """
 
     @transaction.atomic
@@ -294,11 +445,7 @@ class RegistrarDecisaoService:
         justificativa: str,
         ator: Usuario,
     ) -> Decisao:
-        if oportunidade.situacao == SituacaoOportunidade.ARQUIVADA:
-            raise ConflitoDeEstado(
-                'Oportunidade arquivada nao recebe nova decisao.',
-                codigo='ja_arquivada',
-            )
+        mover(oportunidade, SITUACAO_POR_DECISAO[tipo], ator, registrar=False)
 
         decisao = Decisao.objects.create(
             oportunidade=oportunidade,
@@ -306,9 +453,6 @@ class RegistrarDecisaoService:
             observacoes=justificativa,
             responsavel=ator,
         )
-
-        oportunidade.situacao = SITUACAO_POR_DECISAO[tipo]
-        oportunidade.save(update_fields=['situacao', 'atualizada_em'])
 
         registrar_evento(
             categoria=CategoriaEvento.DECISAO,
@@ -322,6 +466,18 @@ class RegistrarDecisaoService:
 
         if tipo == TipoDecisao.REVISAR:
             self._avisar_demandante(oportunidade, justificativa)
+
+        if oportunidade.demandante_id is not None:
+            transaction.on_commit(
+                partial(
+                    avisar_decisao_por_email,
+                    id_organizacao=oportunidade.demandante_id,
+                    codigo=oportunidade.codigo,
+                    titulo=oportunidade.titulo,
+                    tipo=tipo,
+                    justificativa=justificativa,
+                )
+            )
 
         return decisao
 
@@ -346,6 +502,11 @@ class RegistrarDecisaoService:
 
 TIPO_COMPLEMENTO_SOLICITADO = 'complemento_solicitado'
 TIPO_COMPLEMENTACAO_ENVIADA = 'complementacao_enviada'
+MARCA_DA_COMPLEMENTACAO = '[Complementação do Demandante]'
+"""
+O contexto vai para a IA, e o nome de quem respondeu nao precisa ir junto
+(LGPD, minimizacao): quem foi esta na trilha.
+"""
 
 
 def ha_pedido_de_complemento_aberto(oportunidade: Oportunidade) -> bool:
@@ -400,8 +561,8 @@ class SolicitarComplementoService:
 
         if not contas.exists():
             raise ConflitoDeEstado(
-                'Esta oportunidade nao tem Demandante Externo a quem pedir '
-                'complementacao.',
+                'Esta oportunidade não tem Demandante Externo a quem pedir '
+                'complementação.',
                 codigo='sem_demandante',
             )
 
@@ -412,7 +573,7 @@ class SolicitarComplementoService:
             entidade_id=oportunidade.codigo,
             oportunidade=oportunidade,
             ator=ator.email,
-            detalhe={'mensagem': mensagem, 'autor_nome': ator.nome},
+            detalhe={'mensagem': mensagem},
         )
 
         for conta in contas:
@@ -468,12 +629,12 @@ class ComplementarOportunidadeService:
 
         if not em_revisao and not ha_pedido_de_complemento_aberto(oportunidade):
             raise ConflitoDeEstado(
-                'Nao ha pedido de complementacao em aberto nesta oportunidade.',
+                'Não há pedido de complementação em aberto nesta oportunidade.',
                 codigo='sem_pedido_aberto',
             )
 
         oportunidade.contexto = (
-            f'{oportunidade.contexto}\n\n[Complementacao de {ator.nome}]\n{texto}'
+            f'{oportunidade.contexto}\n\n{MARCA_DA_COMPLEMENTACAO}\n{texto}'
         ).strip()
         oportunidade.save(update_fields=['contexto', 'atualizada_em'])
 
@@ -512,7 +673,7 @@ class RegistrarObservacaoService:
             entidade_id=oportunidade.codigo,
             oportunidade=oportunidade,
             ator=ator.email,
-            detalhe={'texto': texto, 'autor_nome': ator.nome},
+            detalhe={'texto': texto},
         )
 
         return {
@@ -522,6 +683,23 @@ class RegistrarObservacaoService:
         }
 
 
+def documento_da_oportunidade(
+    oportunidade: Oportunidade, id_anexo, usuario: Usuario
+) -> AnexoOportunidade:
+    """
+    O anexo desta oportunidade, ou 404 - o de outra nao sai por esta rota, nem
+    o que o ator nao le (`anexos_visiveis`).
+    """
+    anexo = anexos_visiveis(oportunidade, usuario).filter(pk=id_anexo).first()
+
+    if anexo is None or not anexo.arquivo:
+        raise RecursoNaoEncontrado(
+            'Documento não encontrado nesta oportunidade.', codigo='anexo_inexistente'
+        )
+
+    return anexo
+
+
 class AnexarDocumentoService:
     """
     Anexo vinculado a oportunidade (PB21).
@@ -529,6 +707,9 @@ class AnexarDocumentoService:
     Limite de tamanho e tipos aceitos sao provisorios e vivem em `settings`: a
     politica definitiva, com retencao, e P14 - decisao do PO com o orientador,
     por causa de LGPD.
+
+    O tipo gravado e o conferido pelo conteudo do arquivo, nao o que o
+    navegador declarou (`tipo_do_anexo`).
     """
 
     @transaction.atomic
@@ -543,13 +724,7 @@ class AnexarDocumentoService:
                 codigo='anexo_grande_demais',
             )
 
-        mime = getattr(arquivo, 'content_type', '') or 'application/octet-stream'
-
-        if mime not in settings.ANEXO_TIPOS_ACEITOS:
-            raise ErroDeDominio(
-                'Tipo de arquivo nao aceito nesta versao.',
-                codigo='anexo_tipo_recusado',
-            )
+        mime = tipo_conferido(arquivo, arquivo.name)
 
         anexo = AnexoOportunidade.objects.create(
             oportunidade=oportunidade,

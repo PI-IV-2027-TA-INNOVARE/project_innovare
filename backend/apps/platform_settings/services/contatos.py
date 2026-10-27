@@ -34,6 +34,20 @@ def contatos_vigentes() -> list[dict]:
     return gravados or [dict(contato) for contato in CONTATOS_PADRAO]
 
 
+def encarregado_de_dados() -> dict | None:
+    """
+    O encarregado de dados (LGPD, art. 41), se a AC2 ja o indicou.
+
+    E o contato de suporte cujo "do que cuida" fala em encarregado: o mesmo
+    cadastro que o Administrador ja mantem em Parametros.
+    """
+    for contato in contatos_vigentes():
+        if 'encarregad' in (contato.get('papel') or '').lower():
+            return {'nome': contato['nome'], 'email': contato['email']}
+
+    return None
+
+
 def _registrar(tipo: str, ator: Usuario, emails: list[str]) -> None:
     registrar_evento(
         categoria=CategoriaEvento.CONFIG,

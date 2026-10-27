@@ -43,6 +43,13 @@ from django.utils import timezone
 
 from apps.ai.models import ExecucaoIA, StatusExecucao
 from apps.ai.services.custo import precos
+from apps.ai.services.registro import (
+    descritores,
+    modelo_do_provedor,
+    nome_do_principal,
+    papel_do_provedor,
+    provedor_configurado,
+)
 from core.medicao import medidor, percentil
 
 MOTIVO_SEM_FILA = (
@@ -115,6 +122,52 @@ def _revisao_humana() -> dict[str, Any]:
     }
 
 
+def _provedores(execucoes) -> list[dict[str, Any]]:
+    """
+    Uma linha por provedor registrado, com o consumo dele no mês.
+
+    O total do mês não diz qual provedor gastou nem qual falhou; a linha diz.
+    Provedor sem chamada aparece com zero, porque ele existe e está configurado
+    (ou não) - diferente de um provedor que não está registrado.
+    """
+    linhas = []
+
+    for provedor in descritores():
+        do_provedor = execucoes.filter(provedor=provedor.nome)
+        totais = do_provedor.aggregate(
+            chamadas=Count('id_execucao_ia'),
+            custo=Sum('custo_estimado'),
+            erros=Count('pk', filter=Q(status=StatusExecucao.ERRO)),
+            fallbacks=Count('pk', filter=Q(fallback_usado=True)),
+            latencia=Avg('latencia_ms'),
+        )
+        preco_entrada, preco_saida = provedor.precos()
+
+        linhas.append(
+            {
+                'nome': provedor.nome,
+                'rotulo': provedor.rotulo,
+                'papel': papel_do_provedor(provedor.nome),
+                'configurado': provedor.configurado(),
+                'modelo': provedor.modelo(),
+                'chamadas': totais['chamadas'] or 0,
+                'erros': totais['erros'] or 0,
+                'fallbacks': totais['fallbacks'] or 0,
+                'custo_estimado_brl': round(float(totais['custo'] or 0), 4),
+                'custo_apurado': do_provedor.exclude(custo_estimado__isnull=True).exists(),
+                'latencia_media_ms': (
+                    round(float(totais['latencia']))
+                    if totais['latencia'] is not None
+                    else None
+                ),
+                'preco_entrada_brl_por_milhao': preco_entrada,
+                'preco_saida_brl_por_milhao': preco_saida,
+            }
+        )
+
+    return linhas
+
+
 def _consumo_de_ia() -> dict[str, Any]:
     desde = inicio_do_mes()
     execucoes = ExecucaoIA.objects.filter(criado_em__gte=desde)
@@ -137,7 +190,7 @@ def _consumo_de_ia() -> dict[str, Any]:
     ]
 
     custo = float(totais['custo'] or 0)
-    preco_entrada, preco_saida = precos()
+    preco_entrada, preco_saida = precos(nome_do_principal())
     teto = float(settings.AI_CUSTO_TETO_MENSAL_BRL)
     ultima = ExecucaoIA.objects.order_by('-criado_em').first()
     chamadas = totais['chamadas'] or 0
@@ -186,9 +239,10 @@ def _consumo_de_ia() -> dict[str, Any]:
         'saldo_brl': round(max(teto - custo, 0), 4) if teto else None,
         'p50_ms': percentil(latencias, 0.50),
         'p90_ms': percentil(latencias, 0.90),
-        'provedor_configurado': bool(settings.GEMINI_API_KEY),
+        'provedor_configurado': provedor_configurado(),
         'rerank_habilitado': bool(settings.AI_MATCH_RERANK_ENABLED),
-        'modelo': settings.AI_MATCH_GEMINI_MODEL,
+        'modelo': modelo_do_provedor(),
+        'provedores': _provedores(execucoes),
         'revisao_humana': _revisao_humana(),
         'ultima_execucao': (
             {

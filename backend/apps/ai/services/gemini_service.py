@@ -1,28 +1,32 @@
 """
 Gateway do Google Gemini.
 
-Adaptado do legado (ai_matching) para o novo modelo:
-- Oportunidade + PropostaEstruturada + CompetenciaNecessaria + MembroRede
-- Rastreabilidade via ExecucaoIA (ai_run_id, correlation_id)
-- Fallback seguro: Gemini indisponivel -> busca lexical/embedding
-
 E **gateway, nao caso de uso**. Na convencao do projeto (plano 7.2) Service
-Object e um caso de uso por classe, com `execute()`; esta classe traduz quatro
+Object e um caso de uso por classe, com `execute()`; esta classe traduz as
 operacoes para o provedor externo, grava a execucao e garante o fallback. Os
 casos de uso que a consomem - Copiloto, competencias, matching e pre-analise -
-nascem nas fases 3.2 a 3.4 e a recebem por construtor (plano 7.3), que e o que
-permite o duble em teste (AGENTS.md 0.1).
+a recebem por construtor (plano 7.3), que e o que permite o duble em teste
+(AGENTS.md 0.1).
+
+Fala com o provedor pela biblioteca `google-genai`, que permite limitar o
+"raciocinio" do modelo (`AI_GEMINI_ORCAMENTO_RACIOCINIO`). Toda chamada leva o
+prompt de sistema da baseline; o texto de cada tarefa vem de `prompts.py`.
 """
 import json
 import logging
 import time
 import uuid
-from typing import Any
+from typing import Any, Callable
+
 from django.conf import settings
-import google.generativeai as genai
-from google.api_core import exceptions as excecoes_google
-from apps.ai.models import ExecucaoIA, TipoExecucaoIA, StatusExecucao
+
+from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
+from apps.ai.services import prompts
 from apps.ai.services.custo import (
+    MOTIVO_DO_ESTOURO,
+    MOTIVO_FALHA_DO_PROVEDOR,
+    MOTIVO_LIMITE_DO_MES,
+    MOTIVO_SEM_IA,
     TetoDeCustoExcedido,
     custo_da_chamada,
     garantir_orcamento,
@@ -44,10 +48,7 @@ def tokens_da_resposta(response, *, prompt: str) -> tuple[int, int]:
     """
     Os tokens da chamada, do provedor quando ele informa.
 
-    `Plano_Integracao_IA.md` manda *registrar* tokens de entrada e saida - e e
-    sobre esse numero que o custo e o teto mensal sao conferidos. O
-    `usage_metadata` do Gemini e a medida do proprio provedor; a contagem por
-    caractere so entra quando ele nao vem.
+    Os tokens de raciocinio sao cobrados como saida, e entram na saida.
     """
     uso = getattr(response, 'usage_metadata', None)
     texto = getattr(response, 'text', '') or ''
@@ -55,9 +56,10 @@ def tokens_da_resposta(response, *, prompt: str) -> tuple[int, int]:
     if uso is not None:
         entrada = getattr(uso, 'prompt_token_count', None)
         saida = getattr(uso, 'candidates_token_count', None)
+        raciocinio = getattr(uso, 'thoughts_token_count', None) or 0
 
         if entrada is not None and saida is not None:
-            return int(entrada), int(saida)
+            return int(entrada), int(saida) + int(raciocinio)
 
     return (
         len(prompt) // CARACTERES_POR_TOKEN,
@@ -65,20 +67,80 @@ def tokens_da_resposta(response, *, prompt: str) -> tuple[int, int]:
     )
 
 
-FALHAS_PASSAGEIRAS = (
-    excecoes_google.TooManyRequests,
-    excecoes_google.ServerError,
-)
-"""
-O que vale tentar de novo: 429, 5xx e o timeout (`DeadlineExceeded` e um 504).
+def falha_passageira(erro: Exception) -> bool:
+    """
+    O que vale tentar de novo: 429, 5xx e o tempo esgotado.
 
-Erro de requisicao - prompt invalido, chave recusada - devolve a mesma resposta
-na segunda vez, e repeti-lo so gasta a espera do usuario.
-"""
+    Erro de requisicao - prompt invalido, chave recusada - devolve a mesma
+    resposta na segunda vez, e repeti-lo so gasta a espera do usuario.
+    """
+    from google.genai import errors as erros_genai
+
+    if isinstance(erro, erros_genai.ServerError):
+        return True
+
+    if isinstance(erro, erros_genai.ClientError):
+        return getattr(erro, 'code', None) == 429
+
+    try:
+        import httpx
+    except ImportError:
+        return False
+
+    return isinstance(erro, httpx.TimeoutException)
 
 
 class ChamadaEsgotada(Exception):
     """A falha passageira persistiu em todas as tentativas permitidas."""
+
+
+class ClienteGenAI:
+    """
+    O SDK `google-genai` atras da forma de chamada que o gateway usa.
+
+    Junta numa configuracao so o que cada chamada leva: prompt de sistema,
+    temperatura, teto de saida, resposta em JSON, limite de raciocinio e tempo
+    maximo de espera.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        modelo: str,
+        temperatura: float,
+        orcamento_raciocinio: int | None = None,
+    ) -> None:
+        from google import genai
+
+        self._cliente = genai.Client(api_key=api_key)
+        self._modelo = modelo
+        self._temperatura = temperatura
+        self._orcamento = orcamento_raciocinio
+
+    def generate_content(self, prompt: str, *, request_options: dict, sistema: str = ''):
+        from google.genai import types
+
+        orcamento = int(
+            settings.AI_GEMINI_ORCAMENTO_RACIOCINIO
+            if self._orcamento is None
+            else self._orcamento
+        )
+
+        configuracao = types.GenerateContentConfig(
+            system_instruction=sistema or None,
+            temperature=self._temperatura,
+            max_output_tokens=settings.AI_GEMINI_MAX_TOKENS_SAIDA,
+            response_mime_type='application/json',
+            thinking_config=types.ThinkingConfig(thinking_budget=orcamento),
+            http_options=types.HttpOptions(
+                timeout=int(float(request_options['timeout']) * 1000)
+            ),
+        )
+
+        return self._cliente.models.generate_content(
+            model=self._modelo, contents=prompt, config=configuracao
+        )
 
 
 class ProvedorGemini:
@@ -89,17 +151,21 @@ class ProvedorGemini:
     sem tocar a rede - e o que mantem a suite isolada (AGENTS.md 0.1).
     """
 
+    provedor = 'google'
+
     def __init__(
         self,
         modelo: str | None = None,
         temperatura: float | None = None,
         cliente=None,
         dormir=time.sleep,
+        orcamento_raciocinio: int | None = None,
     ):
         """
-        `cliente` substitui o `GenerativeModel` e `dormir` a espera entre
-        tentativas - e o que deixa o teste exercitar o retry sem rede e sem
-        relogio (AGENTS.md 0.1).
+        `cliente` substitui o SDK e `dormir` a espera entre tentativas - e o que
+        deixa o teste exercitar o retry sem rede e sem relogio (AGENTS.md 0.1).
+        `orcamento_raciocinio` vence a settings so neste provedor: e o que a
+        medicao manual usa para comparar com e sem limite.
         """
         self._modelo = modelo or settings.AI_MATCH_GEMINI_MODEL
         self._dormir = dormir
@@ -118,14 +184,11 @@ class ProvedorGemini:
             self._disponivel = False
             self.model = None
         else:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(
-                model_name=self._modelo,
-                generation_config=genai.GenerationConfig(
-                    temperature=temperatura,
-                    max_output_tokens=settings.AI_GEMINI_MAX_TOKENS_SAIDA,
-                    response_mime_type='application/json',
-                ),
+            self.model = ClienteGenAI(
+                api_key=api_key,
+                modelo=self._modelo,
+                temperatura=temperatura,
+                orcamento_raciocinio=orcamento_raciocinio,
             )
             self._disponivel = True
 
@@ -135,14 +198,7 @@ class ProvedorGemini:
 
     @property
     def modelo(self) -> str:
-        """
-        O modelo que este provedor chama - e o que o registro precisa gravar.
-
-        Fica exposto porque `ExecucaoIA.modelo` e o painel de saude respondem
-        "qual modelo produziu isto", e a resposta tem de vir do mesmo lugar que
-        a chamada. Ler a settings de novo no registro reabriria a divergencia
-        que este atributo fecha.
-        """
+        """O modelo que este provedor chama - e o que o registro grava."""
         return self._modelo
 
     def _criar_execucao(
@@ -154,18 +210,12 @@ class ProvedorGemini:
         parametros: dict,
         executado_por: str = '__sistema__',
     ) -> ExecucaoIA:
-        """
-        Cria registro de execucao de IA para rastreabilidade.
-
-        `oportunidade_id` chega dos quatro fluxos e e gravado: e ele que
-        permite perguntar quanto uma oportunidade custou. Fica nulo so em
-        execucao que nao pende de oportunidade nenhuma, como embedding da rede.
-        """
+        """O registro da execucao, aberto antes da chamada."""
         return ExecucaoIA.objects.create(
             tipo=tipo,
-            provedor='google',
+            provedor=self.provedor,
             modelo=self._modelo,
-            versao_prompt=prompt_versao,
+            versao_prompt=prompts.versao_registrada(prompt_versao),
             correlation_id=correlation_id,
             oportunidade_id=oportunidade_id,
             executado_por=executado_por,
@@ -194,7 +244,9 @@ class ProvedorGemini:
             custo_estimado
             if custo_estimado is not None
             else custo_da_chamada(
-                tokens_entrada=tokens_entrada, tokens_saida=tokens_saida
+                tokens_entrada=tokens_entrada,
+                tokens_saida=tokens_saida,
+                provedor=self.provedor,
             )
         )
         execucao.latencia_ms = latencia_ms
@@ -208,10 +260,7 @@ class ProvedorGemini:
         return execucao
 
     def _parse_json_seguro(self, texto: str) -> dict[str, Any]:
-        """
-        Extrai JSON valido da resposta, tolerando texto extra.
-        Mesmo parser robusto do legado.
-        """
+        """Extrai JSON valido da resposta, tolerando texto em volta."""
         try:
             return json.loads(texto)
         except json.JSONDecodeError:
@@ -235,14 +284,19 @@ class ProvedorGemini:
         """
         tentativas = max(1, settings.AI_GEMINI_TENTATIVAS)
         espera = settings.AI_GEMINI_ESPERA_INICIAL_S
+        sistema, _ = prompts.prompt_de_sistema()
 
         for tentativa in range(1, tentativas + 1):
             try:
                 return self.model.generate_content(
                     prompt,
                     request_options={'timeout': settings.AI_GEMINI_TIMEOUT_S},
+                    sistema=sistema,
                 )
-            except FALHAS_PASSAGEIRAS as falha:
+            except Exception as falha:
+                if not falha_passageira(falha):
+                    raise
+
                 if tentativa == tentativas:
                     raise ChamadaEsgotada(
                         f'Falha passageira em {tentativas} tentativas: {falha}'
@@ -254,6 +308,14 @@ class ProvedorGemini:
                 self._dormir(espera)
                 espera *= 2
 
+    def _ler(self, response, validar: Callable[[dict], bool] | None) -> dict[str, Any]:
+        resultado = self._parse_json_seguro(getattr(response, 'text', None) or '{}')
+
+        if not resultado.get('_erro_parse') and validar is not None and not validar(resultado):
+            return {'_erro_parse': True, '_raw': 'resposta sem os vinculos pedidos'}
+
+        return resultado
+
     def _executar_com_fallback(
         self,
         tipo: TipoExecucaoIA,
@@ -264,24 +326,24 @@ class ProvedorGemini:
         parametros: dict,
         fallback_fn,
         executado_por: str = '__sistema__',
+        validar: Callable[[dict], bool] | None = None,
     ) -> dict[str, Any]:
         """
         Executa no Gemini com fallback automatico.
-        Retorna dict com keys: 'dados', 'execucao_ia', 'fallback_usado'.
 
-        Antes de chamar, confere o teto mensal: `Metodos_Integracao_IA.md`, na
-        tabela de falhas, manda "Interromper requisicao e registrar alerta"
-        quando o custo passa do limite. Interromper nao pode virar erro na cara
-        do usuario - o fallback e o que AGENTS.md 0.2 exige de todo componente
-        de IA -, entao o estouro devolve o caminho sem IA, nao excecao.
+        Antes de chamar, confere o teto de gasto: estourado, a chamada nao sai
+        e o caminho sem IA volta com o motivo, para a tela explicar.
+
+        Resposta malformada - JSON invalido, ou sem os vinculos que `validar`
+        exige - e pedida de novo uma vez, com o mesmo prompt.
         """
         if not self._disponivel:
             logger.info(f'Gemini indisponivel - executando fallback para {tipo}')
-            dados_fallback = fallback_fn()
             return {
-                'dados': dados_fallback,
+                'dados': fallback_fn(),
                 'execucao_ia': None,
                 'fallback_usado': True,
+                'motivo_fallback': MOTIVO_SEM_IA,
             }
 
         try:
@@ -292,6 +354,9 @@ class ProvedorGemini:
                 'dados': fallback_fn(),
                 'execucao_ia': None,
                 'fallback_usado': True,
+                'motivo_fallback': MOTIVO_DO_ESTOURO.get(
+                    estouro.codigo, MOTIVO_LIMITE_DO_MES
+                ),
             }
 
         execucao = self._criar_execucao(
@@ -313,10 +378,10 @@ class ProvedorGemini:
                 response, prompt=prompt
             )
 
-            resultado = self._parse_json_seguro(response.text or '{}')
+            resultado = self._ler(response, validar)
 
             if resultado.get('_erro_parse'):
-                logger.warning(f'JSON invalido do Gemini ({tipo}); pedindo de novo.')
+                logger.warning(f'Resposta malformada do Gemini ({tipo}); pedindo de novo.')
                 response = self._gerar(prompt)
                 latencia_ms = int((time.perf_counter() - inicio) * 1000)
                 entrada_extra, saida_extra = tokens_da_resposta(
@@ -324,7 +389,7 @@ class ProvedorGemini:
                 )
                 tokens_entrada += entrada_extra
                 tokens_saida += saida_extra
-                resultado = self._parse_json_seguro(response.text or '{}')
+                resultado = self._ler(response, validar)
 
             self._finalizar_execucao(
                 execucao=execucao,
@@ -340,6 +405,7 @@ class ProvedorGemini:
                 'dados': resultado,
                 'execucao_ia': execucao,
                 'fallback_usado': False,
+                'motivo_fallback': None,
             }
 
         except Exception as e:
@@ -354,78 +420,62 @@ class ProvedorGemini:
                 erro=str(e),
             )
 
-            # Fallback
             logger.info(f'Executando fallback para {tipo}')
-            dados_fallback = fallback_fn()
             return {
-                'dados': dados_fallback,
+                'dados': fallback_fn(),
                 'execucao_ia': execucao,
                 'fallback_usado': True,
+                'motivo_fallback': MOTIVO_FALHA_DO_PROVEDOR,
             }
 
-    # ==================== PROMPTS ESPECIFICOS ====================
-
-    def estruturar_proposta(
+    def sintetizar_entrada(
         self,
         oportunidade_id: int,
-        entrada_bruta: str,
-        contexto: str,
+        entrada: str,
         correlation_id: uuid.UUID,
         executado_por: str,
     ) -> dict[str, Any]:
-        """
-        Copiloto de Estruturacao (RF04).
-        Transforma entrada em proposta estruturada (8 elementos).
-        """
-        prompt = f"""
-Você é o Copiloto de Estruturação do P&D Connect.
-Sua tarefa: transformar a entrada bruta em uma proposta de P&D estruturada com 8 elementos.
-
-ENTRADA BRUTA:
-{entrada_bruta}
-
-CONTEXTO ADICIONAL:
-{contexto}
-
-REGRAS:
-1. Responda APENAS com JSON valido.
-2. Os 8 campos sao obrigatorios (podem vir vazios se nao houver informacao).
-3. "objetivos_especificos" deve ser array de strings.
-4. Nao inclua comentarios, markdown ou explicacoes.
-
-FORMATO DE SAIDA:
-{{
-  "problema_pesquisa": "string",
-  "hipotese": "string ou null",
-  "objetivo_geral": "string",
-  "objetivos_especificos": ["string", "..."],
-  "metodologia": "string",
-  "resultados_esperados": "string",
-  "caracterizacao_inovacao": "string",
-  "infraestrutura_recursos": "string"
-}}
-"""
-
-        def fallback():
-            return {
-                'problema_pesquisa': '',
-                'hipotese': None,
-                'objetivo_geral': '',
-                'objetivos_especificos': [],
-                'metodologia': '',
-                'resultados_esperados': '',
-                'caracterizacao_inovacao': '',
-                'infraestrutura_recursos': '',
-            }
-
+        """A interpretacao inicial da entrada, que o Supervisor corrige (PB29)."""
         return self._executar_com_fallback(
             tipo=TipoExecucaoIA.COPILOTO,
             oportunidade_id=oportunidade_id,
             correlation_id=correlation_id,
-            prompt_versao='copiloto_v1',
-            prompt=prompt,
-            parametros={'entrada_bruta': entrada_bruta[:200], 'contexto': contexto[:200]},
-            fallback_fn=fallback,
+            prompt_versao=prompts.VERSAO_SINTESE,
+            prompt=prompts.prompt_sintese(entrada=entrada),
+            parametros={'entrada_len': len(entrada)},
+            fallback_fn=lambda: {'problema': '', 'contexto': '', 'o_que_falta': []},
+            executado_por=executado_por,
+        )
+
+    def estruturar_proposta(
+        self,
+        oportunidade_id: int,
+        entrada: str,
+        sintese: str,
+        preenchidos: dict[str, str],
+        vazios: list[str],
+        respostas: list[str],
+        correlation_id: uuid.UUID,
+        executado_por: str,
+    ) -> dict[str, Any]:
+        """
+        Copiloto de Estruturacao (RF04): escreve so os elementos vazios, avalia
+        os oito e devolve como sugestao o que mexeria em elemento preenchido.
+        """
+        return self._executar_com_fallback(
+            tipo=TipoExecucaoIA.COPILOTO,
+            oportunidade_id=oportunidade_id,
+            correlation_id=correlation_id,
+            prompt_versao=prompts.VERSAO_COPILOTO,
+            prompt=prompts.prompt_estruturacao(
+                entrada=entrada,
+                sintese=sintese,
+                preenchidos=preenchidos,
+                vazios=vazios,
+                respostas=respostas,
+            ),
+            parametros={'vazios': len(vazios), 'respostas': len(respostas)},
+            fallback_fn=lambda: {'preenchimentos': {}, 'sugestoes': [], 'avaliacao': []},
             executado_por=executado_por,
         )
 
@@ -436,42 +486,15 @@ FORMATO DE SAIDA:
         correlation_id: uuid.UUID,
         executado_por: str,
     ) -> dict[str, Any]:
-        """
-        Deriva competencias necessarias da proposta (RF05).
-        """
-        prompt = f"""
-Você é um especialista em gestao de P&D.
-Extraia as competencias tecnicas/cientificas necessarias para executar esta proposta.
-
-PROPOSTA ESTRUTURADA:
-{proposta_texto}
-
-REGRAS:
-1. Responda APENAS com JSON valido.
-2. Retorne array de objetos, cada um com: "descricao", "nivel_importancia" ("essencial" ou "desejavel").
-3. Maximo 15 competencias.
-4. Foque em conhecimentos tecnicos/cientificos reais (ex: "Microbiologia de alimentos", "PCR em tempo real", "Fermentacao industrial").
-
-FORMATO:
-{{
-  "competencias": [
-    {{"descricao": "string", "nivel_importancia": "essencial|desejavel"}},
-    ...
-  ]
-}}
-"""
-
-        def fallback():
-            return {'competencias': []}
-
+        """Deriva competencias necessarias da proposta (RF05)."""
         return self._executar_com_fallback(
             tipo=TipoExecucaoIA.COMPETENCIAS,
             oportunidade_id=oportunidade_id,
             correlation_id=correlation_id,
-            prompt_versao='competencias_v1',
-            prompt=prompt,
+            prompt_versao=prompts.VERSAO_COMPETENCIAS,
+            prompt=prompts.prompt_competencias(proposta_texto=proposta_texto),
             parametros={'proposta_len': len(proposta_texto)},
-            fallback_fn=fallback,
+            fallback_fn=lambda: {'competencias': []},
             executado_por=executado_por,
         )
 
@@ -483,60 +506,17 @@ FORMATO:
         correlation_id: uuid.UUID,
         executado_por: str,
     ) -> dict[str, Any]:
-        """
-        Matching: compara competencias necessarias com perfis da rede (RF06-RF08).
-        """
-        cand_text = '\n'.join([
-            f"Candidato {i}: {c['nome']} | Titulação: {c.get('titulacao', 'N/A')} | "
-            f"Disponibilidade: {c.get('disponibilidade', 'N/A')} | "
-            f"Competencias: {', '.join(c.get('competencias', []))} | "
-            f"Tecnicas: {', '.join(c.get('tecnicas', []))} | "
-            f"Linhas: {', '.join(c.get('linhas', []))} | "
-            f"Experiencia: {c.get('experiencia', 'N/A')[:200]}"
-            for i, c in enumerate(candidatos)
-        ])
-
-        comp_text = '\n'.join([
-            f"- {c['descricao']} ({c.get('nivel_importancia', 'essencial')})"
-            for c in competencias_necessarias
-        ])
-
-        prompt = f"""
-Você é o motor de Matching do P&D Connect.
-Compare as competencias necessarias com os perfis da rede interna e rankie os melhores.
-
-COMPETENCIAS NECESSARIAS:
-{comp_text}
-
-CANDIDATOS DA REDE ({len(candidatos)} total):
-{cand_text}
-
-REGRAS:
-1. Responda APENAS com JSON valido.
-2. Retorne "matches": array de objetos com:
-   - "candidato_index": int (indice no array acima)
-   - "nome": string
-   - "score_compatibilidade": float 0.0-1.0
-   - "match_reasons": array de strings (fatores que levaram ao match)
-   - "score_features": object (features do score: ex: {{"titulacao": 0.8, "competencias": 0.6, "disponibilidade": 1.0}})
-   - "papel_sugerido": "supervisor|pesquisador"
-3. Ordene por score decrescente.
-4. Maximo 10 matches.
-5. So inclua se score >= 0.3.
-"""
-
-        def fallback():
-            # Fallback: busca lexical simples (Jaccard) - implementado em matching service
-            return {'matches': []}
-
+        """A reordenacao do matching (RF06-RF08): candidatos so por apelido."""
         return self._executar_com_fallback(
             tipo=TipoExecucaoIA.MATCHING,
             oportunidade_id=oportunidade_id,
             correlation_id=correlation_id,
-            prompt_versao='matching_v1',
-            prompt=prompt,
+            prompt_versao=prompts.VERSAO_MATCHING,
+            prompt=prompts.prompt_matching(
+                competencias=competencias_necessarias, candidatos=candidatos
+            ),
             parametros={'num_candidatos': len(candidatos), 'num_competencias': len(competencias_necessarias)},
-            fallback_fn=fallback,
+            fallback_fn=lambda: {'matches': []},
             executado_por=executado_por,
         )
 
@@ -545,61 +525,50 @@ REGRAS:
         oportunidade_id: int,
         proposta_texto: str,
         equipe_texto: str,
+        criterios: dict[str, Any],
         correlation_id: uuid.UUID,
         executado_por: str,
     ) -> dict[str, Any]:
         """
-        Pre-analise PIPE/FAPESP (RF09, RF10).
-        6 dimensoes: desafio_tecnologico, inovacao, plano_pesquisa, equipe_supervisao, infraestrutura, viabilidade.
+        Pre-analise PIPE/FAPESP (RF09, RF10), com os criterios da versao vigente.
+
+        Recomendacao que nao aponta para uma lacuna da propria resposta torna a
+        resposta malformada: e o vinculo que a tela mostra.
         """
-        prompt = f"""
-Você é um analista de maturidade tecnologica orientado ao PIPE/FAPESP.
-Avalie a proposta em 6 dimensoes e retorne lacunas + recomendacoes.
-
-PROPOSTA:
-{proposta_texto}
-
-EQUIPE POTENCIAL:
-{equipe_texto}
-
-REGRAS:
-1. Responda APENAS com JSON valido.
-2. Para cada dimensao: "avaliacao" (texto), "nivel" ("consolidada"|"em_desenvolvimento"|"fragil"), "evidencias" (array).
-3. "lacunas": array de objetos {{"dimensao": "...", "descricao": "..."}}.
-4. "recomendacoes": array de strings acionaveis.
-5. Nao use palavras "nota", "parecer", "aprovacao" - e orientativo apenas.
-
-FORMATO:
-{{
-  "dimensoes": [
-    {{"dimensao": "desafio_tecnologico", "avaliacao": "...", "nivel": "...", "evidencias": [...]}},
-    {{"dimensao": "inovacao", "avaliacao": "...", "nivel": "...", "evidencias": [...]}},
-    {{"dimensao": "plano_pesquisa", "avaliacao": "...", "nivel": "...", "evidencias": [...]}},
-    {{"dimensao": "equipe_supervisao", "avaliacao": "...", "nivel": "...", "evidencias": [...]}},
-    {{"dimensao": "infraestrutura", "avaliacao": "...", "nivel": "...", "evidencias": [...]}},
-    {{"dimensao": "viabilidade", "avaliacao": "...", "nivel": "...", "evidencias": [...]}}
-  ],
-  "lacunas": [{{"dimensao": "...", "descricao": "..."}}, ...],
-  "recomendacoes": ["...", "..."],
-  "sintese": "Resumo executivo em 2-3 linhas"
-}}
-"""
-
-        def fallback():
-            return {
-                'dimensoes': [],
-                'lacunas': [],
-                'recomendacoes': [],
-                'sintese': 'Pre-analise nao disponivel (IA indisponivel).',
-            }
-
         return self._executar_com_fallback(
             tipo=TipoExecucaoIA.PREANALISE,
             oportunidade_id=oportunidade_id,
             correlation_id=correlation_id,
-            prompt_versao='preanalise_v1',
-            prompt=prompt,
+            prompt_versao=prompts.VERSAO_PREANALISE,
+            prompt=prompts.prompt_preanalise(
+                baseline_id=criterios.get('baseline_id', ''),
+                versao=criterios.get('versao', ''),
+                criterios_por_dimensao=criterios.get('por_dimensao', []),
+                proposta_texto=proposta_texto,
+                equipe_texto=equipe_texto,
+            ),
             parametros={'proposta_len': len(proposta_texto), 'equipe_len': len(equipe_texto)},
-            fallback_fn=fallback,
+            fallback_fn=lambda: {
+                'dimensoes': [],
+                'lacunas': [],
+                'recomendacoes': [],
+                'sintese': 'Pré-análise indisponível agora: o serviço de IA não respondeu.',
+            },
             executado_por=executado_por,
+            validar=recomendacoes_vinculadas,
         )
+
+
+def recomendacoes_vinculadas(resultado: dict[str, Any]) -> bool:
+    """Toda recomendacao aponta para uma lacuna que a resposta declarou."""
+    ids = {
+        str(lacuna.get('id'))
+        for lacuna in resultado.get('lacunas') or []
+        if isinstance(lacuna, dict) and lacuna.get('id')
+    }
+
+    for recomendacao in resultado.get('recomendacoes') or []:
+        if not isinstance(recomendacao, dict) or str(recomendacao.get('lacuna')) not in ids:
+            return False
+
+    return True

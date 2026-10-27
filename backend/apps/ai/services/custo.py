@@ -31,20 +31,61 @@ class TetoDeCustoExcedido(ErroDeDominio):
     """O mes bateu no teto configurado. A chamada ao provedor nao sai."""
 
 
-def precos() -> tuple[float, float]:
+MOTIVO_SEM_IA = 'ia_indisponivel'
+MOTIVO_FALHA_DO_PROVEDOR = 'falha_do_provedor'
+MOTIVO_LIMITE_DA_OPORTUNIDADE = 'limite_da_oportunidade'
+MOTIVO_LIMITE_DO_MES = 'limite_do_mes'
+MOTIVO_MODELO_DE_RESERVA = 'modelo_de_reserva'
+
+MOTIVO_DO_ESTOURO = {
+    'teto_por_oportunidade_excedido': MOTIVO_LIMITE_DA_OPORTUNIDADE,
+    'teto_de_custo_excedido': MOTIVO_LIMITE_DO_MES,
+}
+
+EXPLICACAO_DO_MOTIVO = {
+    MOTIVO_SEM_IA: 'o serviço de IA está indisponível',
+    MOTIVO_FALHA_DO_PROVEDOR: 'o serviço de IA não respondeu',
+    MOTIVO_LIMITE_DA_OPORTUNIDADE: (
+        'esta oportunidade atingiu o limite de gasto com IA. Quem administra '
+        'a plataforma pode rever o limite'
+    ),
+    MOTIVO_LIMITE_DO_MES: (
+        'o limite mensal de gasto com IA foi atingido. A IA volta no próximo '
+        'mês ou quando o limite for aumentado'
+    ),
+    MOTIVO_MODELO_DE_RESERVA: (
+        'o provedor principal não respondeu; o modelo de reserva assumiu'
+    ),
+}
+
+
+def explicar_motivo(motivo: str | None) -> str:
+    """Por que a IA nao foi chamada, em linguagem de tela."""
+    return EXPLICACAO_DO_MOTIVO.get(motivo or MOTIVO_SEM_IA, EXPLICACAO_DO_MOTIVO[MOTIVO_SEM_IA])
+
+
+def precos(provedor: str | None = None) -> tuple[float, float]:
     """Os precos vigentes por milhao de tokens, entrada e saida."""
+    if provedor:
+        from apps.ai.services.registro import precos_do_provedor
+
+        return precos_do_provedor(provedor)
+
     return (
         float(getattr(settings, 'AI_CUSTO_ENTRADA_BRL_POR_MILHAO', 0) or 0),
         float(getattr(settings, 'AI_CUSTO_SAIDA_BRL_POR_MILHAO', 0) or 0),
     )
 
 
-def ha_tabela_de_preco() -> bool:
-    return any(preco > 0 for preco in precos())
+def ha_tabela_de_preco(provedor: str | None = None) -> bool:
+    return any(preco > 0 for preco in precos(provedor))
 
 
 def custo_da_chamada(
-    *, tokens_entrada: int | None, tokens_saida: int | None
+    *,
+    tokens_entrada: int | None,
+    tokens_saida: int | None,
+    provedor: str | None = None,
 ) -> float | None:
     """
     O custo de uma chamada, ou `None` quando nao da para apurar.
@@ -55,10 +96,10 @@ def custo_da_chamada(
     if tokens_entrada is None and tokens_saida is None:
         return None
 
-    if not ha_tabela_de_preco():
+    if not ha_tabela_de_preco(provedor):
         return None
 
-    preco_entrada, preco_saida = precos()
+    preco_entrada, preco_saida = precos(provedor)
 
     return (
         (tokens_entrada or 0) / POR_MILHAO * preco_entrada

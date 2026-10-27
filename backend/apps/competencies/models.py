@@ -14,7 +14,7 @@ class NivelImportancia(models.TextChoices):
     """O `nivel_importancia` do diagrama, no lugar do booleano `essencial`."""
 
     ESSENCIAL = 'essencial', 'Essencial'
-    DESEJAVEL = 'desejavel', 'Desejavel'
+    DESEJAVEL = 'desejavel', 'Desejável'
 
 
 class DerivadaDe(models.TextChoices):

@@ -18,7 +18,12 @@ beforeEach(() => {
 
 function renderizar(props = {}) {
   return render(
-    <AbaDecisao podeDecidir onRegistrar={onRegistrar} {...props} />
+    <AbaDecisao
+      podeDecidir
+      situacao="aguardando_decisao"
+      onRegistrar={onRegistrar}
+      {...props}
+    />
   )
 }
 
@@ -133,15 +138,15 @@ describe('AbaDecisao — o que o registro exige', () => {
 
 describe('AbaDecisao — decisao ja registrada', () => {
   it('mostra o desfecho, a justificativa e quem registrou', () => {
-    renderizar({ decisao: DECISAO_REGISTRADA })
+    renderizar({ decisao: DECISAO_REGISTRADA, situacao: 'continuar' })
 
     expect(screen.getByText('Continuar')).toBeInTheDocument()
     expect(screen.getByText(DECISAO_REGISTRADA.justificativa)).toBeInTheDocument()
     expect(screen.getByText('Rafael Antunes')).toBeInTheDocument()
   })
 
-  it('nao oferece decidir de novo por cima do que ja foi registrado', () => {
-    renderizar({ decisao: DECISAO_REGISTRADA })
+  it('nao oferece decidir de novo depois de Continuar ou Arquivar', () => {
+    renderizar({ decisao: DECISAO_REGISTRADA, situacao: 'continuar' })
 
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /registrar decisão/i }))
@@ -152,6 +157,74 @@ describe('AbaDecisao — decisao ja registrada', () => {
     renderizar({ decisao: DECISAO_REGISTRADA, podeDecidir: false })
 
     expect(screen.getByText(DECISAO_REGISTRADA.justificativa)).toBeInTheDocument()
+  })
+})
+
+/**
+ * O fluxo da oportunidade tem regra: Continuar e Revisar vêm depois da
+ * pré-análise, Arquivar vale em qualquer etapa, e depois de Revisar a
+ * oportunidade volta para a proposta. A API recusa o que estiver fora disso;
+ * a tela não oferece o botão que vai ser recusado e diz o que falta.
+ */
+describe('AbaDecisao — portões do fluxo', () => {
+  it('antes da pré-análise só Arquivar fica liberado, com o motivo', async () => {
+    const irPara = vi.fn()
+    const user = userEvent.setup()
+    renderizar({ situacao: 'matching', irPara })
+
+    expect(screen.getByRole('radio', { name: /continuar/i })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: /revisar/i })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: /arquivar/i })).toBeEnabled()
+    expect(screen.getByText(/ficam liberados quando a pré-análise termina/i))
+      .toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /ir para pré-análise/i }))
+
+    expect(irPara).toHaveBeenCalledWith('pre-analise')
+  })
+
+  it('depois de Revisar mostra a última decisão e leva de volta à proposta', async () => {
+    const irPara = vi.fn()
+    const user = userEvent.setup()
+    renderizar({
+      situacao: 'revisar',
+      decisao: { ...DECISAO_REGISTRADA, tipo: 'revisar' },
+      irPara,
+    })
+
+    expect(screen.getByText('Última decisão')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /arquivar/i })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /ir para proposta estruturada/i }))
+
+    expect(irPara).toHaveBeenCalledWith('proposta')
+  })
+
+  it('aguardando decisão, os três encaminhamentos ficam liberados', () => {
+    renderizar()
+
+    for (const opcao of screen.getAllByRole('radio')) {
+      expect(opcao).toBeEnabled()
+    }
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * No Revisar a justificativa é o pedido de complementação: vai para a
+ * empresa demandante, na plataforma e por e-mail. Quem escreve precisa saber
+ * disso antes, porque o que sai por e-mail o sistema não apaga depois.
+ */
+describe('AbaDecisao — o que sai para a empresa', () => {
+  it('avisa, só no Revisar, que a justificativa vai para a empresa', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.click(screen.getByRole('radio', { name: /continuar/i }))
+    expect(screen.queryByText(/vai para a empresa demandante/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /revisar/i }))
+    expect(justificativa()).toHaveAccessibleDescription(/vai para a empresa demandante/i)
   })
 })
 

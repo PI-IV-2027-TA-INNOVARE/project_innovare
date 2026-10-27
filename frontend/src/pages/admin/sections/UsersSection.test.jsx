@@ -15,6 +15,8 @@ vi.mock('../../../services/pdConnectApi', () => ({
   updateUsuario: vi.fn(),
   setSituacaoUsuario: vi.fn(),
   reenviarConvite: vi.fn(),
+  buscarEmpresaPorCnpj: vi.fn(),
+  anonimizarConta: vi.fn(),
 }))
 
 const api = await import('../../../services/pdConnectApi')
@@ -39,6 +41,9 @@ beforeEach(() => {
   api.listUsuarios.mockResolvedValue({
     results: USUARIOS_EXEMPLO.map(comoApi),
   })
+  api.buscarEmpresaPorCnpj.mockRejectedValue(
+    Object.assign(new Error('Nenhuma empresa cadastrada com este CNPJ.'), { status: 404 })
+  )
 })
 
 async function renderUsuarios() {
@@ -294,6 +299,88 @@ describe('UsersSection — situação do acesso', () => {
   })
 })
 
+describe('UsersSection — pedido de exclusão', () => {
+  function comPedido() {
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        { ...comoApi(USUARIOS_EXEMPLO[1]), exclusao_solicitada_em: '2026-10-20T10:00:00Z' },
+        comoApi(USUARIOS_EXEMPLO[7]),
+      ],
+    })
+  }
+
+  it('mostra quem pediu a exclusão e só a essa pessoa oferece atender', async () => {
+    const user = userEvent.setup()
+    comPedido()
+    await renderUsuarios()
+
+    const pediu = linhaDe('Maria Ferreira')
+    expect(within(pediu).getByText(/pediu exclusão em 20\/10\/2026/i)).toBeInTheDocument()
+    await user.click(within(pediu).getByRole('button', { name: /ações para maria ferreira/i }))
+    expect(screen.getByRole('menuitem', { name: /atender pedido de exclusão/i })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    const naoPediu = linhaDe('Rafael Antunes')
+    await user.click(within(naoPediu).getByRole('button', { name: /ações para rafael antunes/i }))
+    expect(screen.queryByRole('menuitem', { name: /atender pedido de exclusão/i })).not.toBeInTheDocument()
+  })
+
+  it('anonimiza só depois de confirmar e mostra a conta já sem o nome', async () => {
+    const user = userEvent.setup()
+    comPedido()
+    api.anonimizarConta.mockResolvedValue({
+      ...comoApi(USUARIOS_EXEMPLO[1]),
+      nome: 'Pessoa removida',
+      email: 'removido-2@anonimizado.invalid',
+      situacao: 'inativo',
+      anonimizada: true,
+    })
+    await renderUsuarios()
+
+    await user.click(within(linhaDe('Maria Ferreira')).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /atender pedido de exclusão/i }))
+
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent(/não tem volta/i)
+    expect(api.anonimizarConta).not.toHaveBeenCalled()
+
+    await user.click(within(dialogo).getByRole('button', { name: /^anonimizar$/i }))
+
+    expect(api.anonimizarConta).toHaveBeenCalledWith(2)
+    expect(await screen.findByText('Pessoa removida')).toBeInTheDocument()
+    expect(screen.queryByText('Maria Ferreira')).not.toBeInTheDocument()
+  })
+
+  /**
+   * Conta anonimizada não volta a ser usada: reativada ou editada, ela
+   * passaria a outra pessoa com o histórico de quem pediu para sair. A API
+   * recusa; a tela nem oferece.
+   */
+  it('à conta anonimizada só oferece visualizar', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        {
+          ...comoApi(USUARIOS_EXEMPLO[1]),
+          nome: 'Pessoa removida',
+          email: 'removido-2@anonimizado.invalid',
+          situacao: 'inativo',
+          anonimizada: true,
+        },
+        comoApi(USUARIOS_EXEMPLO[0]),
+      ],
+    })
+    render(<UsersSection />)
+
+    await user.click(
+      await screen.findByRole('button', { name: /ações para pessoa removida/i }),
+    )
+
+    const itens = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(itens).toEqual(['Visualizar perfil'])
+  })
+})
+
 describe('UsersSection — convite', () => {
   it('so oferece reenviar convite a quem ainda nao definiu senha', async () => {
     const user = userEvent.setup()
@@ -425,5 +512,117 @@ describe('UsersSection — ficha da pessoa', () => {
     await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Aguardando primeiro acesso')
+  })
+})
+
+describe('UsersSection — Demandante Externo com CNPJ', () => {
+  async function abrirComoDemandante(user) {
+    await renderUsuarios()
+    await user.click(screen.getByRole('button', { name: /novo usuário/i }))
+    const dialogo = screen.getByRole('dialog')
+    await user.selectOptions(within(dialogo).getByLabelText('Perfil'), 'demandante')
+    return dialogo
+  }
+
+  it('pede CNPJ, nome da empresa e e-mail de acesso, e não pede nome da pessoa', async () => {
+    const user = userEvent.setup()
+    const dialogo = await abrirComoDemandante(user)
+
+    expect(within(dialogo).getByLabelText('CNPJ')).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText('Nome da empresa')).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText('E-mail de acesso')).toBeInTheDocument()
+    expect(within(dialogo).queryByLabelText('Nome')).not.toBeInTheDocument()
+  })
+
+  it('aplica a máscara no CNPJ enquanto digita', async () => {
+    const user = userEvent.setup()
+    const dialogo = await abrirComoDemandante(user)
+
+    await user.type(within(dialogo).getByLabelText('CNPJ'), '11222333000181')
+
+    expect(within(dialogo).getByLabelText('CNPJ')).toHaveValue('11.222.333/0001-81')
+  })
+
+  it('recusa CNPJ com dígito errado no próprio campo, sem chamar a API', async () => {
+    const user = userEvent.setup()
+    const dialogo = await abrirComoDemandante(user)
+
+    await user.type(within(dialogo).getByLabelText('CNPJ'), '11222333000180')
+    await user.type(within(dialogo).getByLabelText('Nome da empresa'), 'Vale Verde')
+    await user.type(within(dialogo).getByLabelText('E-mail de acesso'), 'contato@valeverde.com.br')
+    await user.click(within(dialogo).getByRole('button', { name: /criar conta e enviar convite/i }))
+
+    expect(within(dialogo).getByRole('alert')).toHaveTextContent('CNPJ inválido. Confira os 14 números.')
+    expect(api.createUsuario).not.toHaveBeenCalled()
+  })
+
+  it('cria a conta ligada à empresa', async () => {
+    const user = userEvent.setup()
+    api.createUsuario.mockResolvedValue({
+      id_usuario: 77,
+      nome: 'Agroindústria Vale Verde',
+      email: 'contato@valeverde.com.br',
+      papel: 'demandante',
+      situacao: 'ativo',
+      instituicao: 'Agroindústria Vale Verde',
+      cnpj: '11.222.333/0001-81',
+      telefone: '',
+      ultimo_acesso: null,
+      aguardando_primeiro_acesso: true,
+    })
+    const dialogo = await abrirComoDemandante(user)
+
+    await user.type(within(dialogo).getByLabelText('CNPJ'), '11222333000181')
+    await user.type(within(dialogo).getByLabelText('Nome da empresa'), 'Agroindústria Vale Verde')
+    await user.type(within(dialogo).getByLabelText('E-mail de acesso'), 'contato@valeverde.com.br')
+    await user.click(within(dialogo).getByRole('button', { name: /criar conta e enviar convite/i }))
+
+    expect(api.createUsuario).toHaveBeenCalledWith({
+      email: 'contato@valeverde.com.br',
+      papel: 'demandante',
+      cnpj: '11222333000181',
+      nome_empresa: 'Agroindústria Vale Verde',
+    })
+  })
+
+  it('preenche e trava o nome quando a empresa do CNPJ já existe', async () => {
+    const user = userEvent.setup()
+    api.buscarEmpresaPorCnpj.mockResolvedValue({
+      id_organizacao: 3,
+      nome: 'Agroindústria Vale Verde',
+      cnpj: '11.222.333/0001-81',
+    })
+    const dialogo = await abrirComoDemandante(user)
+
+    await user.type(within(dialogo).getByLabelText('CNPJ'), '11222333000181')
+
+    const nome = within(dialogo).getByLabelText('Nome da empresa')
+    await waitFor(() => expect(nome).toHaveValue('Agroindústria Vale Verde'))
+    expect(nome).toHaveAttribute('readonly')
+    expect(api.buscarEmpresaPorCnpj).toHaveBeenCalledWith('11222333000181')
+    expect(within(dialogo).getByText('Empresa já cadastrada: esta conta fica ligada a ela.')).toBeInTheDocument()
+  })
+
+  it('marca o Demandante antigo que ainda está sem empresa', async () => {
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        ...USUARIOS_EXEMPLO.map(comoApi),
+        {
+          id_usuario: 50,
+          nome: 'Contato sem empresa',
+          email: 'antigo@empresa.com.br',
+          papel: 'demandante',
+          situacao: 'ativo',
+          instituicao: null,
+          cnpj: null,
+          ultimo_acesso: null,
+          aguardando_primeiro_acesso: false,
+        },
+      ],
+    })
+    await renderUsuarios()
+
+    const linha = linhaDe('Contato sem empresa')
+    expect(within(linha).getByText('Sem empresa vinculada')).toBeInTheDocument()
   })
 })

@@ -33,7 +33,7 @@ def marcar_como_lida(*, usuario: Usuario, id_notificacao: int) -> Notificacao:
 
     if notificacao is None:
         raise RecursoNaoEncontrado(
-            'Notificacao nao encontrada.', codigo='notificacao_nao_encontrada'
+            'Notificação não encontrada.', codigo='notificacao_nao_encontrada'
         )
 
     if notificacao.lida_em is None:

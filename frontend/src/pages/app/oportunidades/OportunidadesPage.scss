@@ -90,6 +90,18 @@
   color: var(--text-muted);
 }
 
+.oportunidade-page__prioridade {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  .admin-input--select {
+    width: auto;
+    min-height: 36px;
+    padding-block: 4px;
+  }
+}
+
 .oportunidade-page__codigo {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   font-size: 0.8125rem;
@@ -320,6 +332,24 @@
     line-height: 1.5;
     color: var(--text-muted);
   }
+}
+
+.decisao-opcao.is-disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+
+  &:hover {
+    border-color: var(--admin-card-border);
+  }
+
+  input {
+    cursor: not-allowed;
+  }
+}
+
+.equipe__inativo {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 .decisao-acoes {
@@ -773,6 +803,68 @@
   color: var(--text-muted);
 }
 
+.preanalise__dimensao-lacunas {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.preanalise__grupos {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preanalise__grupo {
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-md, 10px);
+
+  .preanalise__recomendacoes {
+    margin-top: 6px;
+    padding-left: 12px;
+    border-left: 2px solid var(--admin-card-border);
+  }
+}
+
+.preanalise__grupo-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 6px;
+}
+
+.preanalise__grupo-dimensao {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preanalise__criterio {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--admin-card-border);
+
+  &--sem-evidencia {
+    color: var(--text-muted);
+    border-style: dashed;
+  }
+}
+
+.preanalise__grupo-lacuna {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
 @media (max-width: 640px) {
   .competencias__item--editando {
     grid-template-columns: 1fr;
@@ -1041,6 +1133,93 @@
   flex: 1 1 320px;
 }
 
+.copiloto__pergunta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.copiloto__origem {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  color: var(--accent-primary-text);
+  background: var(--accent-primary-dim);
+  border-radius: 999px;
+}
+
+.copiloto__resumo-texto,
+.copiloto__sugestao-texto {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-line;
+}
+
+.copiloto__resumo-forma {
+  display: grid;
+  gap: 10px;
+}
+
+.copiloto__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.copiloto__sugestoes {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.copiloto__sugestao {
+  padding: 4px 14px 12px;
+  border: 1px solid var(--admin-card-border);
+  border-left: 3px solid var(--accent-secondary);
+  border-radius: var(--radius-md, 10px);
+
+  .copiloto__sugestao-texto {
+    margin-top: 8px;
+  }
+}
+
+.copiloto__escolhida {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-md, 10px);
+}
+
+.copiloto__escolhida-texto {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.copiloto__lacuna-cabeca {
+  margin: 0 0 2px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.copiloto__lacuna-rotulo {
+  font-style: normal;
+  font-weight: 600;
+}
+
 .proposta__inicio {
   display: flex;
   gap: 8px;
@@ -1255,4 +1434,16 @@
   .espera-ia {
     flex-wrap: wrap;
   }
+}
+
+.proposta__texto--recolhido {
+  resize: none;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.equipe__motivo-principal {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: var(--text-primary);
 }

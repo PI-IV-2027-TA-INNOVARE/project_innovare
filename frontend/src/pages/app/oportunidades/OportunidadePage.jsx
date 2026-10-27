@@ -7,6 +7,7 @@ import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
+  definirPrioridade,
   listarHistorico,
   obterOportunidade,
   registrarDecisao as registrarDecisaoNaApi,
@@ -21,7 +22,14 @@ import AbaHistorico from './abas/AbaHistorico'
 import AbaPreAnalise from './abas/AbaPreAnalise'
 import AbaProposta from './abas/AbaProposta'
 import { ETAPAS, REGISTROS } from './etapas'
-import { daApi, eventoDaApi, origemLabel, situacaoLabel } from './oportunidadesData'
+import {
+  PRIORIDADES,
+  daApi,
+  eventoDaApi,
+  origemLabel,
+  prioridadeLabel,
+  situacaoLabel,
+} from './oportunidadesData'
 import './OportunidadesPage.scss'
 
 const ABAS = [...ETAPAS, ...REGISTROS]
@@ -108,6 +116,19 @@ export default function OportunidadePage() {
     window.scrollTo?.({ top: 0, behavior: 'smooth' })
   }, [trocarAba])
 
+  const mudarPrioridade = async (event) => {
+    const prioridade = event.target.value
+
+    try {
+      await definirPrioridade(id, prioridade)
+      setRegistro((atual) => ({ ...atual, prioridade }))
+      showToast(`Prioridade ${prioridadeLabel(prioridade).toLowerCase()} na fila.`)
+      await atualizarEmSegundoPlano()
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível mudar a prioridade.')
+    }
+  }
+
   const registrarDecisao = async (tipo, justificativa) => {
     try {
       await registrarDecisaoNaApi(id, { tipo, justificativa })
@@ -174,6 +195,25 @@ export default function OportunidadePage() {
           <span className={`fluxo-badge fluxo-badge--${registro.situacao}`}>
             {situacaoLabel(registro.situacao)}
           </span>
+          {ehSupervisor && registro.prioridade ? (
+            <label className="oportunidade-page__prioridade">
+              <span>Prioridade</span>
+              <select
+                className="admin-input admin-input--select"
+                value={registro.prioridade}
+                onChange={mudarPrioridade}
+              >
+                {PRIORIDADES.map((opcao) => (
+                  <option key={opcao.id} value={opcao.id}>{opcao.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {!ehSupervisor && registro.prioridade ? (
+            <span className={`prioridade-badge prioridade-badge--${registro.prioridade}`}>
+              Prioridade {prioridadeLabel(registro.prioridade).toLowerCase()}
+            </span>
+          ) : null}
           <span className="oportunidade-page__demandante">{registro.demandante}</span>
           <span className="user-cell__meta">
             Atualizada {formatarUltimoAcesso(registro.atualizadaEm).toLowerCase()}
@@ -256,13 +296,23 @@ export default function OportunidadePage() {
         {abaAtiva === 'decisao' ? (
           <AbaDecisao
             decisao={decisao}
+            situacao={registro.situacao}
             podeDecidir={ehSupervisor}
             onRegistrar={registrarDecisao}
+            irPara={irPara}
           />
         ) : null}
 
         {abaAtiva === 'anexos' ? (
-          <AnexosOportunidade codigo={id} podeEnviar={ehSupervisor} />
+          <AnexosOportunidade
+            codigo={id}
+            podeEnviar={ehSupervisor}
+            quemVe={
+              registro.origem === 'externo'
+                ? 'o Supervisor e a equipe indicada. A empresa demandante vê só os documentos que ela mesma enviou.'
+                : 'o Supervisor e a equipe indicada.'
+            }
+          />
         ) : null}
 
         {abaAtiva === 'historico' ? (

@@ -26,11 +26,12 @@ from django.utils import timezone
 
 from apps.accounts.models import Usuario
 from apps.ai.models import StatusExecucao
+from apps.ai.services.apelidos import Apelidos
 from apps.ai.services.protocolos import ProvedorDeIA
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.competencies.models import CompetenciaNecessaria
-from apps.copilot.services.proposta import proposta_de
+from apps.copilot.services.proposta import exigir_proposta_revisada, proposta_de
 from apps.matching.models import (
     EquipePotencial,
     ExecucaoMatching,
@@ -39,8 +40,10 @@ from apps.matching.models import (
     OrigemIndicacao,
 )
 from apps.matching.services.motor import Avaliacao, MotorDeMatching, candidato_de
+from apps.matching.services.semantica import BaseSemantica, provedor_de_embedding
 from apps.network.models import MembroRede, SituacaoMembro
-from apps.opportunities.models import Oportunidade
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services.fluxo import avancar, conferir_avanco, exigir_em_curso
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
 
 
@@ -56,7 +59,7 @@ def candidatos_da_rede():
         MembroRede.objects.com_identificacao()
         .exclude(situacao=SituacaoMembro.INATIVO)
         .select_related('titulacao')
-        .prefetch_related('vinculos_competencia__competencia')
+        .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
         .order_by('nome_atual')
     )
 
@@ -106,9 +109,9 @@ class ExecutarMatchingService:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.gemini_service import ProvedorGemini
+        from apps.ai.services.registro import provedor_principal
 
-        return ProvedorGemini()
+        return provedor_principal()
 
     def execute(
         self, *, oportunidade: Oportunidade, ator: Usuario
@@ -119,6 +122,7 @@ class ExecutarMatchingService:
         conexao do banco durante a espera.
         """
         proposta = proposta_de(oportunidade)
+        exigir_proposta_revisada(proposta)
         necessarias = list(proposta.competencias_necessarias.select_related('competencia'))
 
         if not necessarias:
@@ -126,6 +130,8 @@ class ExecutarMatchingService:
                 'Derive as competências necessárias antes de rodar o matching.',
                 'sem_competencias',
             )
+
+        conferir_avanco(oportunidade, SituacaoOportunidade.MATCHING)
 
         candidatos = [candidato_de(membro) for membro in candidatos_da_rede()]
 
@@ -135,7 +141,7 @@ class ExecutarMatchingService:
                 'rede_vazia',
             )
 
-        motor = self._motor or MotorDeMatching()
+        motor = self._motor or MotorDeMatching(BaseSemantica(provedor_de_embedding()))
         avaliacoes = motor.avaliar(necessarias, candidatos)
         sem_semantica = not motor.semantico_disponivel
 
@@ -154,6 +160,10 @@ class ExecutarMatchingService:
         selecionadas = rerank['selecionadas']
 
         with transaction.atomic():
+            avancar(oportunidade, SituacaoOportunidade.MATCHING, ator)
+            proposta.refresh_from_db()
+            exigir_proposta_revisada(proposta)
+
             execucao = ExecucaoMatching.objects.create(
                 oportunidade=oportunidade,
                 estrategia=motor.estrategia,
@@ -238,6 +248,7 @@ class ExecutarMatchingService:
             'desejavel': motor.peso_desejavel,
             'disponibilidade': motor.fatores_disponibilidade,
             'semantico_disponivel': motor.semantico_disponivel,
+            'modelo_semantico': motor.modelo_semantico,
         }
 
     def _reordenar(
@@ -272,6 +283,8 @@ class ExecutarMatchingService:
 
         from apps.matching.serializers import SaidaMatchingSerializer
 
+        apelidos = Apelidos([avaliacao.candidato.nome for avaliacao in selecionadas])
+
         resultado = provedor.executar_matching(
             oportunidade_id=oportunidade.id_oportunidade,
             competencias_necessarias=[
@@ -283,7 +296,7 @@ class ExecutarMatchingService:
             ],
             candidatos=[
                 {
-                    'nome': avaliacao.candidato.nome,
+                    'apelido': apelidos.apelido(avaliacao.candidato.nome),
                     'titulacao': (
                         avaliacao.membro.titulacao.rotulo
                         if avaliacao.membro.titulacao_id
@@ -293,7 +306,7 @@ class ExecutarMatchingService:
                     'competencias': avaliacao.candidato.competencias,
                     'tecnicas': avaliacao.candidato.tecnicas,
                     'linhas': avaliacao.candidato.linhas,
-                    'experiencia': avaliacao.membro.experiencia,
+                    'experiencia': apelidos.anonimizar(avaliacao.membro.experiencia),
                 }
                 for avaliacao in selecionadas
             ],
@@ -301,7 +314,9 @@ class ExecutarMatchingService:
             executado_por=ator.email,
         )
 
-        saida = SaidaMatchingSerializer(data=resultado.get('dados') or {})
+        saida = SaidaMatchingSerializer(
+            data=apelidos.restaurar_em(resultado.get('dados') or {})
+        )
 
         if resultado.get('fallback_usado') or not saida.is_valid():
             return {
@@ -322,7 +337,7 @@ class ExecutarMatchingService:
 
             if motivos:
                 selecionadas[indice].motivos = selecionadas[indice].motivos + [
-                    f'Rerank: {motivo}' for motivo in motivos
+                    f'Segundo a IA: {motivo}' for motivo in motivos
                 ]
 
         if not posicao:
@@ -396,6 +411,8 @@ class AjustarMembroService:
     def execute(
         self, *, membro: MembroEquipe, dados: dict[str, Any], ator: Usuario
     ) -> MembroEquipe:
+        exigir_em_curso(membro.equipe.oportunidade)
+
         for campo, valor in dados.items():
             setattr(membro, campo, valor)
 
@@ -426,9 +443,17 @@ class AdicionarMembroService:
         papel: str,
         ator: Usuario,
     ) -> MembroEquipe:
+        exigir_em_curso(equipe.oportunidade)
+
         if equipe.membros.filter(membro=membro_rede).exists():
             raise ConflitoDeEstado(
                 'Esta pessoa já consta da equipe potencial.', 'membro_duplicado'
+            )
+
+        if membro_rede.situacao == SituacaoMembro.INATIVO:
+            raise ConflitoDeEstado(
+                'Esta pessoa está inativa na rede e não entra em equipe nova.',
+                'membro_inativo',
             )
 
         membro = MembroEquipe.objects.create(
@@ -467,6 +492,7 @@ class ValidarEquipeService:
     def execute(
         self, *, equipe: EquipePotencial, ator: Usuario
     ) -> EquipePotencial:
+        exigir_em_curso(equipe.oportunidade)
         incluidos = equipe.membros.filter(incluido=True)
 
         if not incluidos.exists():

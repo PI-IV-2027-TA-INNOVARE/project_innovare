@@ -187,6 +187,9 @@ def seguranca_de_transporte(ambiente, debug=False, rodando_testes=False):
     `SECURE_PROXY_SSL_HEADER` nao e enfeite: atras de um proxy que termina o
     TLS, o Django ve `http` e o redirect entraria em laco infinito.
 
+    `AUTH_COOKIE_SECURE` e o mesmo cuidado para o cookie do token de renovacao
+    (`apps/accounts/cookie_de_sessao.py`).
+
     `nosniff` e `X_FRAME_OPTIONS` valem nos dois ambientes - nao dependem de
     TLS e nao atrapalham o local.
 
@@ -208,6 +211,7 @@ def seguranca_de_transporte(ambiente, debug=False, rodando_testes=False):
         'SECURE_SSL_REDIRECT': endurecido,
         'SESSION_COOKIE_SECURE': endurecido,
         'CSRF_COOKIE_SECURE': endurecido,
+        'AUTH_COOKIE_SECURE': endurecido,
         'SECURE_HSTS_SECONDS': HSTS_EM_PRODUCAO if endurecido else 0,
         'SECURE_HSTS_INCLUDE_SUBDOMAINS': endurecido,
         'SECURE_HSTS_PRELOAD': endurecido,
@@ -233,3 +237,55 @@ def ambiente_incoerente(ambiente, debug):
     nao sabe que esta nessa situacao.
     """
     return ambiente == AMBIENTE_PRODUCAO and bool(debug)
+
+
+def exigir_ambiente_coerente(ambiente, debug, rodando_testes=False):
+    """
+    Recusa `AMBIENTE=producao` com `DEBUG=True`.
+
+    Era o `.env` de desenvolvimento apontado para o banco de verdade: a pagina
+    de erro detalhada saia para quem pedisse e os anexos ficavam abertos.
+    Desenvolver e no banco local; o banco remoto e de homologacao, sem DEBUG.
+    A suite nao e barrada: o tripwire ja troca o banco remoto por SQLite.
+    """
+    if rodando_testes or not ambiente_incoerente(ambiente, debug):
+        return
+
+    raise ImproperlyConfigured(
+        'AMBIENTE=producao com DEBUG=True. Para desenvolver, aponte o '
+        'backend/.env para o banco local (AMBIENTE=local); o banco remoto e '
+        'de homologacao, com DEBUG=False.'
+    )
+
+
+CAMINHO_PADRAO_DO_ADMIN = 'admin'
+
+
+def caminho_do_admin(valor, ambiente=AMBIENTE_LOCAL):
+    """
+    O endereco do `/admin/` do Django, sem barra no inicio e com uma no fim.
+
+    Fica em configuracao para nao ser o endereco padrao que todo robo tenta
+    (S8): em producao o padrao e recusado. Recusa tambem o vazio, que poria o
+    admin na raiz, e o que comeca por `api`, que disputaria rota com a API.
+    """
+    caminho = (valor or '').strip().strip('/')
+
+    if ambiente == AMBIENTE_PRODUCAO and caminho == CAMINHO_PADRAO_DO_ADMIN:
+        raise ImproperlyConfigured(
+            'Em producao o /admin/ do Django nao fica no endereco padrao. '
+            'Defina ADMIN_URL com um caminho proprio, como painel-tecnico-7f3a.'
+        )
+
+    if not caminho:
+        raise ImproperlyConfigured(
+            'ADMIN_URL vazio poria o /admin/ do Django na raiz do site. '
+            'Use um caminho, como painel-tecnico-7f3a.'
+        )
+
+    if caminho.split('/')[0] == 'api':
+        raise ImproperlyConfigured(
+            f'ADMIN_URL={valor!r} disputa rota com a API. Escolha outro caminho.'
+        )
+
+    return f'{caminho}/'

@@ -19,6 +19,18 @@
   min-height: calc(100vh - 68px);
 }
 
+.authenticated-app__rodape {
+  padding: 16px var(--admin-gutter, 24px) 24px;
+  font-size: 0.8125rem;
+  text-align: center;
+  color: var(--text-muted);
+
+  a {
+    color: var(--text-muted);
+    text-decoration: underline;
+  }
+}
+
 .route-state {
   min-height: 100vh;
   display: flex;

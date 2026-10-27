@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   executarPreAnalise: null,
   acatarRecomendacao: null,
   obterEquipePotencial: null,
+  obterProposta: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
@@ -34,6 +35,7 @@ vi.mock('../../../../services/pdConnectApi', () => ({
   executarPreAnalise: (...args) => api.executarPreAnalise(...args),
   acatarRecomendacao: (...args) => api.acatarRecomendacao(...args),
   obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
+  obterProposta: (...args) => api.obterProposta(...args),
 }))
 
 const AVISO =
@@ -83,7 +85,14 @@ describe('AbaPreAnalise', () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue(ANALISE)
     api.executarPreAnalise = vi.fn().mockResolvedValue(ANALISE)
     api.acatarRecomendacao = vi.fn().mockResolvedValue({})
-    api.obterEquipePotencial = vi.fn().mockResolvedValue({ id_equipe: 3, membros: [] })
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      id_equipe: 3,
+      membros: [{ id_membro_equipe: 7, incluido: true }],
+    })
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: true,
+    })
   })
 
   it('apresenta o aviso de que o resultado é orientativo', async () => {
@@ -188,6 +197,45 @@ describe('AbaPreAnalise', () => {
     )
   })
 
+  it('mostra a pré-análise na fila como andamento, não como falha', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'pendente',
+      status_rotulo: 'Aguardando',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    expect(
+      await screen.findByText(/na fila para começar/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/não produziu resultado/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toBeDisabled()
+  })
+
+  it('depois de enviar para a fila, acompanha o andamento', async () => {
+    api.executarPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'pendente',
+      status_rotulo: 'Aguardando',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: /reavaliar/i }))
+
+    expect(await screen.findByText(/enviada\. a tela atualiza sozinha/i)).toBeInTheDocument()
+    expect(await screen.findByText(/na fila para começar/i)).toBeInTheDocument()
+  })
+
   it('não desenha dimensão quando a execução falhou', async () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue({
       ...ANALISE,
@@ -205,6 +253,25 @@ describe('AbaPreAnalise', () => {
       await screen.findByText(/não produziu resultado/i),
     ).toBeInTheDocument()
     expect(screen.queryByText('Desafio tecnológico')).not.toBeInTheDocument()
+  })
+
+  it('explica que o limite de gasto barrou a pré-análise', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'erro',
+      erro: 'limite_da_oportunidade',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    expect(
+      await screen.findByText(/esta oportunidade atingiu o limite de gasto com ia/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/tente reavaliar em alguns minutos/i)).not.toBeInTheDocument()
   })
 
   /**
@@ -253,7 +320,7 @@ describe('AbaPreAnalise', () => {
     expect(screen.queryByText('Fragil')).not.toBeInTheDocument()
   })
 
-  it('resume as dimensões por nível e põe a lacuna dentro da dimensão dela', async () => {
+  it('resume as dimensões por nível e conta as lacunas de cada uma', async () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue({
       ...ANALISE,
       lacunas: [
@@ -267,10 +334,56 @@ describe('AbaPreAnalise', () => {
 
     renderizar()
 
-    const dimensao = (await screen.findByText('Desafio tecnológico')).closest('li')
-    expect(dimensao).toHaveTextContent('Falta quantificar a perda atual.')
+    const dimensao = (
+      await screen.findByRole('heading', { name: 'Desafio tecnológico' })
+    ).closest('li')
+    expect(dimensao).toHaveTextContent('1 lacuna em O que melhorar')
     expect(screen.getByText('1 consolidada')).toBeInTheDocument()
-    expect(screen.queryByText('Outras lacunas')).not.toBeInTheDocument()
+  })
+
+  it('mostra cada lacuna com o critério e a recomendação logo abaixo', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      lacunas: [
+        {
+          id_lacuna: 8,
+          campo_afetado: 'plano_pesquisa',
+          descricao: 'Falta o controle negativo.',
+          criterio_codigo: 'A3',
+          criterio_rotulo: 'Metodologia adequada',
+        },
+        {
+          id_lacuna: 9,
+          campo_afetado: 'viabilidade',
+          descricao: 'Não há prazo.',
+          criterio_codigo: null,
+        },
+      ],
+      recomendacoes: [
+        { id_recomendacao: 20, id_lacuna: 8, texto: 'Defina o controle negativo.', acatada: false },
+        { id_recomendacao: 21, id_lacuna: 9, texto: 'Monte um cronograma.', acatada: false },
+        { id_recomendacao: 22, id_lacuna: null, texto: 'Revise o resumo.', acatada: true },
+      ],
+    })
+
+    renderizar()
+
+    const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
+    expect(ligada).toHaveTextContent('Plano de pesquisa')
+    expect(ligada).toHaveTextContent('A3 · Metodologia adequada')
+    expect(within(ligada).getByText('Defina o controle negativo.')).toBeInTheDocument()
+
+    await userEvent.click(within(ligada).getByRole('button', { name: /marcar como acatada/i }))
+    await waitFor(() =>
+      expect(api.acatarRecomendacao).toHaveBeenCalledWith('OP-2026-001', 20, true),
+    )
+
+    const semCriterio = screen.getByText('Não há prazo.').closest('li')
+    expect(semCriterio).toHaveTextContent('Sem evidência na proposta')
+    expect(within(semCriterio).getByText('Monte um cronograma.')).toBeInTheDocument()
+
+    expect(screen.getByText('Outras recomendações')).toBeInTheDocument()
+    expect(screen.getByText(/1 de 3 acatadas/)).toBeInTheDocument()
   })
 
   it('avisa que falta a equipe antes de executar sem ela', async () => {
@@ -285,11 +398,46 @@ describe('AbaPreAnalise', () => {
     renderizar({ irPara })
 
     expect(
-      await screen.findByText(/equipe potencial ainda não foi definida/i),
+      await screen.findByText(/avalia também a equipe/i),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /executar pré-análise/i })).toBeDisabled()
 
     await userEvent.click(screen.getByRole('button', { name: /ir para equipe potencial/i }))
     expect(irPara).toHaveBeenCalledWith('equipe')
+  })
+
+  /**
+   * PB50 pede "uma equipe potencial definida": a equipe gerada em que o
+   * Supervisor tirou todo mundo não conta, e a API recusa do mesmo jeito.
+   */
+  it('equipe sem ninguém incluído também trava a execução', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      id_equipe: 3,
+      membros: [{ id_membro_equipe: 7, incluido: false }],
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/avalia também a equipe/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toBeDisabled()
+  })
+
+  /**
+   * PB41: texto do Copiloto sem leitura humana não vale como definitivo. A
+   * API recusa a pré-análise; a tela trava o botão e leva à aba Proposta.
+   */
+  it('proposta não revisada trava a reavaliação', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/ainda não foi revisada/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /reavaliar/i })).toBeDisabled(),
+    )
   })
 
   it('mostra a espera enquanto a pré-análise roda', async () => {
@@ -364,5 +512,17 @@ describe('AbaPreAnalise', () => {
     expect(
       screen.queryByRole('button', { name: /reavaliar/i }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('AbaPreAnalise — resumo na tela', () => {
+  it('separa a primeira frase da avaliação do que vai para os detalhes', async () => {
+    const { primeiraFrase } = await import('./AbaPreAnalise')
+
+    expect(primeiraFrase('O desafio está descrito. Falta o estado da arte.')).toEqual({
+      frase: 'O desafio está descrito.',
+      resto: 'Falta o estado da arte.',
+    })
+    expect(primeiraFrase('Sem ponto final')).toEqual({ frase: 'Sem ponto final', resto: '' })
   })
 })

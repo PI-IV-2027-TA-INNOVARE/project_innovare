@@ -14,7 +14,7 @@ class TemPapel(BasePermission):
     """Base: subclasses declaram `papeis_permitidos`."""
 
     papeis_permitidos = ()
-    message = 'Seu perfil nao tem competencia para esta acao.'
+    message = 'Seu perfil não tem permissão para esta ação.'
 
     def has_permission(self, request, view):
         usuario = request.user

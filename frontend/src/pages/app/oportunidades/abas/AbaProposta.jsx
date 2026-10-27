@@ -95,12 +95,18 @@ const CAMPOS_PROPOSTA = SECOES.flatMap((secao) => secao.campos)
 
 const CODIGO_NAO_INICIADA = 'proposta_inexistente'
 
-function Campo({ campo, valor, onChange, erro }) {
+const LINHAS_RECOLHIDAS = 2
+
+function Campo({ campo, valor, onChange, erro, somenteLeitura }) {
   const { id, label, rows, requerido, isList, dica } = campo
+  const [focado, setFocado] = useState(false)
+
+  const texto = isList ? (valor || []).join('\n') : valor || ''
+  const recolhido = !focado && texto.trim() !== ''
 
   const aoDigitar = (event) => {
-    const texto = event.target.value
-    onChange(isList ? texto.split('\n') : texto)
+    const digitado = event.target.value
+    onChange(isList ? digitado.split('\n') : digitado)
   }
 
   const descritores = [`dica-${id}`, erro ? `erro-${id}` : null].filter(Boolean).join(' ')
@@ -115,10 +121,13 @@ function Campo({ campo, valor, onChange, erro }) {
       </span>
       <textarea
         id={id}
-        className="admin-input admin-input--area"
-        rows={rows}
-        value={isList ? (valor || []).join('\n') : valor || ''}
+        className={`admin-input admin-input--area${recolhido ? ' proposta__texto--recolhido' : ''}`}
+        rows={recolhido ? LINHAS_RECOLHIDAS : rows}
+        value={texto}
         onChange={aoDigitar}
+        onFocus={() => setFocado(true)}
+        onBlur={() => setFocado(false)}
+        readOnly={somenteLeitura}
         aria-invalid={Boolean(erro)}
         aria-describedby={descritores}
       />
@@ -383,7 +392,11 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           }}
           noValidate
         >
-          <fieldset className="proposta__campos" disabled={!podeEditar}>
+          <p className="proposta__legenda">
+            Cada elemento mostra as duas primeiras linhas. Clique no texto para ver tudo.
+          </p>
+
+          <fieldset className="proposta__campos">
             {SECOES.map((secao) => (
               <fieldset key={secao.titulo} className="proposta__secao">
                 <legend className="proposta__secao-titulo">{secao.titulo}</legend>
@@ -394,6 +407,7 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
                     valor={proposta[campo.id]}
                     onChange={alterarCampo(campo.id)}
                     erro={erroValidacao[campo.id]}
+                    somenteLeitura={!podeEditar}
                   />
                 ))}
               </fieldset>

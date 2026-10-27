@@ -26,6 +26,7 @@ from apps.copilot.models import (
     AutorMensagem,
     EstadoSessao,
     Lacuna,
+    MensagemCopiloto,
     ObjetivoEspecifico,
     PropostaEstruturada,
     Severidade,
@@ -87,7 +88,7 @@ class CopilotoBaseTests(TestCase):
         return reverse(f'oportunidade-{sufixo}', args=[self.oportunidade.codigo])
 
     def iniciar_sessao(self):
-        return IniciarSessaoService().execute(
+        return IniciarSessaoService(provedor=ProvedorFake()).execute(
             oportunidade=self.oportunidade, ator=self.supervisor
         )
 
@@ -231,7 +232,7 @@ class EstruturacaoTests(CopilotoBaseTests):
     def test_saida_invalida_do_provedor_nao_grava_nada(self):
         """AGENTS.md 2.2: contrato externo e parseado com fail-fast."""
         quebrado = ProvedorFake(
-            proposta={'objetivos_especificos': 'isto deveria ser uma lista'}
+            proposta={'preenchimentos': {'objetivos_especificos': 'isto deveria ser uma lista'}}
         )
 
         resultado = self.estruturar(provedor=quebrado)
@@ -357,7 +358,7 @@ class ChamadaForaDaTransacaoTests(CopilotoBaseTests):
         )
         self.assertNotIn('metodologia', resultado['preenchidos'])
         self.assertEqual(
-            proposta.problema_pesquisa, PROPOSTA_PADRAO['problema_pesquisa']
+            proposta.problema_pesquisa, PROPOSTA_PADRAO['preenchimentos']['problema_pesquisa']
         )
 
 
@@ -414,3 +415,33 @@ class ObjetivosEspecificosTests(TestCase):
         transitoria = PropostaEstruturada(oportunidade=OportunidadeBuilder().build())
 
         self.assertEqual(transitoria.objetivos_especificos, [])
+
+
+class LimiteDeGastoNoCopilotoTests(CopilotoBaseTests):
+    """Quando o limite barra a chamada, o Copiloto diz o motivo."""
+
+    def test_rodada_barrada_pelo_limite_explica_o_motivo(self):
+        self.iniciar_sessao()
+
+        resultado = self.estruturar(
+            provedor=ProvedorIndisponivel(motivo='limite_da_oportunidade')
+        )
+
+        self.assertEqual(resultado['motivo_fallback'], 'limite_da_oportunidade')
+        relato = MensagemCopiloto.objects.filter(
+            autor=AutorMensagem.COPILOTO
+        ).order_by('-ordem').first()
+        self.assertIn('limite de gasto com IA', relato.conteudo)
+
+    def test_api_devolve_o_motivo(self):
+        self.iniciar_sessao()
+
+        from unittest import mock
+
+        with mock.patch(
+            'apps.copilot.services.copiloto.EstruturarPropostaService._resolver_provedor',
+            return_value=ProvedorIndisponivel(motivo='limite_do_mes'),
+        ):
+            resposta = self.client.post(self.url('copiloto-estruturar'))
+
+        self.assertEqual(resposta.data['motivo_fallback'], 'limite_do_mes')

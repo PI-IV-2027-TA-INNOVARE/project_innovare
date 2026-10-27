@@ -41,6 +41,23 @@ const IA = {
   provedor_configurado: true,
   rerank_habilitado: false,
   modelo: 'gemini-2.5-flash',
+  provedores: [
+    {
+      nome: 'google',
+      rotulo: 'Google Gemini',
+      papel: 'principal',
+      configurado: true,
+      modelo: 'gemini-2.5-flash',
+      chamadas: 7,
+      erros: 1,
+      fallbacks: 2,
+      custo_estimado_brl: 0,
+      custo_apurado: false,
+      latencia_media_ms: 900,
+      preco_entrada_brl_por_milhao: 0,
+      preco_saida_brl_por_milhao: 0,
+    },
+  ],
   ultima_execucao: {
     id: 'run-1',
     tipo: 'copiloto',
@@ -242,6 +259,18 @@ describe('SaudeSection — consumo de IA', () => {
     expect(screen.queryByText(/por milhão de tokens/i)).not.toBeInTheDocument()
   })
 
+  it('avisa que sem tabela de preço os limites de gasto não bloqueiam nada', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comConsumo({ preco_entrada_brl_por_milhao: 0, preco_saida_brl_por_milhao: 0 }),
+    )
+
+    render(<SaudeSection />)
+
+    expect(
+      await screen.findByText(/a tabela de preço da ia está vazia/i),
+    ).toBeInTheDocument()
+  })
+
   it('mostra onde o gasto do mês foi, não só o total', async () => {
     api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
       comConsumo({
@@ -261,6 +290,19 @@ describe('SaudeSection — consumo de IA', () => {
     expect(gasto).toHaveTextContent(/Copiloto/)
     expect(gasto).toHaveTextContent(/R\$\s*4,50/)
     expect(gasto).toHaveTextContent(/Matching/)
+  })
+
+  it('mostra o consumo de cada provedor, não só o total do mês', async () => {
+    render(<SaudeSection />)
+
+    const tabela = await screen.findByRole('table', {
+      name: /consumo do mês por provedor/i,
+    })
+
+    expect(tabela).toHaveTextContent(/Google Gemini/)
+    expect(tabela).toHaveTextContent(/principal/)
+    expect(tabela).toHaveTextContent(/7/)
+    expect(tabela).toHaveTextContent(/sem apuração/)
   })
 
   it('sem custo calculado, não inventa a lista de gasto por operação', async () => {
@@ -566,7 +608,7 @@ describe('SaudeSection — detalhes para o suporte técnico', () => {
     })
 
     expect(botao).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText(/tokens enviados/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/tokens enviados/i)).not.toBeVisible()
 
     await abrirDetalhes()
 
@@ -667,11 +709,11 @@ describe('SaudeSection — tarefas em segundo plano', () => {
     render(<SaudeSection />)
 
     await verificacoes()
-    expect(screen.queryByText(SAUDE.jobs.motivo)).not.toBeInTheDocument()
+    expect(screen.getByText(SAUDE.jobs.motivo)).not.toBeVisible()
 
     await abrirDetalhes()
 
-    expect(screen.getByText(SAUDE.jobs.motivo)).toBeInTheDocument()
+    expect(screen.getByText(SAUDE.jobs.motivo)).toBeVisible()
   })
 
   it('ambiente que espera fila e está sem ela ganha cartão e alerta', async () => {

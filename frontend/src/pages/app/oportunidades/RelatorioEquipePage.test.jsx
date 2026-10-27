@@ -136,7 +136,7 @@ describe('RelatorioEquipePage (PB77)', () => {
     expect(await screen.findByText('hibrido_v1')).toBeInTheDocument()
     expect(screen.getByText(/indisponível na rodada/i)).toBeInTheDocument()
     expect(screen.getByText('peso 0.45')).toBeInTheDocument()
-    expect(screen.getAllByText(/base semântica/i).length).toBe(2)
+    expect(screen.getAllByText(/afinidade com o tema/i).length).toBe(2)
   })
 
   it('lista as competências comparadas e a lacuna da composição', async () => {
@@ -179,5 +179,19 @@ describe('RelatorioEquipePage (PB77)', () => {
     expect(
       screen.getByRole('link', { name: /voltar para a oportunidade/i }),
     ).toHaveAttribute('href', '/oportunidades/OP-2026-014')
+  })
+})
+
+describe('RelatorioEquipePage — como foi calculado', () => {
+  it('guarda a explicação da nota que saiu da tela', async () => {
+    api.obterRelatorioEquipe = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      como_foi_calculado: ['A nota de cada pessoa soma quatro parcelas, cada uma com o seu peso.'],
+    })
+    renderizar()
+
+    const secao = await screen.findByRole('region', { name: 'Como foi calculado' })
+
+    expect(secao).toHaveTextContent('A nota de cada pessoa soma quatro parcelas')
   })
 })
