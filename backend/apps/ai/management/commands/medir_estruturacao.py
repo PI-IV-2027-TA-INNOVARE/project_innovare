@@ -25,7 +25,12 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.ai.services.gemini_service import ProvedorGemini
+from apps.ai.services.registro import (
+    descritor,
+    nome_do_principal,
+    provedor_configurado,
+    provedor_principal,
+)
 from apps.copilot.services.copiloto import ELEMENTOS
 from core.management.commands.semear_dev import exigir_banco_local
 
@@ -93,9 +98,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        if not settings.GEMINI_API_KEY:
+        if not provedor_configurado():
+            chave = descritor(nome_do_principal()).chave_setting
             raise CommandError(
-                'Sem GEMINI_API_KEY no .env: a medição precisa do Gemini de verdade.'
+                f'Sem {chave} no .env: a medição precisa do Gemini de verdade.'
             )
 
         if not options['banco_remoto']:
@@ -107,7 +113,7 @@ class Command(BaseCommand):
             if options['raciocinio'] is None
             else options['raciocinio']
         )
-        provedor = ProvedorGemini(orcamento_raciocinio=orcamento)
+        provedor = provedor_principal(orcamento_raciocinio=orcamento)
 
         resultado = medir(provedor, rodadas=rodadas)
 

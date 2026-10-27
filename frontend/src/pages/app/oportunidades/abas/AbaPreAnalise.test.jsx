@@ -197,6 +197,45 @@ describe('AbaPreAnalise', () => {
     )
   })
 
+  it('mostra a pré-análise na fila como andamento, não como falha', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'pendente',
+      status_rotulo: 'Aguardando',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    expect(
+      await screen.findByText(/na fila para começar/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/não produziu resultado/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toBeDisabled()
+  })
+
+  it('depois de enviar para a fila, acompanha o andamento', async () => {
+    api.executarPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'pendente',
+      status_rotulo: 'Aguardando',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: /reavaliar/i }))
+
+    expect(await screen.findByText(/enviada\. a tela atualiza sozinha/i)).toBeInTheDocument()
+    expect(await screen.findByText(/na fila para começar/i)).toBeInTheDocument()
+  })
+
   it('não desenha dimensão quando a execução falhou', async () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue({
       ...ANALISE,

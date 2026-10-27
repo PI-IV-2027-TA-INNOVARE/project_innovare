@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { EXTENSOES_ACEITAS, TIPOS_POR_EXTENSO, salvarNoComputador } from '../lib/anexos'
+import {
+  EXTENSOES_ACEITAS,
+  PRAZO_DE_GUARDA,
+  TIPOS_POR_EXTENSO,
+  salvarNoComputador,
+} from '../lib/anexos'
 import { Icone, appIcons } from '../lib/icons'
 import { formatarUltimoAcesso } from '../lib/people'
 import { baixarAnexo, enviarAnexo, listarAnexos } from '../services/pdConnectApi'
@@ -179,6 +184,8 @@ export default function AnexosOportunidade({
             <p className="anexos__envio-dica">{TIPOS_POR_EXTENSO} · até 10 MB por arquivo</p>
           </div>
         ) : null}
+
+        <p className="anexos__prazo">{PRAZO_DE_GUARDA}</p>
 
         {erro ? (
           <p className="login-message" role="alert">

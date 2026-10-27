@@ -136,9 +136,15 @@ class EncarregadoSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
+class RetencaoSerializer(serializers.Serializer):
+    eventos_conta_meses = serializers.IntegerField()
+    anexos_apos_arquivamento_meses = serializers.IntegerField()
+
+
 class PrivacidadeSerializer(serializers.Serializer):
     encarregado = EncarregadoSerializer(allow_null=True)
     contatos = ContatoSuporteSerializer(many=True)
+    retencao = RetencaoSerializer()
 
 
 def secao_vazia(secao):

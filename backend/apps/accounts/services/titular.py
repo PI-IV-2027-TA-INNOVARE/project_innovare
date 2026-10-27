@@ -6,7 +6,8 @@ proprio perfil. Quem atende e o Administrador, anonimizando a conta: o nome, o
 e-mail, o telefone e o perfil da rede deixam de identificar a pessoa, e a
 trilha passa a dizer "pessoa removida" onde dizia o nome ou o e-mail.
 
-A trilha e append-only (RF12), e esta e a unica excecao: troca quem agiu,
+A trilha e append-only (RF12). A anonimizacao e uma das excecoes - a outra e a
+retencao programada (`apps/audit/services/retencao.py`) - e troca quem agiu,
 nunca o que aconteceu, quando nem em qual oportunidade. Apagar os eventos
 apagaria a historia das oportunidades de outras pessoas e empresas.
 """

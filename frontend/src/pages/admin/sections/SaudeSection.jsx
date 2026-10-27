@@ -421,6 +421,61 @@ function Metrica({ rotulo, children }) {
  * controla a regua: sem o preco que produziu o numero, o gasto nao se
  * interpreta.
  */
+function Provedores({ provedores }) {
+  if (!provedores?.length) return null
+
+  return (
+    <div className="saude__provedores">
+      <h4 className="saude__subtitulo">Provedores de IA neste mês</h4>
+      <p className="saude__nota">
+        Cada provedor registrado aparece com o próprio consumo. Assim dá para
+        ver quem respondeu, quem falhou e quanto cada um custou.
+      </p>
+
+      <div className="saude__tabela-rolagem">
+        <table className="saude__tabela">
+          <caption className="saude__fonte">
+            Consumo do mês por provedor de IA
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Provedor</th>
+              <th scope="col">Papel</th>
+              <th scope="col">Modelo</th>
+              <th scope="col">Usos</th>
+              <th scope="col">Falhas</th>
+              <th scope="col">Custo</th>
+              <th scope="col">Tempo médio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {provedores.map((provedor) => (
+              <tr key={provedor.nome}>
+                <th scope="row">
+                  {provedor.rotulo}
+                  {provedor.configurado ? null : (
+                    <span className="saude__tabela-aviso">sem chave</span>
+                  )}
+                </th>
+                <td>{provedor.papel}</td>
+                <td>{provedor.modelo || '—'}</td>
+                <td>{contagem(provedor.chamadas)}</td>
+                <td>{contagem((provedor.erros || 0) + (provedor.fallbacks || 0))}</td>
+                <td>
+                  {provedor.custo_apurado
+                    ? reais(provedor.custo_estimado_brl)
+                    : 'sem apuração'}
+                </td>
+                <td>{milissegundos(provedor.latencia_media_ms)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function Consumo({ ia, erro }) {
   if (erro || !ia) {
     return (
@@ -544,6 +599,8 @@ function Consumo({ ia, erro }) {
           </div>
         ) : null}
       </div>
+
+      <Provedores provedores={ia.provedores} />
 
       {gastoPorOperacao.length > 0 ? (
         <ul className="saude__gasto" aria-label="Gasto por operação no mês">

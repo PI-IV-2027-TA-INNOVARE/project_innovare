@@ -427,18 +427,12 @@ class PreAnalisarService:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.gemini_service import ProvedorGemini
+        from apps.ai.services.registro import provedor_com_reserva
 
-        return ProvedorGemini()
+        return provedor_com_reserva()
 
-    def execute(self, *, oportunidade: Oportunidade, ator: Usuario) -> PreAnalise:
-        """
-        A chamada ao provedor fica fora da transacao, que so abre para gravar
-        o resultado: a pre-analise e a chamada mais longa do produto, e dentro
-        de `atomic` prendia a conexao do banco durante toda a espera.
-        """
-        from apps.maturity.serializers import SaidaPreAnaliseSerializer
-
+    def _contexto(self, oportunidade: Oportunidade):
+        """Valida o que a execução exige e devolve proposta, versão e texto."""
         proposta = proposta_de(oportunidade)
         versao = versao_vigente()
         texto = texto_da_proposta(proposta)
@@ -453,93 +447,155 @@ class PreAnalisarService:
         exigir_equipe_potencial(oportunidade)
         conferir_avanco(oportunidade, SituacaoOportunidade.PRE_ANALISE)
 
-        correlation_id = uuid.uuid4()
-        equipe_texto, apelidos = _texto_da_equipe(oportunidade)
-        resultado = self._resolver_provedor().pre_analise_pipe(
-            oportunidade_id=oportunidade.id_oportunidade,
-            proposta_texto=texto,
-            equipe_texto=equipe_texto,
-            criterios=criterios_para_o_prompt(versao),
-            correlation_id=correlation_id,
-            executado_por=ator.email,
+        return proposta, versao, texto
+
+    def preparar(self, *, oportunidade: Oportunidade, ator: Usuario) -> PreAnalise:
+        """
+        Cria a execução pendente, com a versão que será avaliada.
+
+        A linha nasce antes da chamada ao provedor para a tela poder mostrar
+        "em andamento" - e para o worker ter um id estável para atualizar.
+        """
+        proposta, versao, _ = self._contexto(oportunidade)
+
+        return PreAnalise.objects.create(
+            proposta=proposta,
+            versao_criterio=versao,
+            versao_proposta=proposta.versao,
+            executada_por=ator.email,
+            status=StatusExecucao.PENDENTE,
         )
 
-        execucao_ia = resultado.get('execucao_ia')
-        fallback_usado = bool(resultado.get('fallback_usado'))
-        motivo_fallback = resultado.get('motivo_fallback')
-        saida = SaidaPreAnaliseSerializer(
-            data=apelidos.restaurar_em(resultado.get('dados') or {})
-        )
-        aceita = saida.is_valid()
-        dados = dict(saida.validated_data) if aceita else {}
-        dimensoes = dados.get('dimensoes', [])
+    def execute(self, *, oportunidade: Oportunidade, ator: Usuario) -> PreAnalise:
+        """
+        O caminho síncrono: prepara e processa a mesma execução.
 
-        with transaction.atomic():
-            avancar(oportunidade, SituacaoOportunidade.PRE_ANALISE, ator)
-            proposta.refresh_from_db()
-            exigir_proposta_revisada(proposta)
-            exigir_equipe_potencial(oportunidade)
+        A chamada ao provedor fica fora da transação, que só abre para gravar
+        o resultado: a pré-análise é a chamada mais longa do produto, e dentro
+        de `atomic` prendia a conexão do banco durante toda a espera.
+        """
+        analise = self.preparar(oportunidade=oportunidade, ator=ator)
 
-            if dimensoes:
-                avancar(oportunidade, SituacaoOportunidade.AGUARDANDO_DECISAO, ator)
+        return self.processar(analise=analise, ator=ator)
 
-            analise = PreAnalise.objects.create(
-                proposta=proposta,
-                versao_criterio=versao,
-                versao_proposta=proposta.versao,
-                sintese=dados.get('sintese', ''),
-                executada_por=ator.email,
-                execucao_ia=execucao_ia,
-                status=StatusExecucao.OK if dimensoes else StatusExecucao.ERRO,
-                erro='' if dimensoes else self._motivo_da_falha(
-                    fallback_usado, aceita, motivo_fallback
-                ),
-            )
+    def processar(self, *, analise: PreAnalise, ator: Usuario) -> PreAnalise:
+        """Executa uma pré-análise já preparada, atualizando a mesma linha."""
+        from apps.maturity.serializers import SaidaPreAnaliseSerializer
 
-            self._gravar_dimensoes(analise, dimensoes)
-            itens_de_recomendacao = dados.get('recomendacoes', [])
-            lacunas = self._gravar_lacunas(
-                analise=analise,
-                itens=dados.get('lacunas', []),
-                execucao_ia=execucao_ia,
-                sem_evidencia={
-                    str(item.get('lacuna'))
-                    for item in itens_de_recomendacao
-                    if item.get('sem_evidencia')
-                },
-            )
-            recomendacoes = self._gravar_recomendacoes(
-                analise=analise,
-                oportunidade=oportunidade,
-                itens=itens_de_recomendacao,
-                execucao_ia=execucao_ia,
-                lacunas=lacunas,
-            )
+        analise.status = StatusExecucao.EXECUTANDO
+        analise.save(update_fields=['status'])
 
-            registrar_evento(
-                categoria=CategoriaEvento.PREANALISE,
-                tipo='execucao',
-                entidade='pre_analise_maturidade',
-                entidade_id=analise.id_pre_analise,
-                oportunidade=oportunidade,
-                ator=ator.email,
+        try:
+            oportunidade = analise.proposta.oportunidade
+            proposta, versao, texto = self._contexto(oportunidade)
+            correlation_id = uuid.uuid4()
+            equipe_texto, apelidos = _texto_da_equipe(oportunidade)
+            resultado = self._resolver_provedor().pre_analise_pipe(
+                oportunidade_id=oportunidade.id_oportunidade,
+                proposta_texto=texto,
+                equipe_texto=equipe_texto,
+                criterios=criterios_para_o_prompt(versao),
                 correlation_id=correlation_id,
-                execucao_ia=execucao_ia,
-                detalhe={
-                    'versao_criterios': versao.versao,
-                    'versao_proposta': proposta.versao,
-                    'dimensoes': len(dimensoes),
-                    'lacunas': len(lacunas),
-                    'recomendacoes_ligadas': sum(
-                        1 for recomendacao in recomendacoes if recomendacao.lacuna_id
-                    ),
-                    'recomendacoes': len(recomendacoes),
-                    'fallback_usado': fallback_usado,
-                    'saida_aceita': aceita,
-                },
+                executado_por=ator.email,
             )
 
-            return analise
+            execucao_ia = resultado.get('execucao_ia')
+            fallback_usado = bool(resultado.get('fallback_usado'))
+            motivo_fallback = resultado.get('motivo_fallback')
+            saida = SaidaPreAnaliseSerializer(
+                data=apelidos.restaurar_em(resultado.get('dados') or {})
+            )
+            aceita = saida.is_valid()
+            dados = dict(saida.validated_data) if aceita else {}
+            dimensoes = dados.get('dimensoes', [])
+
+            with transaction.atomic():
+                avancar(oportunidade, SituacaoOportunidade.PRE_ANALISE, ator)
+                proposta.refresh_from_db()
+                exigir_proposta_revisada(proposta)
+                exigir_equipe_potencial(oportunidade)
+
+                if dimensoes:
+                    avancar(oportunidade, SituacaoOportunidade.AGUARDANDO_DECISAO, ator)
+
+                analise.refresh_from_db()
+                analise.versao_criterio = versao
+                analise.versao_proposta = proposta.versao
+                analise.sintese = dados.get('sintese', '')
+                analise.executada_por = ator.email
+                analise.execucao_ia = execucao_ia
+                analise.status = (
+                    StatusExecucao.OK if dimensoes else StatusExecucao.ERRO
+                )
+                analise.erro = (
+                    ''
+                    if dimensoes
+                    else self._motivo_da_falha(
+                        fallback_usado, aceita, motivo_fallback
+                    )
+                )
+                analise.save(
+                    update_fields=[
+                        'versao_criterio',
+                        'versao_proposta',
+                        'sintese',
+                        'executada_por',
+                        'execucao_ia',
+                        'status',
+                        'erro',
+                    ]
+                )
+
+                self._gravar_dimensoes(analise, dimensoes)
+                itens_de_recomendacao = dados.get('recomendacoes', [])
+                lacunas = self._gravar_lacunas(
+                    analise=analise,
+                    itens=dados.get('lacunas', []),
+                    execucao_ia=execucao_ia,
+                    sem_evidencia={
+                        str(item.get('lacuna'))
+                        for item in itens_de_recomendacao
+                        if item.get('sem_evidencia')
+                    },
+                )
+                recomendacoes = self._gravar_recomendacoes(
+                    analise=analise,
+                    oportunidade=oportunidade,
+                    itens=itens_de_recomendacao,
+                    execucao_ia=execucao_ia,
+                    lacunas=lacunas,
+                )
+
+                registrar_evento(
+                    categoria=CategoriaEvento.PREANALISE,
+                    tipo='execucao',
+                    entidade='pre_analise_maturidade',
+                    entidade_id=analise.id_pre_analise,
+                    oportunidade=oportunidade,
+                    ator=ator.email,
+                    correlation_id=correlation_id,
+                    execucao_ia=execucao_ia,
+                    detalhe={
+                        'versao_criterios': versao.versao,
+                        'versao_proposta': proposta.versao,
+                        'dimensoes': len(dimensoes),
+                        'lacunas': len(lacunas),
+                        'recomendacoes_ligadas': sum(
+                            1 for recomendacao in recomendacoes if recomendacao.lacuna_id
+                        ),
+                        'recomendacoes': len(recomendacoes),
+                        'fallback_usado': fallback_usado,
+                        'saida_aceita': aceita,
+                    },
+                )
+
+                return analise
+        except Exception as erro:
+            analise.refresh_from_db()
+            analise.status = StatusExecucao.ERRO
+            analise.erro = getattr(erro, 'codigo', None) or 'falha_na_execucao'
+            analise.save(update_fields=['status', 'erro'])
+            raise
 
     def _motivo_da_falha(
         self, fallback_usado: bool, aceita: bool, motivo_fallback: str | None = None

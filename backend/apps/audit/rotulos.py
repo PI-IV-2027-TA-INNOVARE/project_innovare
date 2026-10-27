@@ -62,6 +62,7 @@ ROTULOS_DO_TIPO = {
     'teto_de_custo_excedido': 'Teto mensal de IA atingido',
     'teto_por_oportunidade_excedido': 'Limite de IA da oportunidade atingido',
     'configuracao_alterada': 'Configuração alterada',
+    'retencao_aplicada': 'Retenção de dados aplicada',
     **{
         f'decisao_{valor}': f'Decisão: {rotulo}'
         for valor, rotulo in TipoDecisao.choices

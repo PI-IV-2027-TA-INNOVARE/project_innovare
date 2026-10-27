@@ -36,6 +36,8 @@ docker compose up --build               # a primeira vez demora: baixa o torch e
   `docker compose run --rm backend python manage.py migrate`.
 - Dentro do container, `localhost` é o próprio container. Para um Postgres
   desta máquina, use `DB_HOST=host.docker.internal`.
+- O compose também sobe Redis, `worker` e `beat`; a retenção LGPD roda todos os
+  dias às 3h pelo beat (ver "Retenção de dados").
 - Mudou o `requirements.txt` ou o `package.json`: `docker compose up --build -V`.
 - As portas 8000 e 5173 precisam estar livres: pare o `runserver` e o Vite
   antes.
@@ -107,6 +109,25 @@ python dev.py --porta-backend 8001
 > Depurando um dos lados a sério, dois terminais são melhores: você reinicia um
 > sem derrubar o outro. `cd backend && python manage.py runserver` e
 > `cd frontend && npm run dev`.
+
+---
+
+## Retenção de dados (LGPD)
+
+Eventos de conta (`login`, entrada recusada e saída) perdem o vínculo com a
+pessoa depois de **12 meses**: a trilha mantém o fato, mas anonimiza o ator.
+Anexos de oportunidade arquivada são descartados **24 meses** após a decisão de
+arquivamento.
+
+```bash
+cd backend
+python manage.py aplicar_retencao             # simula; não altera nada
+python manage.py aplicar_retencao --aplicar   # executa e registra na trilha
+```
+
+Os prazos ficam em `RETENCAO_EVENTOS_CONTA_MESES` e `RETENCAO_ANEXOS_MESES`
+(`backend/.env`; padrões 12 e 24). Com Celery e Redis configurados, a task
+`audit.aplicar_retencao` roda todos os dias às 3h.
 
 ---
 

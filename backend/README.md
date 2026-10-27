@@ -195,6 +195,21 @@ As tabelas das demais fases já existem no banco; as rotas entram com cada fase.
 - **Não existe rota de autocadastro** (RN-A04 / D06). A conta nasce sem senha
   utilizável e a pessoa a define pelo token de convite.
 
+### Retenção de dados (LGPD)
+
+Eventos de conta (`login`, `login_recusado`, `logout`) são anonimizados depois
+de 12 meses; anexos de oportunidade arquivada são descartados 24 meses após o
+arquivamento. Os prazos vêm de `RETENCAO_EVENTOS_CONTA_MESES` e
+`RETENCAO_ANEXOS_MESES`.
+
+```bash
+python manage.py aplicar_retencao             # simulação (padrão)
+python manage.py aplicar_retencao --aplicar   # executa e grava `retencao_aplicada`
+```
+
+A task `audit.aplicar_retencao` está no `CELERY_BEAT_SCHEDULE` diário às 3h.
+Sem broker configurado, o comando continua sendo o caminho de execução.
+
 ---
 
 ## Testes

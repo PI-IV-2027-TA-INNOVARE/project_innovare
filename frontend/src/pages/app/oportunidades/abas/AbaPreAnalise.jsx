@@ -26,6 +26,7 @@ const CODIGO_SEM_ANALISE = 'preanalise_inexistente'
 const CODIGO_SEM_PROPOSTA = 'proposta_inexistente'
 const CODIGO_SEM_CRITERIOS = 'criterios_ausentes'
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
+const STATUS_EM_ANDAMENTO = ['pendente', 'executando']
 
 const NIVEIS = [
   { id: 'consolidada', singular: 'consolidada', plural: 'consolidadas', rotulo: 'Consolidada' },
@@ -39,6 +40,9 @@ const NIVEIS = [
 ]
 
 const MOTIVOS_DE_FALHA = {
+  fila_indisponivel: 'a fila de processamento não estava disponível',
+  falha_na_execucao: 'a execução falhou antes de terminar',
+  ator_indisponivel: 'quem pediu a análise não está mais disponível',
   provedor_indisponivel: 'o serviço de IA não respondeu',
   limite_da_oportunidade: MOTIVOS_SEM_IA.limite_da_oportunidade,
   limite_do_mes: MOTIVOS_SEM_IA.limite_do_mes,
@@ -336,6 +340,18 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
     carregar()
   }, [carregar])
 
+  const emAndamento = Boolean(
+    analise && STATUS_EM_ANDAMENTO.includes(analise.status),
+  )
+
+  useEffect(() => {
+    if (!emAndamento) return undefined
+
+    const relogio = setInterval(() => carregar({ silencioso: true }), 3000)
+
+    return () => clearInterval(relogio)
+  }, [emAndamento, carregar])
+
   useEffect(() => {
     aoOcupar?.(ocupado === 'executar')
   }, [ocupado, aoOcupar])
@@ -350,7 +366,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
       setAnalise(resultado)
       setSemAnalise(false)
 
-      if (resultado.status === 'ok') {
+      if (STATUS_EM_ANDAMENTO.includes(resultado.status)) {
+        showToast('Pré-análise enviada. A tela atualiza sozinha.')
+      } else if (resultado.status === 'ok') {
         showToast('Pré-análise concluída.')
       }
     } catch (falha) {
@@ -383,7 +401,18 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   }
 
   const espera = ocupado === 'executar' ? (
-    <EsperaIA titulo="A pré-análise está lendo a proposta e a equipe potencial." />
+    <EsperaIA titulo="A prǸ-anǭlise estǭ lendo a proposta e a equipe potencial." />
+  ) : null
+
+  const esperaDaFila = emAndamento ? (
+    <EsperaIA
+      titulo={
+        analise.status === 'pendente'
+          ? 'A pré-análise está na fila para começar.'
+          : 'A pré-análise está em andamento.'
+      }
+      detalhe="A tela atualiza sozinha; você pode continuar em outra aba."
+    />
   ) : null
 
   if (carregando) {
@@ -457,7 +486,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={executar}
-              disabled={Boolean(ocupado) || semEquipe || propostaPendente}
+              disabled={
+                Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
+              }
             >
               <Icone icon={appIcons.researcher} />
               {ocupado === 'executar' ? 'Analisando...' : 'Executar pré-análise'}
@@ -486,7 +517,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
     )
   }
 
-  const falhou = analise?.status !== 'ok'
+  const falhou = analise?.status === 'erro'
   const dimensoes = analise.dimensoes || []
   const lacunas = analise.lacunas || []
   const recomendacoes = analise.recomendacoes || []
@@ -516,7 +547,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={executar}
-              disabled={Boolean(ocupado) || semEquipe || propostaPendente}
+              disabled={
+                Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
+              }
             >
               <Icone icon={appIcons.reset} />
               {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
@@ -540,6 +573,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         </div>
 
         {espera}
+        {esperaDaFila}
 
         {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 

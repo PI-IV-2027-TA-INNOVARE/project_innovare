@@ -4,6 +4,7 @@ Views da Oportunidade.
 O portao real da leitura e `escopo_de()`, que chega aqui dentro de `fila_de()`
 no `get_queryset`; a permissao de rota so decide quem pode tentar.
 """
+from django.conf import settings
 from django.db.models import Q
 from django.http import FileResponse
 from drf_spectacular.utils import extend_schema
@@ -13,6 +14,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.models import Papel
+from apps.ai.models import StatusExecucao
 from apps.opportunities.serializers import (
     AnexoSerializer,
     CadastroOportunidadeSerializer,
@@ -118,7 +120,7 @@ from apps.opportunities.services import (
     nomes_de_quem_agiu,
     por_prioridade,
 )
-from core.exceptions import AcaoNaoPermitida
+from core.exceptions import AcaoNaoPermitida, ServicoIndisponivel
 from core.permissions import EhSupervisor, TemPapel
 
 
@@ -994,7 +996,35 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
         oportunidade = self.get_object()
 
         if request.method == 'POST':
-            analise = PreAnalisarService().execute(
+            servico = PreAnalisarService()
+
+            if settings.PREANALISE_ASSINCRONA and settings.CELERY_BROKER_URL:
+                analise = servico.preparar(
+                    oportunidade=oportunidade, ator=request.user
+                )
+
+                try:
+                    from apps.maturity.tasks import pre_analisar
+
+                    pre_analisar.delay(
+                        str(analise.id_pre_analise), str(request.user.pk)
+                    )
+                except Exception as erro:
+                    analise.status = StatusExecucao.ERRO
+                    analise.erro = 'fila_indisponivel'
+                    analise.save(update_fields=['status', 'erro'])
+                    raise ServicoIndisponivel(
+                        'A fila de processamento não está disponível. '
+                        'Tente novamente em instantes.',
+                        'fila_indisponivel',
+                    ) from erro
+
+                return Response(
+                    PreAnaliseSerializer(analise).data,
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            analise = servico.execute(
                 oportunidade=oportunidade, ator=request.user
             )
 

@@ -57,6 +57,24 @@ class UltimaExecucaoSerializer(serializers.Serializer):
     erro = serializers.CharField(read_only=True, allow_blank=True)
 
 
+class ProvedorDeIASerializer(serializers.Serializer):
+    """Uma linha por provedor registrado - o que o painel mostra por provedor."""
+
+    nome = serializers.CharField(read_only=True)
+    rotulo = serializers.CharField(read_only=True)
+    papel = serializers.CharField(read_only=True)
+    configurado = serializers.BooleanField(read_only=True)
+    modelo = serializers.CharField(read_only=True, allow_blank=True)
+    chamadas = serializers.IntegerField(read_only=True)
+    erros = serializers.IntegerField(read_only=True)
+    fallbacks = serializers.IntegerField(read_only=True)
+    custo_estimado_brl = serializers.FloatField(read_only=True)
+    custo_apurado = serializers.BooleanField(read_only=True)
+    latencia_media_ms = serializers.IntegerField(read_only=True, allow_null=True)
+    preco_entrada_brl_por_milhao = serializers.FloatField(read_only=True)
+    preco_saida_brl_por_milhao = serializers.FloatField(read_only=True)
+
+
 class ConsumoDeIASerializer(serializers.Serializer):
     """
     O consumo do mes - e o que dele e medido de fato.
@@ -100,6 +118,7 @@ class ConsumoDeIASerializer(serializers.Serializer):
     provedor_configurado = serializers.BooleanField(read_only=True)
     rerank_habilitado = serializers.BooleanField(read_only=True)
     modelo = serializers.CharField(read_only=True)
+    provedores = ProvedorDeIASerializer(many=True, read_only=True)
     revisao_humana = RevisaoHumanaSerializer(read_only=True)
     ultima_execucao = UltimaExecucaoSerializer(read_only=True, allow_null=True)
 

@@ -244,7 +244,9 @@ class ProvedorGemini:
             custo_estimado
             if custo_estimado is not None
             else custo_da_chamada(
-                tokens_entrada=tokens_entrada, tokens_saida=tokens_saida
+                tokens_entrada=tokens_entrada,
+                tokens_saida=tokens_saida,
+                provedor=self.provedor,
             )
         )
         execucao.latencia_ms = latencia_ms

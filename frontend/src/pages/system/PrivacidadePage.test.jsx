@@ -96,6 +96,35 @@ describe('PrivacidadePage', () => {
     expect(compartilhamento.getByText(/no Brasil, em São Paulo/)).toBeInTheDocument()
   })
 
+  it('diz por quanto tempo guarda os registros de acesso e os anexos', async () => {
+    renderizar()
+
+    const tempo = within(screen.getByRole('region', { name: 'Por quanto tempo' }))
+
+    expect(await tempo.findByText('12 meses')).toBeInTheDocument()
+    expect(tempo.getByText('24 meses')).toBeInTheDocument()
+    expect(tempo.getByText(/anonimizados/)).toBeInTheDocument()
+    expect(tempo.getByText(/descartados/)).toBeInTheDocument()
+  })
+
+  it('usa os prazos publicados pela API', async () => {
+    estado.lerPrivacidade = vi.fn().mockResolvedValue({
+      encarregado: null,
+      contatos: [],
+      retencao: {
+        eventos_conta_meses: 6,
+        anexos_apos_arquivamento_meses: 18,
+      },
+    })
+
+    renderizar()
+
+    const tempo = within(screen.getByRole('region', { name: 'Por quanto tempo' }))
+
+    expect(await tempo.findByText('6 meses')).toBeInTheDocument()
+    expect(tempo.getByText('18 meses')).toBeInTheDocument()
+  })
+
   it('mostra o contato do encarregado de dados, que é um Administrador da AC2 (LGPD, art. 41)', async () => {
     renderizar()
 

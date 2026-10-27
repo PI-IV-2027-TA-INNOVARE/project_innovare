@@ -34,6 +34,7 @@ const RedeFormPage = lazy(() => import('./pages/app/rede/form'))
 const AdminPage = lazy(() => import('./pages/admin'))
 const AppearanceSection = lazy(() => import('./pages/admin/sections/AppearanceSection'))
 const UsersSection = lazy(() => import('./pages/admin/sections/UsersSection'))
+const PermissoesSection = lazy(() => import('./pages/admin/sections/PermissoesSection'))
 const ParametrosSection = lazy(() => import('./pages/admin/sections/ParametrosSection'))
 const AuditoriaSection = lazy(() => import('./pages/admin/sections/AuditoriaSection'))
 const SaudeSection = lazy(() => import('./pages/admin/sections/SaudeSection'))
@@ -155,6 +156,14 @@ function App() {
                   element={
                     <SecaoProtegida permissao={PERMISSOES.CONTAS}>
                       <UsersSection />
+                    </SecaoProtegida>
+                  }
+                />
+                <Route
+                  path="permissoes"
+                  element={
+                    <SecaoProtegida permissao={PERMISSOES.CONTAS}>
+                      <PermissoesSection />
                     </SecaoProtegida>
                   }
                 />

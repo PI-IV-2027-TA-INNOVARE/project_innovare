@@ -31,6 +31,7 @@ export const ROTAS_PROTEGIDAS = Object.freeze([
   { padrao: '/admin', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/aparencia', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/usuarios', papeis: PAPEIS.ADMIN },
+  { padrao: '/admin/permissoes', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/parametros', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/auditoria', papeis: PAPEIS.ADMIN },
   { padrao: '/admin/saude', papeis: PAPEIS.ADMIN },

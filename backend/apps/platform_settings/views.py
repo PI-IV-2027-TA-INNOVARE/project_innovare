@@ -3,6 +3,7 @@ Views da configuracao administravel.
 
 A view recebe, delega e responde. O merge patch mora no service.
 """
+from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, views
 from rest_framework.response import Response
@@ -78,7 +79,14 @@ class PrivacidadeView(views.APIView):
     def get(self, request):
         return Response(
             PrivacidadeSerializer(
-                {'encarregado': encarregado_de_dados(), 'contatos': contatos_vigentes()}
+                {
+                    'encarregado': encarregado_de_dados(),
+                    'contatos': contatos_vigentes(),
+                    'retencao': {
+                        'eventos_conta_meses': settings.RETENCAO_EVENTOS_CONTA_MESES,
+                        'anexos_apos_arquivamento_meses': settings.RETENCAO_ANEXOS_MESES,
+                    },
+                }
             ).data
         )
 

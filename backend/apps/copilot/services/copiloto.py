@@ -325,9 +325,9 @@ class ComProvedor:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.gemini_service import ProvedorGemini
+        from apps.ai.services.registro import provedor_principal
 
-        return ProvedorGemini()
+        return provedor_principal()
 
 
 class IniciarSessaoService(ComProvedor):

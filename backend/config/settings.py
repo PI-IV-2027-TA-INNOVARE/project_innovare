@@ -9,6 +9,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+from celery.schedules import crontab
 from decouple import Config, RepositoryEnv, config as env_config
 
 from core.configuracao import (
@@ -229,6 +230,7 @@ if RUNNING_TESTS:
         REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
     )
     LIMITE_DA_IA = None
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(
@@ -294,6 +296,13 @@ ANEXO_TIPOS_ACEITOS = tuple(
     ).split(',')
 )
 
+RETENCAO_EVENTOS_CONTA_MESES = config(
+    'RETENCAO_EVENTOS_CONTA_MESES', default=12, cast=int
+)
+RETENCAO_ANEXOS_MESES = config(
+    'RETENCAO_ANEXOS_MESES', default=24, cast=int
+)
+
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -343,6 +352,9 @@ AI_MATCH_FATOR_DISPONIBILIDADE = {
 }
 AI_MATCH_RERANK_ENABLED = config('AI_MATCH_RERANK_ENABLED', default=False, cast=bool)
 AI_MATCH_GEMINI_MODEL = config('AI_MATCH_GEMINI_MODEL', default='gemini-2.5-flash')
+AI_PROVEDOR_PRINCIPAL = config('AI_PROVEDOR_PRINCIPAL', default='google')
+AI_PROVEDOR_RESERVA = config('AI_PROVEDOR_RESERVA', default='')
+AI_MODELO_RESERVA = config('AI_MODELO_RESERVA', default='')
 AI_GEMINI_TEMPERATURA = config('AI_GEMINI_TEMPERATURA', default=0.3, cast=float)
 AI_GEMINI_MAX_TOKENS_SAIDA = config(
     'AI_GEMINI_MAX_TOKENS_SAIDA', default=8192, cast=int
@@ -371,6 +383,22 @@ AI_CUSTO_SAIDA_BRL_POR_MILHAO = config(
     'AI_CUSTO_SAIDA_BRL_POR_MILHAO', default=0.0, cast=float
 )
 
+# Fila assincrona (SPEC-14). A pre-analise continua sincrona por padrao; so
+# liga no worker quando o ambiente tiver Redis e um worker rodando.
+PREANALISE_ASSINCRONA = config('PREANALISE_ASSINCRONA', default=False, cast=bool)
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='')
+CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_BEAT_SCHEDULE = {
+    'aplicar-retencao-lgpd': {
+        'task': 'audit.aplicar_retencao',
+        'schedule': crontab(hour=3, minute=0),
+    },
+}
+
 PROMPT_SISTEMA_PIPE = Path(
     config(
         'PROMPT_SISTEMA_PIPE',
@@ -391,6 +419,9 @@ if RUNNING_TESTS:
     GEMINI_API_KEY = ''
     AI_MATCH_RERANK_ENABLED = False
     SEARCH_EMBEDDING_ENABLED = False
+    PREANALISE_ASSINCRONA = False
+    CELERY_BROKER_URL = ''
+    CELERY_TASK_ALWAYS_EAGER = True
 
 LOGGING = {
     'version': 1,

@@ -4,9 +4,11 @@ Trilha de auditoria (RF12) - append-only.
 Nunca e atualizada nem apagada pela aplicacao. E a fonte unica da aba Historico
 da oportunidade: duas tabelas para a mesma verdade divergem no primeiro mes.
 
-Unica excecao: a anonimizacao pedida pelo titular (LGPD, art. 18), que troca o
-nome e o e-mail de quem agiu por "pessoa removida", desfaz a ligacao com a conta
-e nao mexe no que aconteceu (`apps/accounts/services/titular.py`).
+Duas excecoes, ambas de anonimizacao e nunca de remocao do fato: a anonimizacao
+pedida pelo titular (LGPD, art. 18) e a retencao programada dos eventos de conta
+depois de 12 meses. As duas trocam quem agiu por "pessoa removida", desfazem a
+ligacao com a conta e nao mexem no que aconteceu
+(`apps/accounts/services/titular.py` e `apps/audit/services/retencao.py`).
 
 Quem agiu fica em dois campos: `ator`, o texto que a tela mostra, e
 `conta_do_ator`, a conta. O texto sozinho perde a pessoa quando o e-mail muda.

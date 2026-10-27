@@ -7,6 +7,11 @@
 #
 # As portas ficam presas a 127.0.0.1: o runserver nao e servidor para a rede, e
 # a API fala com o banco do .env. Quem esta na mesma rede nao chega aqui.
+#
+# Para ligar a pre-analise na fila, use no backend/.env:
+#   PREANALISE_ASSINCRONA=True
+#   CELERY_BROKER_URL=redis://redis:6379/0
+# Os servicos `worker` e `beat` ja apontam para o Redis do compose.
 
 name: pdconnect
 
@@ -20,6 +25,37 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./IA:/app/IA:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A config.celery:app worker --loglevel=info
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app/backend
+      - ./IA:/app/IA:ro
+    depends_on:
+      - redis
+
+  beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A config.celery:app beat --loglevel=info
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app/backend
+      - ./IA:/app/IA:ro
+    depends_on:
+      - redis
 
   frontend:
     build: ./frontend

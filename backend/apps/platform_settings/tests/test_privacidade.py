@@ -41,3 +41,14 @@ class PrivacidadeTests(TestCase):
 
         self.assertIsNone(dados['encarregado'])
         self.assertTrue(dados['contatos'])
+
+    def test_traz_os_prazos_de_retencao(self):
+        dados = self.client.get(reverse('privacidade')).data
+
+        self.assertEqual(
+            dados['retencao'],
+            {
+                'eventos_conta_meses': 12,
+                'anexos_apos_arquivamento_meses': 24,
+            },
+        )

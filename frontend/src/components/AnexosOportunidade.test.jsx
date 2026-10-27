@@ -200,6 +200,15 @@ describe('AnexosOportunidade — tela', () => {
     ).toBeInTheDocument()
   })
 
+  it('diz por quanto tempo os documentos ficam guardados', async () => {
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    expect(
+      screen.getByText(/até 24 meses após o arquivamento da oportunidade/i)
+    ).toBeInTheDocument()
+  })
+
   it('sem documento, quem pode enviar é convidado a anexar o primeiro', async () => {
     api.listarAnexos = vi.fn().mockResolvedValue([])
     renderizar()

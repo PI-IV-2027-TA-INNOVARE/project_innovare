@@ -7,6 +7,11 @@ import './PrivacidadePage.scss'
 
 const ATUALIZADO_EM = '26/10/2026'
 
+const RETENCAO_PADRAO = {
+  eventos_conta_meses: 12,
+  anexos_apos_arquivamento_meses: 24,
+}
+
 const RESUMO = [
   {
     icone: appIcons.folder,
@@ -118,6 +123,8 @@ export default function PrivacidadePage() {
       ativo = false
     }
   }, [])
+
+  const retencao = dados?.retencao ?? RETENCAO_PADRAO
 
   return (
     <main className="privacidade">
@@ -241,8 +248,16 @@ export default function PrivacidadePage() {
             <section aria-labelledby="privacidade-tempo">
               <h2 id="privacidade-tempo">Por quanto tempo</h2>
               <p>
-                Enquanto a conta e a oportunidade existirem. Os prazos de descarte e de
-                anonimização entram aqui quando a AC2 os aprovar.
+                Guardamos os registros de acesso à conta por{' '}
+                <strong>{retencao.eventos_conta_meses} meses</strong>. Depois desse
+                prazo, eles são anonimizados: a data e o tipo do acesso continuam na
+                trilha de segurança, mas o vínculo com a sua conta é desfeito.
+              </p>
+              <p>
+                Documentos anexados a uma oportunidade ficam guardados enquanto ela
+                existir e por{' '}
+                <strong>{retencao.anexos_apos_arquivamento_meses} meses</strong> após o
+                arquivamento. Vencido esse prazo, os arquivos são descartados.
               </p>
             </section>
 
