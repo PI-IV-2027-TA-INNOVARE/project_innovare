@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import {
   clearApiAuthSession,
   configureApiAuth,
@@ -109,16 +109,18 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [isBootstrapping, setIsBootstrapping] = useState(true)
   const [authError, setAuthError] = useState('')
+  const [contaTrocada, setContaTrocada] = useState(null)
 
   const clearAuthState = (message = '') => {
     setUser(null)
     setSession(null)
     setAuthError(message)
+    setContaTrocada(null)
     clearApiAuthSession()
     gravarMarca(false)
   }
 
-  const hydrateSession = async (nextSession) => {
+  const hydrateSession = async (nextSession, { trocouDeConta = false } = {}) => {
     const normalizedSession = normalizeStoredSession(nextSession)
 
     if (!normalizedSession) {
@@ -138,6 +140,10 @@ export function AuthProvider({ children }) {
       setSession(resolvedSession)
       setUser(nextUser)
       gravarMarca(true)
+
+      if (trocouDeConta) {
+        setContaTrocada({ nome: nextUser.displayName, levarAoPainel: true })
+      }
 
       return { ok: true, user: nextUser }
     } catch (error) {
@@ -159,10 +165,15 @@ export function AuthProvider({ children }) {
         clearAuthState('Sua sessão expirou. Entre novamente.')
         setIsBootstrapping(false)
       },
-      onSessionRefresh: (nextSession) => {
+      onSessionRefresh: (nextSession, { contaTrocada: trocouDeConta = false } = {}) => {
         const normalizedSession = normalizeStoredSession(nextSession)
 
         if (!normalizedSession) return
+
+        if (trocouDeConta) {
+          hydrateSession(normalizedSession, { trocouDeConta })
+          return
+        }
 
         setSession(normalizedSession)
       },
@@ -222,16 +233,35 @@ export function AuthProvider({ children }) {
     setIsBootstrapping(false)
   }
 
+  const contaTrocadaNoPainel = useCallback(() => {
+    setContaTrocada((atual) => (atual ? { ...atual, levarAoPainel: false } : atual))
+  }, [])
+
+  const dispensarAvisoDeConta = useCallback(() => {
+    setContaTrocada(null)
+  }, [])
+
   const value = useMemo(() => ({
     user,
     session,
     isAuthenticated: Boolean(user),
     isBootstrapping,
     authError,
+    contaTrocada,
+    contaTrocadaNoPainel,
+    dispensarAvisoDeConta,
     signInWithCredentials,
     refreshUser,
     logout,
-  }), [authError, isBootstrapping, session, user])
+  }), [
+    authError,
+    contaTrocada,
+    contaTrocadaNoPainel,
+    dispensarAvisoDeConta,
+    isBootstrapping,
+    session,
+    user,
+  ])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

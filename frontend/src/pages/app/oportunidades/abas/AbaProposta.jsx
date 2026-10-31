@@ -8,7 +8,7 @@ import {
   criarProposta,
   obterProposta,
 } from '../../../../services/pdConnectApi'
-import ProximoPasso from './ProximoPasso'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
 import '../OportunidadesPage.scss'
 
 const SECOES = [
@@ -144,6 +144,18 @@ function vazio(campo, valor) {
   return campo.isList
     ? !valor || valor.filter((linha) => linha.trim()).length === 0
     : !valor || String(valor).trim() === ''
+}
+
+function quandoFoiSalva(instante) {
+  if (!instante) return 'Tudo salvo.'
+
+  const data = new Date(instante)
+  const hora = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  if (data.toDateString() === new Date().toDateString()) return `Salvo às ${hora}.`
+
+  const dia = data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return `Salvo em ${dia} às ${hora}.`
 }
 
 export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
@@ -367,10 +379,6 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           </div>
         ) : null}
 
-        {revisada && !alterado ? (
-          <ProximoPasso etapa="competencias" irPara={irPara} />
-        ) : null}
-
         {temErro ? (
           <div className="admin-callout admin-callout--alerta" role="alert">
             <Icone icon={appIcons.warning} className="admin-callout__icon" />
@@ -385,7 +393,7 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
         ) : null}
 
         <form
-          className="console-form"
+          className="proposta__form"
           onSubmit={(evento) => {
             evento.preventDefault()
             salvar()
@@ -415,19 +423,20 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           </fieldset>
 
           {podeEditar ? (
-            <div className="proposta__rodape">
-              <span className="proposta__estado" role="status">
-                {alterado
+            <BarraDeAcoes
+              estado={
+                alterado
                   ? 'Há alterações não salvas.'
                   : revisada
-                    ? 'Tudo salvo.'
+                    ? quandoFoiSalva(proposta.atualizado_em)
                     : temConteudo
                       ? 'Salve para registrar a sua revisão.'
-                      : 'Preencha os elementos e salve.'}
-              </span>
+                      : 'Preencha os elementos e salve.'
+              }
+            >
               <button
                 type="submit"
-                className="admin-btn"
+                className={podeSalvar ? 'admin-btn' : 'admin-btn admin-btn--outline'}
                 disabled={!podeSalvar || salvando}
               >
                 <Icone icon={appIcons.save} />
@@ -437,7 +446,8 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
                     ? 'Salvar proposta'
                     : 'Salvar como revisada'}
               </button>
-            </div>
+              {revisada && !alterado ? <ContinuarPara etapa="competencias" irPara={irPara} /> : null}
+            </BarraDeAcoes>
           ) : (
             <p className="proposta__legenda">
               <Icone icon={appIcons.view} /> Somente leitura: apenas o Supervisor edita a proposta.

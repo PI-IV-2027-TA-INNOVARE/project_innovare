@@ -40,7 +40,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
@@ -81,3 +81,34 @@ jobs:
       - name: Build
         working-directory: ./frontend
         run: npm run build
+
+  dependencias:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Backend sem biblioteca com falha conhecida
+        run: |
+          python -m pip install pip-audit==2.10.1
+          pip-audit -r backend/requirements.txt --progress-spinner off
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Front sem falha alta ou crítica no que vai para produção
+        working-directory: ./frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Front, ferramentas de desenvolvimento (só aviso)
+        working-directory: ./frontend
+        continue-on-error: true
+        run: npm audit --audit-level=high

@@ -53,3 +53,39 @@ export const REGISTROS = [
 export function etapaPorId(id) {
   return ETAPAS.find((etapa) => etapa.id === id)
 }
+
+const EM_CURSO_POR_SITUACAO = {
+  entrada: ['contexto'],
+  estruturacao: ['copiloto', 'proposta'],
+  revisar: ['copiloto', 'proposta'],
+  competencias: ['competencias'],
+  matching: ['equipe'],
+  pre_analise: ['pre-analise'],
+  aguardando_decisao: ['decisao'],
+}
+
+export const CONCLUIDA = 'concluida'
+export const EM_ANDAMENTO = 'em_andamento'
+
+export function andamentoDasEtapas(situacao) {
+  if (situacao === 'continuar') {
+    return Object.fromEntries(ETAPAS.map((etapa) => [etapa.id, CONCLUIDA]))
+  }
+
+  const emCurso = EM_CURSO_POR_SITUACAO[situacao]
+
+  if (!emCurso) return {}
+
+  const primeira = Math.min(...emCurso.map((id) => etapaPorId(id).numero))
+
+  return Object.fromEntries(
+    ETAPAS.map((etapa) => [
+      etapa.id,
+      emCurso.includes(etapa.id)
+        ? EM_ANDAMENTO
+        : etapa.numero < primeira
+          ? CONCLUIDA
+          : null,
+    ]),
+  )
+}

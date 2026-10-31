@@ -21,7 +21,14 @@ import AbaEquipe from './abas/AbaEquipe'
 import AbaHistorico from './abas/AbaHistorico'
 import AbaPreAnalise from './abas/AbaPreAnalise'
 import AbaProposta from './abas/AbaProposta'
-import { ETAPAS, REGISTROS } from './etapas'
+import {
+  CONCLUIDA,
+  EM_ANDAMENTO,
+  ETAPAS,
+  REGISTROS,
+  andamentoDasEtapas,
+  etapaPorId,
+} from './etapas'
 import {
   PRIORIDADES,
   daApi,
@@ -34,23 +41,32 @@ import './OportunidadesPage.scss'
 
 const ABAS = [...ETAPAS, ...REGISTROS]
 
-function BotaoAba({ item, ativa, bloqueada, onClick }) {
+function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
+  const classes = [
+    'oportunidade-aba',
+    ativa ? 'is-active' : '',
+    andamento === CONCLUIDA ? 'is-concluida' : '',
+    andamento === EM_ANDAMENTO ? 'is-em-andamento' : '',
+  ]
+
   return (
     <button
       type="button"
-      className={`oportunidade-aba${ativa ? ' is-active' : ''}`}
+      className={classes.filter(Boolean).join(' ')}
       aria-current={ativa ? 'step' : undefined}
       disabled={bloqueada}
       onClick={onClick}
     >
       {item.numero ? (
         <span className="oportunidade-aba__numero" aria-hidden="true">
-          {item.numero}
+          {andamento === CONCLUIDA ? <Icone icon={appIcons.done} /> : item.numero}
         </span>
       ) : (
         <Icone icon={item.icon} className="oportunidade-aba__icon" />
       )}
       {item.label}
+      {andamento === CONCLUIDA ? <span className="sr-only"> concluída</span> : null}
+      {andamento === EM_ANDAMENTO ? <span className="sr-only"> em andamento</span> : null}
     </button>
   )
 }
@@ -167,6 +183,8 @@ export default function OportunidadePage() {
 
   const aba = ABAS.find((item) => item.id === abaAtiva) || ABAS[0]
   const decisao = registro.decisao
+  const andamento = andamentoDasEtapas(registro.situacao)
+  const etapaAtiva = etapaPorId(abaAtiva)
 
   return (
     <div className="console oportunidade-page">
@@ -230,6 +248,7 @@ export default function OportunidadePage() {
                 ativa={item.id === abaAtiva}
                 bloqueada={abaOcupada && item.id !== abaAtiva}
                 onClick={() => trocarAba(item.id)}
+                andamento={andamento[item.id]}
               />
             </li>
           ))}
@@ -248,6 +267,12 @@ export default function OportunidadePage() {
           ))}
         </ul>
       </nav>
+
+      {etapaAtiva ? (
+        <p className="oportunidade-abas__posicao">
+          Etapa {etapaAtiva.numero} de {ETAPAS.length}
+        </p>
+      ) : null}
 
       {abaOcupada ? (
         <p className="oportunidade-abas__aviso" role="status">

@@ -19,52 +19,17 @@ from apps.accounts.models import (
     TokenAcesso,
     Usuario,
 )
+from apps.accounts.services.criadores import criador_de_conta
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
 from apps.accounts.services.titular import anonimizada
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
-from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
+from apps.network.models import MembroRede
 from apps.organizations.services.empresas import empresa_demandante
 from core.exceptions import AcaoNaoPermitida, ConflitoDeEstado, ErroDeDominio
 
 if TYPE_CHECKING:
     from apps.organizations.models import Organizacao
-
-PAPEIS_PROVISIONAVEIS = (Papel.SUPERVISOR, Papel.ADMINISTRADOR, Papel.DEMANDANTE)
-
-
-def _criar_membro_rede_para_supervisor(
-    *,
-    usuario: Usuario,
-    organizacao: Organizacao | None,
-    ator: Usuario,
-) -> MembroRede | None:
-    """Cria MembroRede correspondente quando um SUPERVISOR e provisionado."""
-    if usuario.papel != Papel.SUPERVISOR:
-        return None
-
-    if MembroRede.objects.com_email(usuario.email).exists():
-        return None
-
-    membro = MembroRede.objects.create(
-        usuario=usuario,
-        papel_rede=PapelNaRede.SUPERVISOR,
-        organizacao=organizacao,
-        experiencia='',
-        situacao=SituacaoMembro.ATIVO,
-        cadastrado_por=ator,
-    )
-
-    registrar_evento(
-        categoria=CategoriaEvento.REDE,
-        tipo='membro_cadastrado',
-        entidade='membro_rede',
-        entidade_id=membro.id_membro,
-        ator=getattr(ator, 'email', str(ator)),
-        detalhe={'papel_rede': membro.papel_rede, 'origem': 'provisionamento_admin'},
-    )
-    return membro
-
 
 class ProvisionarContaService:
     """
@@ -93,32 +58,16 @@ class ProvisionarContaService:
         cnpj: str | None = None,
         nome_empresa: str = '',
     ) -> Usuario:
-        if papel not in PAPEIS_PROVISIONAVEIS:
-            raise ErroDeDominio(
-                'Conta de Pesquisador nasce do cadastro na rede interna, feito '
-                'pelo Supervisor. Use a rede interna.',
-                codigo='papel_nao_provisionavel',
-            )
-
-        if papel == Papel.DEMANDANTE:
-            if not cnpj:
-                raise ErroDeDominio(
-                    'Informe o CNPJ da empresa.', codigo='demandante_sem_empresa'
-                )
-
-            organizacao = empresa_demandante(cnpj=cnpj, nome=nome_empresa)
-            nome = organizacao.nome
+        criador = criador_de_conta(papel)
+        nome, organizacao = criador.preparar(
+            nome=nome, organizacao=organizacao, cnpj=cnpj, nome_empresa=nome_empresa,
+        )
 
         usuario = Usuario.objects.create_user(
             email=email, nome=nome, papel=papel, organizacao=organizacao,
         )
 
-        if papel == Papel.DEMANDANTE:
-            DemandanteExterno.objects.create(usuario=usuario)
-
-        _criar_membro_rede_para_supervisor(
-            usuario=usuario, organizacao=organizacao, ator=ator,
-        )
+        criador.completar(usuario=usuario, organizacao=organizacao, ator=ator)
 
         token = TokenAcesso.emitir(usuario, FinalidadeToken.CONVITE)
         self._email.convite_acesso(usuario, token)

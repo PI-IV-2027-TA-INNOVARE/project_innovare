@@ -20,9 +20,12 @@ import smtplib
 
 from django.conf import settings
 from django.core.mail import send_mass_mail
+from django.db.models import CharField, Exists, OuterRef
+from django.db.models.functions import Cast
 
 from apps.accounts.models import Papel, SituacaoConta, Usuario
 from apps.accounts.services.titular import DOMINIO_ANONIMO
+from apps.audit.models import EventoAuditoria
 from apps.decisions.models import TipoDecisao
 
 logger = logging.getLogger(__name__)
@@ -65,9 +68,22 @@ def _texto(*, nome: str, codigo: str, titulo: str, tipo: str, justificativa: str
 
 
 def contas_avisadas(id_organizacao: int | None):
-    """As contas ativas que respondem pela empresa demandante, menos as anonimizadas."""
+    """
+    As contas ativas que respondem pela empresa demandante, menos as
+    anonimizadas e as que pediram exclusao.
+
+    Quem pediu exclusao (LGPD, art. 18) deixa de receber e-mail desde o pedido,
+    sem esperar o Administrador atender: a pessoa disse que quer sair. O aviso
+    na plataforma continua, e os outros contatos da empresa recebem o e-mail.
+    """
     if id_organizacao is None:
         return Usuario.objects.none()
+
+    pediu_exclusao = EventoAuditoria.objects.filter(
+        tipo='exclusao_solicitada',
+        entidade='usuario',
+        entidade_id=Cast(OuterRef('pk'), CharField()),
+    )
 
     return (
         Usuario.objects.filter(
@@ -76,6 +92,7 @@ def contas_avisadas(id_organizacao: int | None):
             situacao=SituacaoConta.ATIVO,
         )
         .exclude(email__endswith=f'@{DOMINIO_ANONIMO}')
+        .exclude(Exists(pediu_exclusao))
         .order_by('pk')
     )
 

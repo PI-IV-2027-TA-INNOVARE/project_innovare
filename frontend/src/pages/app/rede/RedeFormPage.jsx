@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import AdminModal from '../../../components/console/AdminModal'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
@@ -19,6 +20,27 @@ import {
   membroParaApi,
 } from './redeData'
 import './RedePage.scss'
+
+const LISTAS_DO_MATCHING = [
+  {
+    campo: 'competencias',
+    label: 'Competências',
+    dica: 'Conhecimento científico e técnico que a pessoa domina.',
+    placeholder: 'Ex.: Microbiologia de alimentos',
+  },
+  {
+    campo: 'tecnicas',
+    label: 'Técnicas',
+    dica: 'Métodos e equipamentos que a pessoa opera.',
+    placeholder: 'Ex.: PCR em tempo real',
+  },
+  {
+    campo: 'linhas',
+    label: 'Linhas de pesquisa',
+    dica: 'Temas em que a pessoa atua.',
+    placeholder: 'Ex.: Bioinsumos agrícolas',
+  },
+]
 
 const VAZIO = {
   nome: '',
@@ -63,6 +85,8 @@ export default function RedeFormPage() {
   const [erroCarga, setErroCarga] = useState('')
   const [erroEnvio, setErroEnvio] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [alterado, setAlterado] = useState(false)
+  const [confirmarSaida, setConfirmarSaida] = useState(false)
 
   const carregar = useCallback(async () => {
     if (!editando) return
@@ -89,6 +113,24 @@ export default function RedeFormPage() {
   const alterar = (campo) => (valor) => {
     setValores((atual) => ({ ...atual, [campo]: valor }))
     setErros((atual) => ({ ...atual, [campo]: undefined }))
+    setAlterado(true)
+  }
+
+  useEffect(() => {
+    if (!alterado) return undefined
+
+    const avisar = (evento) => {
+      evento.preventDefault()
+      evento.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', avisar)
+    return () => window.removeEventListener('beforeunload', avisar)
+  }, [alterado])
+
+  const cancelar = () => {
+    if (alterado) setConfirmarSaida(true)
+    else navigate('/rede')
   }
 
   const alterarCampo = (campo) => (event) => alterar(campo)(event.target.value)
@@ -117,6 +159,7 @@ export default function RedeFormPage() {
         await liberarAcessoMembro(membro.id_membro)
       }
 
+      setAlterado(false)
       showToast(
         editando ? 'Cadastro atualizado.' : 'Pesquisador cadastrado na rede.'
       )
@@ -169,23 +212,28 @@ export default function RedeFormPage() {
         </div>
       </header>
 
+      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+
       <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
           <header className="perfil-card__header">
             <div>
               <h2 className="perfil-card__title">Identificação</h2>
               <p className="perfil-card__description">
-                O e-mail vira a credencial de acesso quando você liberar o login.
+                O convite de acesso vai para o e-mail informado.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
             <label className="admin-field">
-              <span className="admin-field__label">Nome</span>
+              <span className="admin-field__label">
+                Nome <span aria-hidden="true">*</span>
+              </span>
               <input
                 type="text"
                 className="admin-input"
+                aria-required="true"
                 value={valores.nome}
                 onChange={alterarCampo('nome')}
                 aria-invalid={Boolean(erros.nome)}
@@ -199,10 +247,13 @@ export default function RedeFormPage() {
             </label>
 
             <label className="admin-field">
-              <span className="admin-field__label">E-mail</span>
+              <span className="admin-field__label">
+                E-mail <span aria-hidden="true">*</span>
+              </span>
               <input
                 type="email"
                 className="admin-input"
+                aria-required="true"
                 value={valores.email}
                 onChange={alterarCampo('email')}
                 aria-invalid={Boolean(erros.email)}
@@ -251,8 +302,8 @@ export default function RedeFormPage() {
             <div>
               <h2 className="perfil-card__title">Qualificação</h2>
               <p className="perfil-card__description">
-                Titulação é lista fechada porque o matching de supervisão filtra
-                por ela.
+                Titulação é lista fechada porque o matching usa o nível dela para
+                priorizar mestres e doutores na supervisão.
               </p>
             </div>
           </header>
@@ -293,7 +344,7 @@ export default function RedeFormPage() {
                 rows={3}
                 value={valores.experiencia}
                 onChange={alterarCampo('experiencia')}
-                placeholder="Projetos relevantes e tempo de atuação."
+                placeholder="Projetos relevantes, áreas de atuação, técnicas usadas e tempo de experiência."
               />
             </label>
           </div>
@@ -319,33 +370,33 @@ export default function RedeFormPage() {
             <div>
               <h2 className="perfil-card__title">O que o matching compara</h2>
               <p className="perfil-card__description">
-                Sem competência declarada a pessoa entra na rede, mas fica
-                invisível para as sugestões.
+                O matching compara estas listas com as competências necessárias
+                de cada oportunidade.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
-            <ListaEditavel
-              label="Competências"
-              placeholder="Ex.: Microbiologia de alimentos"
-              values={valores.competencias}
-              onChange={alterar('competencias')}
-            />
+            {LISTAS_DO_MATCHING.every(({ campo }) => valores[campo].length === 0) ? (
+              <p className="admin-field__hint" role="note">
+                Sem nenhuma das três listas, a pessoa entra na rede, mas
+                dificilmente aparece nas sugestões.
+              </p>
+            ) : null}
 
-            <ListaEditavel
-              label="Técnicas"
-              placeholder="Ex.: PCR em tempo real"
-              values={valores.tecnicas}
-              onChange={alterar('tecnicas')}
-            />
-
-            <ListaEditavel
-              label="Linhas de pesquisa"
-              placeholder="Ex.: Bioinsumos agrícolas"
-              values={valores.linhas}
-              onChange={alterar('linhas')}
-            />
+            {LISTAS_DO_MATCHING.map((lista) => (
+              <div key={lista.campo} className="admin-field">
+                <span className="admin-field__label">{lista.label}</span>
+                <span className="admin-field__hint">{lista.dica}</span>
+                <ListaEditavel
+                  label={lista.label}
+                  placeholder={lista.placeholder}
+                  values={valores[lista.campo]}
+                  onChange={alterar(lista.campo)}
+                  avisoQuandoVazia={false}
+                />
+              </div>
+            ))}
           </div>
         </section>
 
@@ -367,13 +418,21 @@ export default function RedeFormPage() {
                 checked={valores.liberarAcesso}
                 disabled={temAcesso}
                 onChange={(event) => alterar('liberarAcesso')(event.target.checked)}
+                aria-describedby="efeito-do-acesso"
               />
               <span>
                 {temAcesso
                   ? 'Esta pessoa já tem login na plataforma'
-                  : 'Liberar acesso agora — o convite chega por e-mail'}
+                  : `Enviar o convite de acesso ao ${editando ? 'salvar' : 'cadastrar'}`}
               </span>
             </label>
+            {temAcesso ? null : (
+              <p id="efeito-do-acesso" className="admin-field__hint" role="status">
+                {valores.liberarAcesso
+                  ? 'A conta é criada, e o convite de primeiro acesso sai para o e-mail informado.'
+                  : 'A pessoa entra na rede e já pode ser sugerida pelo matching, mas só entra na plataforma depois que o acesso for liberado.'}
+              </p>
+            )}
           </div>
         </section>
 
@@ -385,7 +444,9 @@ export default function RedeFormPage() {
         ) : null}
 
         <footer className="console-form__footer">
-          <Link className="admin-btn admin-btn--outline" to="/rede">Cancelar</Link>
+          <button type="button" className="admin-btn admin-btn--outline" onClick={cancelar}>
+            Cancelar
+          </button>
           <button type="submit" className="admin-btn" disabled={salvando}>
             <Icone icon={editando ? appIcons.save : appIcons.addUser} />
             {salvando
@@ -394,6 +455,36 @@ export default function RedeFormPage() {
           </button>
         </footer>
       </form>
+
+      {confirmarSaida ? (
+        <AdminModal
+          title="Sair sem salvar?"
+          description="O que você preencheu neste cadastro será perdido."
+          onClose={() => setConfirmarSaida(false)}
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="admin-btn admin-btn--outline"
+                onClick={() => setConfirmarSaida(false)}
+              >
+                Continuar editando
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--danger"
+                onClick={() => {
+                  setAlterado(false)
+                  navigate('/rede')
+                }}
+              >
+                Sair sem salvar
+              </button>
+            </>
+          }
+        />
+      ) : null}
 
       <AdminToast toast={toast} />
     </div>

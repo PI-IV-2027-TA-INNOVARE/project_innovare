@@ -6,7 +6,7 @@ import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
   listOportunidades,
-  listarRede,
+  obterResumoDaRede,
   obterMeuPerfil,
 } from '../../../services/pdConnectApi'
 import {
@@ -16,7 +16,7 @@ import {
   situacaoLabel,
 } from '../oportunidades/oportunidadesData'
 import { resumoDoDemandante } from '../problemas/problemasData'
-import { completudeDoPerfil, membroDaApi, perfilDaApi } from '../rede/redeData'
+import { completudeDoPerfil, perfilDaApi } from '../rede/redeData'
 
 function Tile({ icon, label, value, tone, to }) {
   const conteudo = (
@@ -69,14 +69,14 @@ function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
   )
 }
 
-function BlocoSupervisor({ oportunidades, rede }) {
+function BlocoSupervisor({ oportunidades, resumoDaRede }) {
   const indicadores = resumoPorSituacao(oportunidades)
 
   const aguardando = oportunidades
     .filter((item) => item.situacao === 'aguardando_decisao')
     .slice(0, 3)
 
-  const semCompetencia = rede.filter((pessoa) => pessoa.competencias.length === 0).length
+  const semCompetencia = resumoDaRede?.sem_competencia ?? 0
 
   return (
     <>
@@ -248,7 +248,7 @@ export default function PainelPorPapel({ user }) {
   const papel = user?.role
 
   const [oportunidades, setOportunidades] = useState([])
-  const [rede, setRede] = useState([])
+  const [resumoDaRede, setResumoDaRede] = useState(null)
   const [perfil, setPerfil] = useState(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
@@ -266,16 +266,16 @@ export default function PainelPorPapel({ user }) {
     const ehPesquisador = papel === ROLES.PESQUISADOR
 
     try {
-      const [fila, membros, meu] = await Promise.all([
+      const [fila, resumo, meu] = await Promise.all([
         listOportunidades(),
-        ehSupervisor ? listarRede() : null,
+        ehSupervisor ? obterResumoDaRede() : null,
         ehPesquisador ? obterMeuPerfil().catch(() => null) : null,
       ])
 
       setOportunidades((fila.results || fila).map(daApi))
 
       if (ehSupervisor) {
-        setRede((membros.results || membros).map(membroDaApi))
+        setResumoDaRede(resumo)
       }
 
       if (ehPesquisador) {
@@ -316,7 +316,7 @@ export default function PainelPorPapel({ user }) {
   }
 
   if (papel === ROLES.SUPERVISOR) {
-    return <BlocoSupervisor oportunidades={oportunidades} rede={rede} />
+    return <BlocoSupervisor oportunidades={oportunidades} resumoDaRede={resumoDaRede} />
   }
 
   if (papel === ROLES.PESQUISADOR) {

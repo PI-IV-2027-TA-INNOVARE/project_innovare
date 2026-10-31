@@ -1,7 +1,13 @@
 import { useId, useState } from 'react'
 import { Icone, appIcons } from '../../../lib/icons'
 
-export default function ListaEditavel({ label, placeholder, values = [], onChange }) {
+export default function ListaEditavel({
+  label,
+  placeholder,
+  values = [],
+  onChange,
+  avisoQuandoVazia = true,
+}) {
   const [rascunho, setRascunho] = useState('')
   const inputId = useId()
 
@@ -67,11 +73,11 @@ export default function ListaEditavel({ label, placeholder, values = [], onChang
             </li>
           ))}
         </ul>
-      ) : (
+      ) : avisoQuandoVazia ? (
         <p className="lista-editavel__vazio">
           Nada declarado ainda — esta dimensão fica de fora do matching.
         </p>
-      )}
+      ) : null}
     </div>
   )
 }

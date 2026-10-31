@@ -298,6 +298,89 @@ class ExecucaoDoMatchingTests(MatchingBaseTests):
         )
 
 
+class SupervisaoNaEquipeTests(MatchingBaseTests):
+    """
+    PB44 / RF07: a rodada sugere supervisores compativeis e, entre eles,
+    prioriza mestres e doutores. A vaga de supervisao vem antes da nota, para
+    a equipe nao sair sem ninguem que possa supervisionar.
+    """
+
+    def supervisor_da_rede(self, nome, titulacao, integral=False):
+        construtor = (
+            MembroRedeBuilder()
+            .supervisor()
+            .chamado(nome)
+            .com_titulacao(titulacao)
+            .com_competencia('Microbiologia de alimentos')
+        )
+
+        if integral:
+            construtor.integral()
+
+        return construtor.build()
+
+    def pesquisador_forte(self, nome):
+        return (
+            MembroRedeBuilder()
+            .pesquisador()
+            .chamado(nome)
+            .com_titulacao('doutorado')
+            .integral()
+            .com_competencia('Microbiologia de alimentos')
+            .com_competencia('Estatistica aplicada')
+            .com_linha_de_pesquisa('Seguranca de alimentos')
+            .build()
+        )
+
+    def membros_da_equipe(self):
+        return list(
+            MembroEquipe.objects.filter(
+                equipe__oportunidade=self.oportunidade
+            ).values_list('membro__nome_sem_conta', flat=True)
+        )
+
+    @override_settings(AI_MATCH_LIMITE_SUGESTOES=2)
+    def test_supervisor_compativel_entra_mesmo_com_nota_menor(self):
+        self.pesquisador_forte('Clara Nunes')
+        self.supervisor_da_rede('Rafael Antunes', 'mestrado')
+
+        self.rodar()
+
+        self.assertIn('Rafael Antunes', self.membros_da_equipe())
+
+    @override_settings(AI_MATCH_LIMITE_SUGESTOES=1, AI_MATCH_LIMITE_SUPERVISAO=1)
+    def test_mestre_ou_doutor_vem_antes_na_supervisao(self):
+        self.supervisor_da_rede('Paulo Graduado', 'graduacao', integral=True)
+        self.supervisor_da_rede('Lia Doutora', 'doutorado')
+
+        self.rodar()
+
+        self.assertEqual(self.membros_da_equipe(), ['Lia Doutora'])
+
+    def test_supervisor_sem_compatibilidade_nao_entra(self):
+        (
+            MembroRedeBuilder()
+            .supervisor()
+            .chamado('Sergio Embalagens')
+            .com_titulacao('doutorado')
+            .com_competencia('Projeto de embalagens')
+            .build()
+        )
+
+        self.rodar()
+
+        self.assertNotIn('Sergio Embalagens', self.membros_da_equipe())
+
+    def test_motivo_diz_que_a_indicacao_e_para_a_supervisao(self):
+        supervisor = self.supervisor_da_rede('Rafael Antunes', 'mestrado')
+
+        self.rodar()
+        indicacao = MembroEquipe.objects.get(membro=supervisor)
+
+        self.assertIn('Sugerido para a supervisão.', indicacao.match_reasons)
+        self.assertTrue(indicacao.score_features['supervisao'])
+
+
 class AjusteDaEquipeTests(MatchingBaseTests):
     def setUp(self):
         super().setUp()

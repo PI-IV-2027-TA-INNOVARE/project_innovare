@@ -55,36 +55,82 @@ A última linha de cada comando sai pronta para esta tabela.
 
 ## Ratificação (P24)
 
-Valores propostos para a versão 1 dos parâmetros de IA. A coluna "Situação"
-muda para "Ratificado em DD/MM/AAAA" quando o PO aprovar; até lá vale o que
-está aqui, como referência.
+Versão 1 dos parâmetros de IA. O PO ratificou os valores e os prompts abaixo
+na tabela de valores do plano de integração; o registro aqui é de 30/10/2026.
 
 ### Pesos do matching
 
 | Parcela | Peso | Variável | Situação |
 |---|---|---|---|
-| Afinidade com o tema | 0,45 | `AI_MATCH_WEIGHT_SEMANTIC` | A ratificar pelo PO |
-| Palavras em comum | 0,20 | `AI_MATCH_WEIGHT_LEXICAL` | A ratificar pelo PO |
-| Área de atuação | 0,25 | `AI_MATCH_WEIGHT_AREA` | A ratificar pelo PO |
-| Disponibilidade | 0,10 | `AI_MATCH_WEIGHT_AVAILABILITY` | A ratificar pelo PO |
-| Nota mínima para sugerir | 0,26 | `AI_MATCH_MIN_SCORE` | A ratificar pelo PO |
-| Peso da competência desejável | 0,5 | `AI_MATCH_PESO_DESEJAVEL` | A ratificar pelo PO |
+| Afinidade com o tema | 0,45 | `AI_MATCH_WEIGHT_SEMANTIC` | Ratificado pelo PO |
+| Palavras em comum | 0,20 | `AI_MATCH_WEIGHT_LEXICAL` | Ratificado pelo PO |
+| Área de atuação | 0,25 | `AI_MATCH_WEIGHT_AREA` | Ratificado pelo PO |
+| Disponibilidade | 0,10 | `AI_MATCH_WEIGHT_AVAILABILITY` | Ratificado pelo PO |
+| Nota mínima para sugerir | 0,26 | `AI_MATCH_MIN_SCORE` | Ratificado pelo PO |
+| Peso da competência desejável | 0,5 | `AI_MATCH_PESO_DESEJAVEL` | Ratificado pelo PO |
+
+### Supervisão na equipe (PB44)
+
+Cada rodada reserva vagas da equipe sugerida para Supervisores da rede
+compatíveis, acima da nota mínima. Entre eles, mestres e doutores vêm primeiro,
+e a nota desempata. As outras vagas seguem pela nota. As vagas de supervisão
+ficam dentro do limite de sugestões da rodada.
+
+| Parâmetro | Valor | Variável | Situação |
+|---|---|---|---|
+| Vagas para a supervisão | 2 | `AI_MATCH_LIMITE_SUPERVISAO` | Implementado em 30/10/2026; falta o aceite do PO |
+| Titulação priorizada | 3, o nível do mestrado | `AI_MATCH_NIVEL_TITULACAO_SUPERVISAO` | Implementado em 30/10/2026; falta o aceite do PO |
+| Limite de sugestões da rodada | 10 | `AI_MATCH_LIMITE_SUGESTOES` | Já existia |
 
 ### Versões de prompt
 
 Cada execução de IA grava a versão do prompt da tarefa junto com a do prompt de
-sistema, por exemplo `copiloto_v2+PIPE_JT_F1_2026_R1_V2`. O texto de cada uma
+sistema, por exemplo `copiloto_v3+PIPE_JT_F1_2026_R1_V2`. O texto de cada uma
 está na aba "Prompts de IA — antes e depois" do plano de integração e em
 `backend/apps/ai/services/prompts.py`.
 
 | Prompt | Versão | O que faz | Situação |
 |---|---|---|---|
-| Sistema | `PIPE_JT_F1_2026_R1_V2` | `IA/Prompt_Gemini_PIPE_Jornada_Fase1_v2.txt`, inteiro, em toda chamada | A ratificar pelo PO |
-| Resumo da entrada | `sintese_v1` | Problema, contexto e o que falta, para o Supervisor corrigir | A ratificar pelo PO |
-| Estruturação | `copiloto_v2` | Escreve só os elementos vazios, sugere mudança no que já está escrito e avalia os oito | A ratificar pelo PO |
-| Competências | `competencias_v2` | Competências necessárias da proposta | A ratificar pelo PO |
-| Reordenação do matching | `matching_v2` | Candidatos só por apelido | A ratificar pelo PO |
-| Pré-análise | `preanalise_v2` | Critérios PIPE da versão vigente; cada recomendação ligada a uma lacuna | A ratificar pelo PO |
+| Sistema | `PIPE_JT_F1_2026_R1_V2` | `IA/Prompt_Gemini_PIPE_Jornada_Fase1_v2.txt`, inteiro, em toda chamada | Ratificado pelo PO |
+| Resumo da entrada | `sintese_v1` | Problema, contexto e o que falta, para o Supervisor corrigir | Ratificado pelo PO |
+| Estruturação | `copiloto_v3` | Escreve só os elementos vazios, liga cada resultado esperado a um objetivo, fecha a inovação com os pontos para validação humana, sugere mudança no que já está escrito e avalia os oito | Implementado em 30/10/2026; falta o aceite do PO (a `copiloto_v2` foi ratificada) |
+| Competências | `competencias_v2` | Competências necessárias da proposta | Ratificado pelo PO |
+| Reordenação do matching | `matching_v2` | Candidatos só por apelido | Ratificado pelo PO |
+| Pré-análise | `preanalise_v2` | Critérios PIPE da versão vigente; cada recomendação ligada a uma lacuna | Ratificado pelo PO |
+
+## Pertinência do matching (SPEC-16)
+
+A pertinência é a parte das sugestões da equipe potencial que a AC2 marca como
+pertinente. A meta do TAP é 80% (`AI_MATCH_META_PERTINENCIA`). O total soma as
+sugestões de todos os casos.
+
+A amostra é um JSON com um caso por oportunidade e o número (`id_membro`) de
+cada pessoa da rede que a AC2 considera pertinente. Usa o número, e não o nome
+ou o e-mail, para o arquivo não levar dado pessoal:
+
+```json
+{"descricao": "Amostra da AC2, outubro de 2026", "casos": [{"oportunidade": "OP-2026-001", "pertinentes": [3, 7]}]}
+```
+
+O comando roda só em banco local, com dados fictícios ou anonimizados, e não
+grava nada. Cada oportunidade da amostra precisa ter as competências
+necessárias derivadas.
+
+```bash
+python manage.py medir_pertinencia amostra.json                  # com a afinidade com o tema
+python manage.py medir_pertinencia amostra.json --sem-afinidade  # como antes da SPEC-13
+```
+
+O comparativo de modelos (IA 15) usa a mesma amostra: troque
+`SEARCH_EMBEDDING_MODEL` ou `AI_MATCH_GEMINI_MODEL` no `.env` local e rode de
+novo.
+
+| Data | Cálculo | Casos | Sugestões | Pertinentes | Pertinência |
+|---|---|---|---|---|---|
+| a medir | Sem a afinidade (antes da SPEC-13) | — | — | — | — |
+| a medir | Com a afinidade (depois da SPEC-13) | — | — | — | — |
+
+A amostra rotulada ainda não existe: ela precisa ser montada com a AC2.
 
 ## Privacidade
 

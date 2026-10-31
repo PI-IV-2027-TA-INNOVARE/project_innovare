@@ -13,7 +13,7 @@ Supervisor.
 
 | Camada | Tecnologia |
 |---|---|
-| Linguagem | Python 3.12 |
+| Linguagem | Python 3.14 |
 | Framework | Django 5.2 · Django REST Framework 3.17 |
 | Auth | SimpleJWT (`/api/auth/token/`) |
 | Banco | PostgreSQL 14+ (sem extensão: o embedding do matching fica em coluna `jsonb` — plano §8.3) |
@@ -209,6 +209,17 @@ python manage.py aplicar_retencao --aplicar   # executa e grava `retencao_aplica
 
 A task `audit.aplicar_retencao` está no `CELERY_BEAT_SCHEDULE` diário às 3h.
 Sem broker configurado, o comando continua sendo o caminho de execução.
+
+### Pertinência do matching (SPEC-16)
+
+```bash
+python manage.py medir_pertinencia amostra.json                  # com a afinidade com o tema
+python manage.py medir_pertinencia amostra.json --sem-afinidade  # como antes da SPEC-13
+```
+
+Mede a parte das sugestões que a AC2 marcou como pertinente, contra
+`AI_MATCH_META_PERTINENCIA` (0,8). Recusa banco que não é local e não grava
+equipe, execução nem trilha. A amostra cita as pessoas pelo `id_membro`.
 
 ---
 

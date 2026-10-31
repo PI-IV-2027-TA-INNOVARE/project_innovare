@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app/backend
 
 # torch so de CPU: sem o indice abaixo o pip no Linux baixa a versao com CUDA (+2 GB).
-ARG TORCH_VERSION=2.14.1
+ARG TORCH_VERSION=2.15.0
 RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==${TORCH_VERSION}
 
 COPY backend/requirements.txt .

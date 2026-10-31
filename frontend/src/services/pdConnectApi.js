@@ -107,10 +107,6 @@ export function obterOportunidade(codigo) {
   return apiRequest(`/oportunidades/${codigo}/`)
 }
 
-export function atualizarOportunidade(codigo, payload) {
-  return apiRequest(`/oportunidades/${codigo}/`, { method: 'PATCH', body: payload })
-}
-
 export function registrarDecisao(codigo, payload) {
   return apiRequest(`/oportunidades/${codigo}/decisao/`, { method: 'POST', body: payload })
 }
@@ -159,6 +155,10 @@ export function listarRede(params = {}) {
   return apiRequest(`/rede/?${query}`)
 }
 
+export function obterResumoDaRede() {
+  return apiRequest('/rede/resumo/')
+}
+
 export function obterMembroRede(id) {
   return apiRequest(`/rede/${id}/`)
 }
@@ -189,10 +189,6 @@ export function obterMeuPerfil() {
 
 export function atualizarMeuPerfil(payload) {
   return apiRequest('/rede/meu-perfil/', { method: 'PATCH', body: payload })
-}
-
-export function listarTitulacoes() {
-  return apiRequest('/rede/titulacoes/')
 }
 
 export function registrarObservacao(codigo, texto) {

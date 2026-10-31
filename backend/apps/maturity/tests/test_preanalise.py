@@ -35,6 +35,7 @@ from apps.maturity.models import (
 from apps.maturity.serializers import AVISO_ORIENTATIVO
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
 from apps.maturity.services.preanalise import _texto_da_equipe
+from core.exceptions import ConflitoDeEstado
 from core.tests.builders import (
     MembroRedeBuilder,
     OportunidadeBuilder,
@@ -458,6 +459,51 @@ class TextoDaEquipeTests(PreAnaliseBaseTests):
         self.assertEqual(uma, cinco)
         self.assertEqual(texto.count('- Pesquisador '), 5)
         self.assertNotIn('Pessoa', texto)
+
+
+class MembroInativoNaPreAnaliseTests(PreAnaliseBaseTests):
+    """
+    Quem foi inativado continua na equipe antiga, marcado (SPEC-11), mas nao
+    vai mais para a pre-analise: a IA avaliaria uma equipe que nao existe.
+    """
+
+    def _equipe_com_inativo(self):
+        from apps.matching.models import EquipePotencial, MembroEquipe
+
+        oportunidade = (
+            OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        )
+        equipe = EquipePotencial.objects.create(oportunidade=oportunidade)
+
+        for membro in (
+            MembroRedeBuilder().pesquisador().chamado('Pessoa Ativa').build(),
+            MembroRedeBuilder().pesquisador().chamado('Pessoa Inativa').inativo().build(),
+        ):
+            MembroEquipe.objects.create(
+                equipe=equipe, membro=membro, papel=membro.papel_rede
+            )
+
+        return oportunidade
+
+    def test_membro_inativo_fica_fora_do_texto_da_equipe(self):
+        texto, apelidos = _texto_da_equipe(self._equipe_com_inativo())
+
+        self.assertEqual(texto.count('- Pesquisador '), 1)
+        self.assertEqual(apelidos.restaurar('Pesquisador A'), 'Pessoa Ativa')
+
+    def test_equipe_so_com_inativos_nao_vai_para_a_pre_analise(self):
+        from apps.matching.models import MembroEquipe
+
+        MembroEquipe.objects.filter(
+            equipe__oportunidade=self.oportunidade
+        ).update(incluido=True)
+        membro = MembroEquipe.objects.get(equipe__oportunidade=self.oportunidade).membro
+        membro.situacao = 'inativo'
+        membro.save(update_fields=['situacao'])
+        self.importar_criterios()
+
+        with self.assertRaisesMessage(ConflitoDeEstado, 'ativa'):
+            self.analisar()
 
 
 def _preanalise_com(niveis, lacunas=1):

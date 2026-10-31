@@ -343,7 +343,12 @@ AI_MATCH_WEIGHT_AVAILABILITY = config('AI_MATCH_WEIGHT_AVAILABILITY', default=0.
 AI_MATCH_MIN_SCORE = config('AI_MATCH_MIN_SCORE', default=0.26, cast=float)
 AI_MATCH_PESO_DESEJAVEL = config('AI_MATCH_PESO_DESEJAVEL', default=0.5, cast=float)
 AI_MATCH_LIMITE_SUGESTOES = config('AI_MATCH_LIMITE_SUGESTOES', default=10, cast=int)
+AI_MATCH_LIMITE_SUPERVISAO = config('AI_MATCH_LIMITE_SUPERVISAO', default=2, cast=int)
+AI_MATCH_NIVEL_TITULACAO_SUPERVISAO = config(
+    'AI_MATCH_NIVEL_TITULACAO_SUPERVISAO', default=3, cast=int
+)
 AI_MATCH_COBERTURA_MINIMA = config('AI_MATCH_COBERTURA_MINIMA', default=0.2, cast=float)
+AI_MATCH_META_PERTINENCIA = config('AI_MATCH_META_PERTINENCIA', default=0.8, cast=float)
 AI_MATCH_FATOR_DISPONIBILIDADE = {
     'integral': config('AI_MATCH_DISP_INTEGRAL', default=1.0, cast=float),
     'parcial': config('AI_MATCH_DISP_PARCIAL', default=0.6, cast=float),

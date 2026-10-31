@@ -41,7 +41,7 @@ from apps.matching.models import (
 )
 from apps.matching.services.motor import Avaliacao, MotorDeMatching, candidato_de
 from apps.matching.services.semantica import BaseSemantica, provedor_de_embedding
-from apps.network.models import MembroRede, SituacaoMembro
+from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
 from apps.opportunities.services.fluxo import avancar, conferir_avanco, exigir_em_curso
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
@@ -62,6 +62,53 @@ def candidatos_da_rede():
         .prefetch_related('vinculos_competencia__competencia', 'formacoes__titulacao')
         .order_by('nome_atual')
     )
+
+
+def sugestoes_da_rodada(avaliacoes: list[Avaliacao]) -> list[Avaliacao]:
+    """
+    Quem a rodada sugere, acima da nota minima e ate o limite de sugestoes.
+
+    A supervisao vem primeiro (PB44 / RF07): ate `AI_MATCH_LIMITE_SUPERVISAO`
+    Supervisores da rede compativeis, com mestres e doutores
+    (`AI_MATCH_NIVEL_TITULACAO_SUPERVISAO`) na frente e a nota como desempate.
+    As outras vagas seguem pela nota, como antes.
+    """
+    minimo = float(settings.AI_MATCH_MIN_SCORE)
+    limite = int(settings.AI_MATCH_LIMITE_SUGESTOES)
+    vagas = min(int(settings.AI_MATCH_LIMITE_SUPERVISAO), limite)
+    nivel = int(settings.AI_MATCH_NIVEL_TITULACAO_SUPERVISAO)
+
+    compativeis = [avaliacao for avaliacao in avaliacoes if avaliacao.score >= minimo]
+    supervisao = sorted(
+        (
+            avaliacao
+            for avaliacao in compativeis
+            if avaliacao.candidato.papel_sugerido == PapelNaRede.SUPERVISOR
+        ),
+        key=lambda avaliacao: (
+            avaliacao.candidato.nivel_titulacao < nivel,
+            -avaliacao.score,
+            -avaliacao.candidato.nivel_titulacao,
+            avaliacao.candidato.nome,
+        ),
+    )[:vagas]
+    escolhidos = {id(avaliacao) for avaliacao in supervisao}
+    demais = [
+        avaliacao for avaliacao in compativeis if id(avaliacao) not in escolhidos
+    ][: limite - len(supervisao)]
+
+    for avaliacao in supervisao:
+        avaliacao.motivos.append('Sugerido para a supervisão.')
+
+        if avaliacao.candidato.nivel_titulacao >= nivel:
+            avaliacao.motivos.append(
+                'Titulação de mestre ou doutor, priorizada na supervisão.'
+            )
+
+    for avaliacao in supervisao + demais:
+        avaliacao.features['supervisao'] = id(avaliacao) in escolhidos
+
+    return supervisao + demais
 
 
 def equipe_atual_de(oportunidade: Oportunidade) -> EquipePotencial:
@@ -145,11 +192,7 @@ class ExecutarMatchingService:
         avaliacoes = motor.avaliar(necessarias, candidatos)
         sem_semantica = not motor.semantico_disponivel
 
-        selecionadas = [
-            avaliacao
-            for avaliacao in avaliacoes
-            if avaliacao.score >= float(settings.AI_MATCH_MIN_SCORE)
-        ][: int(settings.AI_MATCH_LIMITE_SUGESTOES)]
+        selecionadas = sugestoes_da_rodada(avaliacoes)
 
         rerank = self._reordenar(
             oportunidade=oportunidade,

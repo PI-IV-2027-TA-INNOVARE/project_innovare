@@ -26,10 +26,15 @@ describe('política de conteúdo do build', () => {
     expect(diretiva(politicaDeConteudo('/api'), 'connect-src')).toBe("connect-src 'self'")
   })
 
-  it('aceita as fontes do Google que a página carrega', () => {
+  /**
+   * L8 (LGPD): a fonte vem do próprio site. Liberar o Google aqui deixaria
+   * uma página carregar estilo e fonte de fora, e o servidor de fora recebe o
+   * IP de quem abre a tela.
+   */
+  it('estilo e fonte vêm só do próprio site', () => {
     const politica = politicaDeConteudo('/api')
 
-    expect(diretiva(politica, 'style-src')).toContain('https://fonts.googleapis.com')
-    expect(diretiva(politica, 'font-src')).toContain('https://fonts.gstatic.com')
+    expect(diretiva(politica, 'style-src')).toBe("style-src 'self' 'unsafe-inline'")
+    expect(diretiva(politica, 'font-src')).toBe("font-src 'self' data:")
   })
 })

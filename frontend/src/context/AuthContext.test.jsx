@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getApiAuthSession, renovarSessao, setApiAuthSession } from '../lib/api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { apiRequest, getApiAuthSession, renovarSessao, setApiAuthSession } from '../lib/api'
+import { tokenDeAcesso } from '../test/tokenDeAcesso'
 import {
   encerrarSessao,
   getAuthenticatedProfile,
@@ -152,5 +153,107 @@ describe('AuthContext — PB02: sair encerra a sessão no servidor', () => {
 
     expect(await screen.findByText('sessão encerrada')).toBeInTheDocument()
     expect(window.localStorage.getItem(MARCA)).toBeNull()
+  })
+})
+
+describe('AuthContext — outra conta entrou neste navegador', () => {
+  const OUTRA_CONTA = {
+    id_usuario: 9,
+    email: 'pesquisadora@ac2microbiologia.com.br',
+    nome: 'Pesquisadora',
+    papel: 'pesquisador',
+    papel_rotulo: 'Pesquisador',
+    permissoes: [],
+  }
+
+  function ContaDaAba() {
+    const {
+      contaTrocada,
+      dispensarAvisoDeConta,
+      isBootstrapping,
+      logout,
+      signInWithCredentials,
+      user,
+    } = useAuth()
+
+    if (isBootstrapping) return <p>carregando</p>
+
+    return (
+      <>
+        <p>conta: {user?.displayName ?? 'nenhuma'}</p>
+        {contaTrocada && <p>aviso: {contaTrocada.nome}</p>}
+        <button
+          type="button"
+          onClick={() => signInWithCredentials({ email: PERFIL.email, password: 'x' })}
+        >
+          Entrar
+        </button>
+        <button type="button" onClick={dispensarAvisoDeConta}>
+          Dispensar
+        </button>
+        <button type="button" onClick={logout}>
+          Sair
+        </button>
+      </>
+    )
+  }
+
+  function resposta(status, corpo) {
+    return new Response(JSON.stringify(corpo), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  async function entrarEDeixarOutraContaEntrar() {
+    requestAuthToken.mockResolvedValue({ access: tokenDeAcesso(7) })
+    getAuthenticatedProfile.mockResolvedValueOnce(PERFIL).mockResolvedValueOnce(OUTRA_CONTA)
+
+    render(
+      <AuthProvider>
+        <ContaDaAba />
+      </AuthProvider>
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Entrar' }))
+    await screen.findByText('conta: Supervisora')
+
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(resposta(401, { detail: 'token_not_valid' }))
+      .mockResolvedValueOnce(resposta(200, { access: tokenDeAcesso(9) })))
+
+    return apiRequest('/notificacoes/').catch((problema) => problema)
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('a aba passa para a conta que entrou e guarda o aviso', async () => {
+    const erro = await entrarEDeixarOutraContaEntrar()
+
+    expect(erro.data).toEqual({ codigo: 'conta_trocada' })
+    expect(await screen.findByText('conta: Pesquisadora')).toBeInTheDocument()
+    expect(screen.getByText('aviso: Pesquisadora')).toBeInTheDocument()
+    expect(getApiAuthSession()).toEqual({ accessToken: tokenDeAcesso(9) })
+  })
+
+  it('o aviso sai quando a pessoa o dispensa', async () => {
+    await entrarEDeixarOutraContaEntrar()
+    await screen.findByText('aviso: Pesquisadora')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dispensar' }))
+
+    expect(screen.queryByText(/^aviso:/)).not.toBeInTheDocument()
+    expect(screen.getByText('conta: Pesquisadora')).toBeInTheDocument()
+  })
+
+  it('sair apaga o aviso junto com a sessão', async () => {
+    await entrarEDeixarOutraContaEntrar()
+    await screen.findByText('aviso: Pesquisadora')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sair' }))
+
+    expect(await screen.findByText('conta: nenhuma')).toBeInTheDocument()
+    expect(screen.queryByText(/^aviso:/)).not.toBeInTheDocument()
   })
 })

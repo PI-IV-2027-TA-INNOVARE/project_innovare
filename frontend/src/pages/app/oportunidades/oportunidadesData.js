@@ -280,10 +280,6 @@ export function emAndamento(oportunidade) {
   return !SITUACOES.find((situacao) => situacao.id === oportunidade.situacao)?.desfecho
 }
 
-export function disponibilizadasPara(nome, oportunidades = OPORTUNIDADES_EXEMPLO) {
-  return oportunidades.filter((oportunidade) => oportunidade.equipePara.includes(nome))
-}
-
 export function resumoPorSituacao(oportunidades) {
   return {
     total: oportunidades.length,

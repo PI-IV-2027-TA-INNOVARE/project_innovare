@@ -5,6 +5,9 @@ const MENSAGEM_ERRO_DO_SERVIDOR =
   'O servidor encontrou um erro inesperado. Tente novamente em instantes; se continuar, avise o suporte.'
 const MENSAGEM_SEM_CONEXAO =
   'Não foi possível falar com o servidor. Verifique sua conexão e tente novamente.'
+const MENSAGEM_CONTA_TROCADA =
+  'Outra conta entrou neste navegador. Esta ação não foi feita, para não sair em nome dela.'
+const CONTA_TROCADA = 'conta_trocada'
 
 let authSession = null
 let refreshPromise = null
@@ -161,12 +164,51 @@ async function requestTokenRefresh() {
   return nextSession
 }
 
+/**
+ * A conta dona do token, lida do próprio token.
+ *
+ * O cookie de renovação é um só por navegador: se outra conta entra em outra
+ * aba, a próxima renovação desta aba devolve o token dela. Ler a conta basta
+ * para perceber a troca; quem confere a assinatura é o servidor.
+ */
+function contaDoToken(accessToken) {
+  const corpo = accessToken?.split('.')[1]
+
+  if (!corpo) return null
+
+  try {
+    const base64 = corpo.replace(/-/g, '+').replace(/_/g, '/')
+    const dados = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')))
+
+    return dados?.user_id == null ? null : String(dados.user_id)
+  } catch {
+    return null
+  }
+}
+
+function outraConta(contaAnterior, sessao) {
+  const contaNova = contaDoToken(sessao?.accessToken)
+
+  return Boolean(contaAnterior && contaNova && contaAnterior !== contaNova)
+}
+
+function erroDeContaTrocada() {
+  return new ApiError(MENSAGEM_CONTA_TROCADA, {
+    status: 409,
+    data: { codigo: CONTA_TROCADA },
+  })
+}
+
 async function refreshAccessToken() {
   if (!refreshPromise) {
+    const contaAnterior = contaDoToken(authSession?.accessToken)
+
     refreshPromise = requestTokenRefresh()
       .then((nextSession) => {
         authSession = nextSession
-        sessionRefreshHandler?.(nextSession)
+        sessionRefreshHandler?.(nextSession, {
+          contaTrocada: outraConta(contaAnterior, nextSession),
+        })
         return nextSession
       })
       .catch((error) => {
@@ -246,7 +288,12 @@ export async function baixarArquivo(path, { nomePadrao = 'documento', retryUnaut
   const response = await enviar(buildUrl(path), { cache: 'no-store', headers })
 
   if (response.status === 401 && retryUnauthorized && authSession?.accessToken) {
+    const contaDaAba = contaDoToken(authSession.accessToken)
+
     await refreshAccessToken()
+
+    if (outraConta(contaDaAba, authSession)) throw erroDeContaTrocada()
+
     return baixarArquivo(path, { nomePadrao, retryUnauthorized: false })
   }
 
@@ -295,18 +342,23 @@ export async function apiRequest(path, options = {}) {
     retryUnauthorized &&
     authSession?.accessToken
   ) {
+    const contaDaAba = contaDoToken(authSession.accessToken)
+
     try {
       await refreshAccessToken()
-      return apiRequest(path, {
-        ...options,
-        retryUnauthorized: false,
-      })
     } catch {
       throw new ApiError('Sua sessão expirou. Entre novamente.', {
         status: 401,
         data: respostaEmJson(response) ? data : null,
       })
     }
+
+    if (outraConta(contaDaAba, authSession)) throw erroDeContaTrocada()
+
+    return apiRequest(path, {
+      ...options,
+      retryUnauthorized: false,
+    })
   }
 
   if (!response.ok) {

@@ -6,13 +6,13 @@ import PainelPorPapel from './PainelPorPapel'
 
 const api = vi.hoisted(() => ({
   listOportunidades: null,
-  listarRede: null,
+  obterResumoDaRede: null,
   obterMeuPerfil: null,
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
   listOportunidades: (...args) => api.listOportunidades(...args),
-  listarRede: (...args) => api.listarRede(...args),
+  obterResumoDaRede: (...args) => api.obterResumoDaRede(...args),
   obterMeuPerfil: (...args) => api.obterMeuPerfil(...args),
 }))
 
@@ -87,7 +87,7 @@ beforeEach(() => {
   api.listOportunidades = vi.fn().mockResolvedValue({
     results: [AGUARDANDO, ESTRUTURACAO, CONTINUAR],
   })
-  api.listarRede = vi.fn().mockResolvedValue({ results: [MEMBRO, SEM_COMPETENCIA] })
+  api.obterResumoDaRede = vi.fn().mockResolvedValue({ total: 2, ativos: 1, titulados: 1, sem_competencia: 1 })
   api.obterMeuPerfil = vi.fn().mockResolvedValue(MEMBRO)
 })
 
@@ -137,7 +137,7 @@ describe('PainelPorPapel — Supervisor', () => {
     const alerta = (await screen.findByText('Perfis invisíveis ao matching')).closest('.stat-card')
 
     expect(within(alerta).getByText('1')).toBeInTheDocument()
-    expect(api.listarRede).toHaveBeenCalledTimes(1)
+    expect(api.obterResumoDaRede).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -258,7 +258,7 @@ describe('PainelPorPapel — custo de abertura', () => {
 
     renderPainel('supervisor', 'Rafael Antunes')
 
-    await waitFor(() => expect(api.listarRede).toHaveBeenCalled())
+    await waitFor(() => expect(api.obterResumoDaRede).toHaveBeenCalled())
 
     fila.resolver({ results: [AGUARDANDO] })
     await screen.findByText('Oportunidades')

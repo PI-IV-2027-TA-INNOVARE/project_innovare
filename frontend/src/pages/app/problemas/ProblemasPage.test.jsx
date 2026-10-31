@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProblemaFormPage from './ProblemaFormPage'
 import ProblemaPage from './ProblemaPage'
 import ProblemasPage from './ProblemasPage'
-import { historicoVisivel, problemasDe } from './problemasData'
-import { OPORTUNIDADES_EXEMPLO } from '../oportunidades/oportunidadesData'
 
 const auth = { user: null, isAuthenticated: true }
 
@@ -174,7 +172,7 @@ describe('ProblemaFormPage', () => {
     const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque de fermentação')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque de fermentação')
     await user.type(
       screen.getByLabelText(/resumo do problema/i),
       'Espuma excessiva desde a troca de insumo.'
@@ -201,12 +199,12 @@ describe('ProblemaFormPage', () => {
 
     renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
     await user.type(screen.getByLabelText(/resumo do problema/i), 'Espuma desde a troca.')
     await user.click(screen.getByRole('button', { name: /cadastrar problema/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/já existe um registro igual/i)
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('Espuma no tanque')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('Espuma no tanque')
   })
 
   it('diz que o anexo sobe junto com o cadastro, e o teto por arquivo', () => {
@@ -233,7 +231,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
     await user.click(screen.getByRole('link', { name: /cancelar/i }))
 
     expect(await screen.findByRole('heading', { name: /sair sem cadastrar/i })).toBeInTheDocument()
@@ -244,25 +242,25 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     const user = userEvent.setup({ delay: null })
     renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
     await user.click(screen.getByRole('link', { name: /cancelar/i }))
     await user.click(await screen.findByRole('button', { name: /continuar editando/i }))
 
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('Espuma no tanque')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('Espuma no tanque')
   })
 
   it('guarda o rascunho ao sair e o devolve na volta', async () => {
     const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
     await user.click(screen.getByRole('link', { name: /cancelar/i }))
     await user.click(await screen.findByRole('button', { name: /sair e guardar/i }))
 
     primeira.unmount()
     renderApp('/problemas/novo')
 
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('Espuma no tanque')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('Espuma no tanque')
     expect(screen.getByText(/rascunho recuperado/i)).toBeInTheDocument()
   })
 
@@ -270,14 +268,14 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
     await user.click(screen.getByRole('link', { name: /cancelar/i }))
     await user.click(await screen.findByRole('button', { name: /^descartar$/i }))
 
     primeira.unmount()
     renderApp('/problemas/novo')
 
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('')
     expect(screen.queryByText(/rascunho recuperado/i)).not.toBeInTheDocument()
   })
 
@@ -285,7 +283,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
     await user.type(screen.getByLabelText(/resumo do problema/i), 'Espuma desde a troca de insumo.')
     await user.click(screen.getByRole('button', { name: /cadastrar problema/i }))
     await screen.findByText(/cadastrado/i)
@@ -293,14 +291,14 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     primeira.unmount()
     renderApp('/problemas/novo')
 
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('')
   })
 
   it('não entrega o rascunho de uma organização a outra no mesmo navegador', async () => {
     const user = userEvent.setup({ delay: null })
     const primeira = renderApp('/problemas/novo')
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Espuma no tanque')
+    await user.type(screen.getByLabelText(/^título/i), 'Espuma no tanque')
 
     primeira.unmount()
     auth.user = {
@@ -310,7 +308,7 @@ describe('ProblemaFormPage — rascunho e guarda de saída', () => {
     }
     renderApp('/problemas/novo')
 
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('')
     expect(screen.queryByText(/rascunho recuperado/i)).not.toBeInTheDocument()
   })
 })
@@ -396,27 +394,5 @@ describe('ProblemaPage', () => {
 
     expect(within(encaminhamento).getByText('Continuar')).toBeInTheDocument()
     expect(screen.queryByText(/maturidade suficiente/i)).not.toBeInTheDocument()
-  })
-})
-
-describe('problemasData', () => {
-  it('esconde as categorias internas do histórico e conta quantas ficaram de fora', () => {
-    const problema = OPORTUNIDADES_EXEMPLO.find((item) => item.id === 'OP-2026-014')
-    const { eventos, internos } = historicoVisivel(problema.historico)
-
-    expect(eventos.every((evento) => ['oportunidade', 'decisao'].includes(evento.categoria))).toBe(true)
-    expect(internos).toBe(problema.historico.length - eventos.length)
-    expect(internos).toBeGreaterThan(0)
-  })
-
-  it('só devolve problema externo, nunca ideia interna', () => {
-    for (const nome of ['Agroindústria Vale Verde', 'Núcleo de P&D — AC2']) {
-      expect(problemasDe(nome).every((item) => item.origem === 'externo')).toBe(true)
-    }
-  })
-
-  it('devolve lista vazia sem organização identificada', () => {
-    expect(problemasDe('')).toEqual([])
-    expect(problemasDe(undefined)).toEqual([])
   })
 })

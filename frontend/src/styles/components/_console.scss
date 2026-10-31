@@ -16,7 +16,6 @@
   --admin-glow: 0 10px 28px color-mix(in srgb, var(--accent-secondary) 16%, transparent);
   --admin-glow-soft: 0 2px 10px color-mix(in srgb, var(--accent-secondary) 8%, transparent);
 
-
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--accent-primary);
     outline-offset: 2px;
@@ -221,7 +220,7 @@
   min-height: 44px;
   padding: 0 14px;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   color: var(--text-primary);
   background: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -652,6 +651,27 @@
   gap: 8px;
   margin-bottom: var(--admin-gap);
   flex-wrap: wrap;
+}
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: var(--admin-gap);
+}
+
+.paginacao__total,
+.paginacao__posicao {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.paginacao__controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .admin-table-wrap {
@@ -1258,7 +1278,7 @@
 }
 
 .admin-field__label {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -1269,7 +1289,7 @@
 }
 
 .admin-field__hint {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.45;
   color: var(--text-muted);
 }
@@ -1331,10 +1351,9 @@
 .perfil-card__description {
   margin-top: 6px;
   max-width: 54ch;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.55;
   color: var(--text-muted);
-  opacity: 0.85;
 }
 
 .criterios__resumo {
@@ -1642,7 +1661,7 @@
 }
 
 .console-form {
-  @include cartoes-em-grade(2);
+  @include cartoes-em-grade(2, $altura-igual: false);
 
   margin-top: var(--admin-pad);
 }
@@ -1678,31 +1697,6 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.etapa-planejada {
-  border-style: dashed;
-}
-
-.etapa-planejada__selo {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.etapa-planejada__nota {
-  max-width: 72ch;
-  font-size: 0.875rem;
-  line-height: 1.65;
   color: var(--text-muted);
 }
 

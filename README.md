@@ -131,6 +131,20 @@ Os prazos ficam em `RETENCAO_EVENTOS_CONTA_MESES` e `RETENCAO_ANEXOS_MESES`
 
 ---
 
+## Pertinência do matching
+
+A meta do TAP é que 80% das sugestões da equipe potencial sejam pertinentes. A
+medida sai de uma amostra rotulada pela AC2, só em banco local e sem gravar
+nada. O formato da amostra está em `IA/PARAMETROS_VIGENTES.md`.
+
+```bash
+cd backend
+python manage.py medir_pertinencia amostra.json                  # com a afinidade com o tema
+python manage.py medir_pertinencia amostra.json --sem-afinidade  # como antes da SPEC-13
+```
+
+---
+
 ## Estrutura
 
 ```

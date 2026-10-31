@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import {
+  Paginacao,
   RowActionsMenu,
   SkeletonRows,
   SortableHeader,
@@ -14,12 +15,12 @@ import {
   inativarMembro,
   liberarAcessoMembro,
   listarRede,
+  obterResumoDaRede,
   reativarMembro,
 } from '../../../services/pdConnectApi'
 import {
   PAPEIS_REDE,
   SITUACOES,
-  TITULACOES,
   disponibilidadeLabel,
   membroDaApi,
   papelLabel,
@@ -38,49 +39,68 @@ const COLUNAS = [
   { id: 'acoes', label: 'Ações', ordenavel: false },
 ]
 
-function comparar(a, b, campo) {
-  if (campo === 'disponibilidade') {
-    return disponibilidadeLabel(a.disponibilidade)
-      .localeCompare(disponibilidadeLabel(b.disponibilidade), 'pt-BR')
-  }
+const POR_PAGINA = 20
+const ESPERA_DA_BUSCA_MS = 300
 
-  if (campo === 'titulacao') {
-    const nivel = (id) => TITULACOES.find((item) => item.id === id)?.nivel || 0
-    return nivel(a.titulacao) - nivel(b.titulacao)
-  }
-
-  if (campo === 'papel') return papelLabel(a.papel).localeCompare(papelLabel(b.papel), 'pt-BR')
-  if (campo === 'situacao') return situacaoLabel(a.situacao).localeCompare(situacaoLabel(b.situacao), 'pt-BR')
-
-  return String(a[campo]).localeCompare(String(b[campo]), 'pt-BR', { sensitivity: 'base' })
-}
+const RESUMO_VAZIO = { total: 0, ativos: 0, titulados: 0, sem_competencia: 0 }
 
 export default function RedePage() {
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
   const [pessoas, setPessoas] = useState([])
+  const [total, setTotal] = useState(0)
+  const [resumo, setResumo] = useState(RESUMO_VAZIO)
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState('')
   const [busca, setBusca] = useState('')
+  const [buscaAplicada, setBuscaAplicada] = useState('')
   const [papelFiltro, setPapelFiltro] = useState('todos')
   const [situacaoFiltro, setSituacaoFiltro] = useState('todos')
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
+  const [pagina, setPagina] = useState(1)
   const [detalhe, setDetalhe] = useState(null)
   const [liberando, setLiberando] = useState(() => new Set())
+
+  useEffect(() => {
+    const relogio = setTimeout(() => {
+      setBuscaAplicada(busca.trim())
+      setPagina(1)
+    }, ESPERA_DA_BUSCA_MS)
+
+    return () => clearTimeout(relogio)
+  }, [busca])
 
   const carregar = useCallback(async () => {
     setCarregando(true)
     setErroCarga('')
 
     try {
-      const resposta = await listarRede()
-      setPessoas((resposta.results || resposta).map(membroDaApi))
+      const resposta = await listarRede({
+        page: pagina,
+        page_size: POR_PAGINA,
+        busca: buscaAplicada,
+        papel_rede: papelFiltro === 'todos' ? '' : papelFiltro,
+        situacao: situacaoFiltro === 'todos' ? '' : situacaoFiltro,
+        ordenar: (ordem.direcao === 'desc' ? '-' : '') + ordem.campo,
+      })
+      const resultados = resposta.results || resposta
+      setPessoas(resultados.map(membroDaApi))
+      setTotal(resposta.count ?? resultados.length)
     } catch (falha) {
       setPessoas([])
+      setTotal(0)
       setErroCarga(falha?.message || 'Não foi possível carregar a rede interna.')
     } finally {
       setCarregando(false)
+    }
+  }, [buscaAplicada, ordem, pagina, papelFiltro, situacaoFiltro])
+
+  const carregarResumo = useCallback(async () => {
+    try {
+      setResumo(await obterResumoDaRede())
+    } catch {
+      setResumo(RESUMO_VAZIO)
     }
   }, [])
 
@@ -88,35 +108,16 @@ export default function RedePage() {
     carregar()
   }, [carregar])
 
-  useAtualizarAoFocar(carregar)
+  useEffect(() => {
+    carregarResumo()
+  }, [carregarResumo])
 
-  const estatisticas = useMemo(() => ({
-    total: pessoas.length,
-    ativos: pessoas.filter((pessoa) => pessoa.situacao === 'ativo').length,
-    titulados: pessoas.filter((pessoa) => ['mestrado', 'doutorado', 'pos_doutorado'].includes(pessoa.titulacao)).length,
-    semCompetencia: pessoas.filter((pessoa) => pessoa.competencias.length === 0).length,
-  }), [pessoas])
+  const atualizar = useCallback(() => {
+    carregar()
+    carregarResumo()
+  }, [carregar, carregarResumo])
 
-  const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
-
-    return pessoas.filter((pessoa) => {
-      const papelOk = papelFiltro === 'todos' || pessoa.papel === papelFiltro
-      const situacaoOk = situacaoFiltro === 'todos' || pessoa.situacao === situacaoFiltro
-      const buscaOk =
-        !termo ||
-        pessoa.nome.toLowerCase().includes(termo) ||
-        pessoa.email.toLowerCase().includes(termo) ||
-        pessoa.competencias.some((competencia) => competencia.toLowerCase().includes(termo))
-
-      return papelOk && situacaoOk && buscaOk
-    })
-  }, [busca, papelFiltro, pessoas, situacaoFiltro])
-
-  const ordenadas = useMemo(() => {
-    const fator = ordem.direcao === 'asc' ? 1 : -1
-    return [...filtradas].sort((a, b) => comparar(a, b, ordem.campo) * fator)
-  }, [filtradas, ordem])
+  useAtualizarAoFocar(atualizar)
 
   const temFiltro = Boolean(busca) || papelFiltro !== 'todos' || situacaoFiltro !== 'todos'
 
@@ -125,12 +126,25 @@ export default function RedePage() {
       campo,
       direcao: atual.campo === campo && atual.direcao === 'asc' ? 'desc' : 'asc',
     }))
+    setPagina(1)
+  }
+
+  const filtrarPapel = (valor) => {
+    setPapelFiltro(valor)
+    setPagina(1)
+  }
+
+  const filtrarSituacao = (valor) => {
+    setSituacaoFiltro(valor)
+    setPagina(1)
   }
 
   const limparFiltros = () => {
     setBusca('')
+    setBuscaAplicada('')
     setPapelFiltro('todos')
     setSituacaoFiltro('todos')
+    setPagina(1)
   }
 
   const marcarLiberando = (id, emAndamento) => {
@@ -154,6 +168,7 @@ export default function RedePage() {
       setPessoas((atual) =>
         atual.map((item) => (item.id === pessoa.id ? atualizado : item))
       )
+      carregarResumo()
       showToast(`Acesso liberado para ${pessoa.nome}. O convite saiu por e-mail.`)
     } catch (falha) {
       showToast(falha?.message || `Não foi possível liberar o acesso de ${pessoa.nome}.`)
@@ -179,6 +194,7 @@ export default function RedePage() {
       setPessoas((atual) =>
         atual.map((item) => (item.id === pessoa.id ? atualizado : item))
       )
+      carregarResumo()
       showToast(
         inativar
           ? `${pessoa.nome} saiu da rede e não entra mais na plataforma.`
@@ -213,7 +229,7 @@ export default function RedePage() {
         <div className="admin-callout" role="alert">
           <Icone icon={appIcons.warning} className="admin-callout__icon" />
           <p className="admin-callout__text">{erroCarga}</p>
-          <button type="button" className="link-button" onClick={carregar}>
+          <button type="button" className="link-button" onClick={atualizar}>
             Tentar de novo
           </button>
         </div>
@@ -224,7 +240,7 @@ export default function RedePage() {
           <Icone icon={appIcons.users} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Na rede</p>
-            <p className="stat-card__value">{estatisticas.total}</p>
+            <p className="stat-card__value">{resumo.total}</p>
           </div>
         </article>
 
@@ -232,7 +248,7 @@ export default function RedePage() {
           <Icone icon={appIcons.active} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Com acesso ativo</p>
-            <p className="stat-card__value">{estatisticas.ativos}</p>
+            <p className="stat-card__value">{resumo.ativos}</p>
           </div>
         </article>
 
@@ -240,7 +256,7 @@ export default function RedePage() {
           <Icone icon={appIcons.researcher} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Mestres e doutores</p>
-            <p className="stat-card__value">{estatisticas.titulados}</p>
+            <p className="stat-card__value">{resumo.titulados}</p>
           </div>
         </article>
 
@@ -248,7 +264,7 @@ export default function RedePage() {
           <Icone icon={appIcons.warning} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Sem competência declarada</p>
-            <p className="stat-card__value">{estatisticas.semCompetencia}</p>
+            <p className="stat-card__value">{resumo.sem_competencia}</p>
           </div>
         </article>
       </div>
@@ -283,7 +299,7 @@ export default function RedePage() {
             id="filtro-papel"
             className="admin-input admin-input--select"
             value={papelFiltro}
-            onChange={(event) => setPapelFiltro(event.target.value)}
+            onChange={(event) => filtrarPapel(event.target.value)}
           >
             <option value="todos">Todos os papéis</option>
             {PAPEIS_REDE.map((papel) => (
@@ -296,7 +312,7 @@ export default function RedePage() {
             id="filtro-situacao"
             className="admin-input admin-input--select"
             value={situacaoFiltro}
-            onChange={(event) => setSituacaoFiltro(event.target.value)}
+            onChange={(event) => filtrarSituacao(event.target.value)}
           >
             <option value="todos">Todas as situações</option>
             {SITUACOES.map((situacao) => (
@@ -308,7 +324,7 @@ export default function RedePage() {
 
       {temFiltro ? (
         <div className="active-filters" aria-label="Filtros aplicados">
-          <span className="rede-page__count">{ordenadas.length} de {pessoas.length}</span>
+          <span className="rede-page__count">{total} de {resumo.total}</span>
           <button type="button" className="link-button" onClick={limparFiltros}>
             Limpar filtros
           </button>
@@ -346,7 +362,7 @@ export default function RedePage() {
           <tbody>
             {carregando ? <SkeletonRows colunas={COLUNAS.length} /> : null}
 
-            {!carregando && ordenadas.map((pessoa) => (
+            {!carregando && pessoas.map((pessoa) => (
               <tr key={pessoa.id}>
                 <td data-label="Pessoa">
                   <BotaoPessoa
@@ -438,7 +454,7 @@ export default function RedePage() {
               </tr>
             ))}
 
-            {!carregando && ordenadas.length === 0 ? (
+            {!carregando && pessoas.length === 0 ? (
               <tr>
                 <td colSpan={COLUNAS.length}>
                   <TableEmpty
@@ -468,6 +484,14 @@ export default function RedePage() {
           </tbody>
         </table>
       </div>
+
+      <Paginacao
+        pagina={pagina}
+        total={total}
+        porPagina={POR_PAGINA}
+        rotulo={total === 1 ? 'pessoa' : 'pessoas'}
+        onMudar={setPagina}
+      />
 
       {detalhe ? (
         <FichaDePessoa

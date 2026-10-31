@@ -12,6 +12,7 @@ from unittest import mock
 from django.core import mail
 from django.test import TestCase, override_settings
 
+from apps.accounts.services.titular import SolicitarExclusaoService
 from apps.decisions.models import Decisao, TipoDecisao
 from apps.notifications.models import Notificacao
 from apps.opportunities.models import Oportunidade, PrioridadeOportunidade, SituacaoOportunidade
@@ -87,6 +88,33 @@ class EmailDasDecisoesTests(TestCase):
         destinatarios = [email.to for email in mail.outbox]
         self.assertCountEqual(
             destinatarios, [[self.contato.email], [self.segundo_contato.email]]
+        )
+
+    def test_quem_pediu_exclusao_nao_recebe_o_email(self):
+        """
+        O titular pediu para sair (LGPD, art. 18): ate o Administrador atender,
+        o e-mail de decisao para de usar o endereco dele. O aviso na plataforma
+        continua, e os outros contatos da empresa recebem normalmente.
+        """
+        SolicitarExclusaoService().execute(usuario=self.contato)
+
+        self.decidir(TipoDecisao.REVISAR)
+
+        self.assertEqual([email.to for email in mail.outbox], [[self.segundo_contato.email]])
+        self.assertTrue(
+            Notificacao.objects.filter(
+                usuario=self.contato, tipo='oportunidade.complementacao_solicitada'
+            ).exists()
+        )
+
+    def test_pedido_de_exclusao_de_outra_pessoa_nao_corta_o_email(self):
+        SolicitarExclusaoService().execute(usuario=self.outra_empresa)
+
+        self.decidir(TipoDecisao.CONTINUAR)
+
+        self.assertCountEqual(
+            [email.to for email in mail.outbox],
+            [[self.contato.email], [self.segundo_contato.email]],
         )
 
     def test_revisar_leva_o_pedido_de_complementacao(self):

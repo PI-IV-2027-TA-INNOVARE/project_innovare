@@ -8,7 +8,6 @@ import {
   NUCLEO_INTERNO,
   OPORTUNIDADES_EXEMPLO,
   daApi,
-  disponibilizadasPara,
   emAndamento,
 } from './oportunidadesData'
 
@@ -227,7 +226,7 @@ describe('OportunidadesPage', () => {
 
   it('o recorte do Pesquisador vem do servidor, não de filtro na tela', async () => {
     entrarComo('pesquisador', 'Maria Ferreira')
-    servidorResponde(disponibilizadasPara('Maria Ferreira'))
+    servidorResponde(OPORTUNIDADES_EXEMPLO.filter((item) => item.equipePara.includes('Maria Ferreira')))
 
     renderApp()
     await esperarLista()
@@ -597,13 +596,6 @@ describe('oportunidadesData', () => {
     expect(emAndamento({ situacao: 'matching' })).toBe(true)
     expect(emAndamento({ situacao: 'continuar' })).toBe(false)
     expect(emAndamento({ situacao: 'arquivada' })).toBe(false)
-  })
-
-  it('devolve ao pesquisador apenas as equipes potenciais em que ele está', () => {
-    expect(disponibilizadasPara('Maria Ferreira').map((item) => item.id))
-      .toEqual(['OP-2026-014', 'OP-2026-013', 'OP-2026-009'])
-
-    expect(disponibilizadasPara('Ninguém')).toHaveLength(0)
   })
 
   it('traduz o registro da API para o formato da tela', () => {

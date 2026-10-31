@@ -106,6 +106,37 @@ class PromptsTests(TestCase):
         self.assertEqual(resultado['execucao_ia'].status, 'erro')
 
 
+class EstruturacaoTests(TestCase):
+    """
+    PB35 e PB36: o resultado esperado aponta o objetivo que atende, e a
+    inovacao traz a justificativa e o que o Supervisor ainda precisa validar.
+    """
+
+    def prompt(self):
+        return prompts.prompt_estruturacao(
+            entrada='Contaminacao na linha de envase.',
+            sintese='',
+            preenchidos={},
+            vazios=['resultados_esperados', 'caracterizacao_inovacao'],
+            respostas=[],
+        )
+
+    def test_resultado_esperado_aponta_o_objetivo_que_atende(self):
+        self.assertIn(
+            'Em "resultados_esperados", cada resultado começa pelo objetivo que atende',
+            self.prompt(),
+        )
+
+    def test_inovacao_traz_justificativa_e_pontos_de_validacao_humana(self):
+        prompt = self.prompt()
+
+        self.assertIn('Em "caracterizacao_inovacao", diga o que é novo e por quê', prompt)
+        self.assertIn('Pontos para validação humana:', prompt)
+
+    def test_a_versao_do_prompt_mudou(self):
+        self.assertEqual(prompts.VERSAO_COPILOTO, 'copiloto_v3')
+
+
 class VinculoTests(TestCase):
     def test_recomendacao_precisa_apontar_para_lacuna_declarada(self):
         self.assertTrue(recomendacoes_vinculadas(VALIDA))

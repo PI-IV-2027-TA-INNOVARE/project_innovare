@@ -83,7 +83,7 @@ class RegistroTests(TestCase):
 
         provedor = provedor_principal()
 
-        self.assertIsInstance(provedor, ProvedorFalso)
+        self.assertIsInstance(provedor.decorado, ProvedorFalso)
 
     @override_settings(
         AI_PROVEDOR_PRINCIPAL='fake_principal',
@@ -139,7 +139,7 @@ class RegistroTests(TestCase):
 
         provedor = provedor_com_reserva()
 
-        self.assertIsInstance(provedor, ProvedorFalso)
+        self.assertIsInstance(provedor.decorado, ProvedorFalso)
 
     @override_settings(
         AI_PROVEDOR_PRINCIPAL='fake_principal',

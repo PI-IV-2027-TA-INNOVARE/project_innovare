@@ -254,17 +254,6 @@ export function withAlpha(color, alpha) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
 }
 
-export function shade(color, factor) {
-  const rgb = parseHex(color)
-
-  if (!rgb) return color
-
-  const clamp = (channel) => Math.max(0, Math.min(255, Math.round(channel * factor)))
-  const toHex = (channel) => clamp(channel).toString(16).padStart(2, '0')
-
-  return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
-}
-
 export function isValidHex(color) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(color || '').trim())
 }

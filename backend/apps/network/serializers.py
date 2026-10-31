@@ -7,6 +7,8 @@ linha de pesquisa, disponibilidade.
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.network.services.consulta import ORDENS_DA_REDE
+
 from apps.network.models import (
     Competencia,
     Formacao,
@@ -189,6 +191,17 @@ class PerfilProprioSerializer(MembroRedeSerializer):
 
 class MudancaDeSituacaoSerializer(serializers.Serializer):
     """Sem corpo: inativar e reativar sao a propria rota."""
+
+
+class FiltroDaRedeSerializer(serializers.Serializer):
+    ordenar = serializers.ChoiceField(choices=ORDENS_DA_REDE, required=False)
+
+
+class ResumoDaRedeSerializer(serializers.Serializer):
+    total = serializers.IntegerField()
+    ativos = serializers.IntegerField()
+    titulados = serializers.IntegerField()
+    sem_competencia = serializers.IntegerField()
 
 
 class LiberarAcessoSerializer(serializers.Serializer):

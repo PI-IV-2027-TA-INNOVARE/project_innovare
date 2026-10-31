@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiRequest, baixarArquivo, getApiAuthSession, renovarSessao, setApiAuthSession } from './api'
+import { tokenDeAcesso } from '../test/tokenDeAcesso'
+import {
+  apiRequest,
+  baixarArquivo,
+  configureApiAuth,
+  getApiAuthSession,
+  renovarSessao,
+  setApiAuthSession,
+} from './api'
 
 function responderCom(status, corpo) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
@@ -199,5 +207,90 @@ describe('renovação da sessão pelo cookie', () => {
     await expect(apiRequest('/oportunidades/')).resolves.toEqual({ ok: true })
 
     expect(fetch.mock.calls[2][1].headers.get('Authorization')).toBe('Bearer acesso-novo')
+  })
+})
+
+describe('outra conta entrou neste navegador', () => {
+  function respostaJson(status, corpo) {
+    return new Response(JSON.stringify(corpo), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  function renovacaoQueDevolve(token, depois = []) {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(respostaJson(401, { detail: 'token_not_valid' }))
+      .mockResolvedValueOnce(respostaJson(200, { access: token }))
+
+    for (const resposta of depois) fetch.mockResolvedValueOnce(resposta)
+
+    vi.stubGlobal('fetch', fetch)
+    return fetch
+  }
+
+  afterEach(() => {
+    setApiAuthSession(null)
+    configureApiAuth()
+  })
+
+  it('a renovação que traz outra conta não refaz o pedido em nome dela', async () => {
+    setApiAuthSession({ accessToken: tokenDeAcesso(7) })
+    const fetch = renovacaoQueDevolve(tokenDeAcesso(9), [respostaJson(201, { ok: true })])
+
+    const erro = await apiRequest('/oportunidades/5/decisao/', { method: 'POST', body: {} })
+      .catch((problema) => problema)
+
+    expect(erro.data).toEqual({ codigo: 'conta_trocada' })
+    expect(erro.message).toMatch(/outra conta entrou neste navegador/i)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('a renovação da mesma conta refaz o pedido como antes', async () => {
+    setApiAuthSession({ accessToken: tokenDeAcesso(7, 'a') })
+    const fetch = renovacaoQueDevolve(tokenDeAcesso(7, 'b'), [respostaJson(200, { ok: true })])
+
+    await expect(apiRequest('/oportunidades/')).resolves.toEqual({ ok: true })
+
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('o download também não é refeito em nome de outra conta', async () => {
+    setApiAuthSession({ accessToken: tokenDeAcesso(7) })
+    const fetch = renovacaoQueDevolve(tokenDeAcesso(9), [
+      new Response('conteudo', { status: 200, headers: { 'Content-Type': 'application/pdf' } }),
+    ])
+
+    const erro = await baixarArquivo('/oportunidades/5/anexos/1/conteudo/').catch((problema) => problema)
+
+    expect(erro.data).toEqual({ codigo: 'conta_trocada' })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('quem acompanha a sessão fica sabendo que a conta mudou', async () => {
+    const aoRenovar = vi.fn()
+    configureApiAuth({ onSessionRefresh: aoRenovar })
+    setApiAuthSession({ accessToken: tokenDeAcesso(7) })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respostaJson(200, { access: tokenDeAcesso(9) })))
+
+    await renovarSessao()
+
+    expect(aoRenovar).toHaveBeenCalledWith(
+      { accessToken: tokenDeAcesso(9) },
+      { contaTrocada: true }
+    )
+  })
+
+  it('retomar a sessão ao recarregar a página não conta como troca', async () => {
+    const aoRenovar = vi.fn()
+    configureApiAuth({ onSessionRefresh: aoRenovar })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respostaJson(200, { access: tokenDeAcesso(9) })))
+
+    await renovarSessao()
+
+    expect(aoRenovar).toHaveBeenCalledWith(
+      { accessToken: tokenDeAcesso(9) },
+      { contaTrocada: false }
+    )
   })
 })

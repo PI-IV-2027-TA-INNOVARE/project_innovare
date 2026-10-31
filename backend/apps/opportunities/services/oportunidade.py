@@ -490,7 +490,7 @@ class RegistrarDecisaoService:
             notificar(
                 usuario=conta,
                 tipo='oportunidade.complementacao_solicitada',
-                titulo=f'{oportunidade.codigo} precisa de complementacao',
+                titulo=f'{oportunidade.codigo} precisa de complementação',
                 mensagem=justificativa,
                 entidade='oportunidade',
                 entidade_id=oportunidade.codigo,
@@ -580,7 +580,7 @@ class SolicitarComplementoService:
             notificar(
                 usuario=conta,
                 tipo='oportunidade.complementacao_solicitada',
-                titulo=f'{oportunidade.codigo} precisa de complementacao',
+                titulo=f'{oportunidade.codigo} precisa de complementação',
                 mensagem=mensagem,
                 entidade='oportunidade',
                 entidade_id=oportunidade.codigo,

@@ -6,23 +6,27 @@
   }
 }
 
-@mixin cartoes-em-grade($colunas: 3) {
+@mixin cartoes-em-grade($colunas: 3, $altura-igual: true) {
   display: grid;
   grid-template-columns: repeat($colunas, minmax(0, 1fr));
   gap: var(--admin-gap);
 
-  > .perfil-card {
-    display: grid;
-    grid-template-rows: subgrid;
-    grid-row: span 2;
+  @if $altura-igual {
+    > .perfil-card {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 2;
 
-    .perfil-card__header {
-      margin-bottom: 0;
-    }
+      .perfil-card__header {
+        margin-bottom: 0;
+      }
 
-    .perfil-card__body {
-      align-content: start;
+      .perfil-card__body {
+        align-content: start;
+      }
     }
+  } @else {
+    align-items: start;
   }
 
   @if $colunas > 2 {

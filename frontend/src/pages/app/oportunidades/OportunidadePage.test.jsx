@@ -171,3 +171,46 @@ describe('OportunidadePage — rodada do Copiloto', () => {
     expect(screen.getByRole('button', { name: /^decisão/i })).toBeDisabled()
   })
 })
+
+describe('OportunidadePage — andamento das etapas', () => {
+  /**
+   * A barra só marcava a aba aberta. Agora diz, pela situação da
+   * oportunidade, o que já foi feito e onde o fluxo está, com texto e não só
+   * com cor.
+   */
+  it('marca as etapas concluídas e a que está em andamento', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'matching' })
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /Competências.*concluída/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Contexto.*concluída/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Equipe potencial.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Decisão$/ })).toBeInTheDocument()
+  })
+
+  it('em estruturação, Copiloto e Proposta estão em andamento juntos', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /Copiloto.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Proposta estruturada.*em andamento/ })).toBeInTheDocument()
+  })
+
+  it('oportunidade arquivada não mostra andamento', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'arquivada' })
+
+    renderPagina()
+
+    await screen.findByRole('button', { name: /Contexto/ })
+    expect(screen.queryByText('em andamento')).not.toBeInTheDocument()
+    expect(screen.queryByText('concluída')).not.toBeInTheDocument()
+  })
+
+  it('diz em que etapa a pessoa está', async () => {
+    renderPagina()
+
+    expect(await screen.findByText('Etapa 1 de 7')).toBeInTheDocument()
+  })
+})

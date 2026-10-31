@@ -47,6 +47,7 @@ from apps.maturity.models import (
 from apps.ai.models import StatusExecucao
 from apps.ai.services.apelidos import Apelidos
 from apps.ai.services.custo import MOTIVO_LIMITE_DA_OPORTUNIDADE, MOTIVO_LIMITE_DO_MES
+from apps.network.models import SituacaoMembro
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
 from apps.opportunities.services.fluxo import avancar, conferir_avanco
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
@@ -275,16 +276,27 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
 def exigir_equipe_potencial(oportunidade: Oportunidade) -> None:
     """
     PB50: a pre-analise parte de "uma proposta estruturada e uma equipe
-    potencial definida". Definida e a ultima geracao com alguem incluido.
+    potencial definida". Definida e a ultima geracao com alguem incluido e
+    ativo: quem foi inativado fica na equipe antiga, mas nao e avaliado.
     """
     equipe = oportunidade.equipes_potenciais.first()
 
-    if equipe is None or not equipe.membros.filter(incluido=True).exists():
+    if equipe is None or not _incluidos_ativos(
+        equipe.membros.select_related('membro')
+    ):
         raise ConflitoDeEstado(
             'A pré-análise avalia também a equipe: gere a equipe potencial, com '
-            'ao menos uma pessoa incluída, antes de pré-analisar.',
+            'ao menos uma pessoa ativa incluída, antes de pré-analisar.',
             'sem_equipe',
         )
+
+
+def _incluidos_ativos(membros) -> list:
+    return [
+        membro
+        for membro in membros
+        if membro.incluido and membro.membro.situacao != SituacaoMembro.INATIVO
+    ]
 
 
 def _texto_da_equipe(oportunidade: Oportunidade) -> tuple[str, Apelidos]:
@@ -301,7 +313,7 @@ def _texto_da_equipe(oportunidade: Oportunidade) -> tuple[str, Apelidos]:
     if equipe is None:
         return SEM_EQUIPE, Apelidos([])
 
-    incluidos = [membro for membro in equipe.membros.all() if membro.incluido]
+    incluidos = _incluidos_ativos(equipe.membros.all())
     apelidos = Apelidos([membro.membro.nome for membro in incluidos])
     linhas = []
 

@@ -24,7 +24,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-VERSAO_COPILOTO = 'copiloto_v2'
+VERSAO_COPILOTO = 'copiloto_v3'
 VERSAO_SINTESE = 'sintese_v1'
 VERSAO_COMPETENCIAS = 'competencias_v2'
 VERSAO_MATCHING = 'matching_v2'
@@ -145,7 +145,9 @@ REGRAS
 4. Avalie os 8 elementos como "ausente", "inconsistente", "pouco_desenvolvido" ou "adequado". Nos três primeiros, diga o que falta e o que fazer.
 5. Para elemento "inconsistente" ou "pouco_desenvolvido", escreva uma pergunta ao Supervisor. Elemento vazio não precisa: o sistema usa o banco de perguntas PIPE.
 6. Não invente dado, número, prazo, parceiro ou resultado.
-7. Responda só com JSON válido, sem markdown.
+7. Em "resultados_esperados", cada resultado começa pelo objetivo que atende ("Objetivo geral" ou "Objetivo específico 1", "2"...). Resultado sem objetivo correspondente não entra.
+8. Em "caracterizacao_inovacao", diga o que é novo e por quê, com base na entrada. Termine com uma linha "Pontos para validação humana:" e liste o que o Supervisor precisa confirmar, como ineditismo, estado da arte e propriedade intelectual.
+9. Responda só com JSON válido, sem markdown.
 
 FORMATO
 {{

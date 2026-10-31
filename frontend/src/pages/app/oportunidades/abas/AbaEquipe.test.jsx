@@ -115,6 +115,52 @@ describe('AbaEquipe', () => {
     expect(await screen.findByText('Inativo na rede')).toBeInTheDocument()
   })
 
+  it('separa a supervisão das demais sugestões', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: [
+        EQUIPE.membros[0],
+        {
+          ...EQUIPE.membros[0],
+          id_membro_equipe: 11,
+          id_membro: 2,
+          nome: 'Lia Doutora',
+          papel: 'supervisor',
+          papel_rotulo: 'Supervisor',
+        },
+      ],
+    })
+
+    renderizar()
+
+    const supervisao = await screen.findByRole('list', { name: 'Supervisão' })
+    const pesquisa = screen.getByRole('list', { name: 'Pesquisa' })
+
+    expect(within(supervisao).getByText('Lia Doutora')).toBeInTheDocument()
+    expect(within(pesquisa).getByText('Marina Alves')).toBeInTheDocument()
+    expect(within(pesquisa).queryByText('Lia Doutora')).not.toBeInTheDocument()
+  })
+
+  it('acha pela busca quem incluir na equipe, sem carregar a rede inteira', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.type(await screen.findByLabelText(/incluir alguém da rede/i), 'Clara')
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ busca: 'Clara' })),
+    )
+
+    await user.click(await screen.findByRole('option', { name: /Clara Nunes/ }))
+    await user.click(screen.getByRole('button', { name: /^incluir$/i }))
+
+    await waitFor(() =>
+      expect(api.adicionarMembroEquipe).toHaveBeenCalledWith('OP-2026-001', {
+        id_membro: 9,
+        papel: 'pesquisador',
+      }),
+    )
+  })
+
   it('trava nova rodada enquanto a proposta não foi revisada', async () => {
     api.obterProposta = vi.fn().mockResolvedValue({
       problema_pesquisa: 'Contaminação resiste à pasteurização.',
@@ -203,7 +249,8 @@ describe('AbaEquipe', () => {
   it('valida a equipe e avisa que ninguém foi convocado', async () => {
     renderizar()
 
-    await userEvent.click(await screen.findByRole('button', { name: /validar equipe/i }))
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+    await userEvent.click(within(barra).getByRole('button', { name: /validar equipe/i }))
 
     expect(await screen.findByText(/nenhum convite foi enviado/i)).toBeInTheDocument()
   })
@@ -257,7 +304,8 @@ describe('AbaEquipe', () => {
 
     renderizar({ irPara })
 
-    await userEvent.click(await screen.findByRole('button', { name: /ir para pré-análise/i }))
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+    await userEvent.click(within(barra).getByRole('button', { name: /continuar para pré-análise/i }))
     expect(irPara).toHaveBeenCalledWith('pre-analise')
   })
 })

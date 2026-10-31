@@ -206,6 +206,8 @@ export default function ProblemaFormPage() {
         </div>
       ) : null}
 
+      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+
       <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
           <header className="perfil-card__header">
@@ -237,18 +239,21 @@ export default function ProblemaFormPage() {
             <div>
               <h2 className="perfil-card__title">O problema</h2>
               <p className="perfil-card__description">
-                Título e resumo são obrigatórios. O resto ajuda a AC2 a entender o
-                contexto sem precisar voltar a você.
+                Quanto mais contexto, menos a AC2 precisa voltar a você com
+                perguntas.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
             <label className="admin-field">
-              <span className="admin-field__label">Título</span>
+              <span className="admin-field__label">
+                Título <span aria-hidden="true">*</span>
+              </span>
               <input
                 type="text"
                 className="admin-input"
+                aria-required="true"
                 value={valores.titulo}
                 onChange={alterarCampo('titulo')}
                 placeholder="Ex.: Contaminação microbiana na linha de envase"
@@ -264,10 +269,11 @@ export default function ProblemaFormPage() {
 
             <div className="admin-field">
               <label className="admin-field__label" htmlFor="campo-resumo-problema">
-                Resumo do problema
+                Resumo do problema <span aria-hidden="true">*</span>
               </label>
               <textarea
                 id="campo-resumo-problema"
+                aria-required="true"
                 className="admin-input admin-input--area"
                 rows={4}
                 value={valores.resumo}

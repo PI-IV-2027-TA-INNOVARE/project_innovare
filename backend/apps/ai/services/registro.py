@@ -30,6 +30,7 @@ from apps.ai.services.custo import (
     MOTIVO_SEM_IA,
 )
 from apps.ai.services.protocolos import ProvedorDeIA
+from apps.ai.services.teto import ProvedorComTetoDeCusto
 
 
 @dataclass(frozen=True)
@@ -110,8 +111,8 @@ def papel_do_provedor(nome: str) -> str:
 
 
 def provedor_principal(**kwargs) -> ProvedorDeIA:
-    """O provedor principal, criado com a configuração do ambiente."""
-    return descritor(nome_do_principal()).criar(**kwargs)
+    """O provedor principal, criado com a configuração do ambiente e com o teto de gasto."""
+    return ProvedorComTetoDeCusto(descritor(nome_do_principal()).criar(**kwargs))
 
 
 def provedor_de_reserva(**kwargs) -> ProvedorDeIA | None:
@@ -121,15 +122,16 @@ def provedor_de_reserva(**kwargs) -> ProvedorDeIA | None:
     if not nome:
         return None
 
-    return descritor(nome).criar(**kwargs)
+    return ProvedorComTetoDeCusto(descritor(nome).criar(**kwargs))
 
 
 def provedor_com_reserva(**kwargs) -> ProvedorDeIA:
     """
-    O principal com a reserva configurada.
+    O principal com a reserva configurada, os dois sob o mesmo teto de gasto.
 
     Sem reserva - nem provedor, nem modelo alternativo - devolve o principal
-    direto, sem wrapper: uma camada que não faz nada só esconde a chamada.
+    sem o `ProvedorComReserva`: uma camada que não faz nada só esconde a
+    chamada. O teto embrulha o conjunto uma vez, antes de qualquer chamada.
     """
     principal_descritor = descritor(nome_do_principal())
     principal = principal_descritor.criar(**kwargs)
@@ -137,7 +139,7 @@ def provedor_com_reserva(**kwargs) -> ProvedorDeIA:
     modelo_reserva = str(getattr(settings, 'AI_MODELO_RESERVA', '') or '')
 
     if not reserva_nome and not modelo_reserva:
-        return principal
+        return ProvedorComTetoDeCusto(principal)
 
     reserva_descritor = (
         descritor(reserva_nome) if reserva_nome else principal_descritor
@@ -154,9 +156,9 @@ def provedor_com_reserva(**kwargs) -> ProvedorDeIA:
         and reserva_descritor.nome == principal_descritor.nome
         and getattr(reserva, 'modelo', None) == getattr(principal, 'modelo', None)
     ):
-        return principal
+        return ProvedorComTetoDeCusto(principal)
 
-    return ProvedorComReserva(principal=principal, reserva=reserva)
+    return ProvedorComTetoDeCusto(ProvedorComReserva(principal=principal, reserva=reserva))
 
 
 class ProvedorComReserva:

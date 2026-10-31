@@ -23,14 +23,11 @@ from django.conf import settings
 from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
 from apps.ai.services import prompts
 from apps.ai.services.custo import (
-    MOTIVO_DO_ESTOURO,
     MOTIVO_FALHA_DO_PROVEDOR,
-    MOTIVO_LIMITE_DO_MES,
     MOTIVO_SEM_IA,
-    TetoDeCustoExcedido,
     custo_da_chamada,
-    garantir_orcamento,
 )
+from apps.ai.services.sem_ia import resposta_vazia
 
 logger = logging.getLogger(__name__)
 
@@ -331,8 +328,8 @@ class ProvedorGemini:
         """
         Executa no Gemini com fallback automatico.
 
-        Antes de chamar, confere o teto de gasto: estourado, a chamada nao sai
-        e o caminho sem IA volta com o motivo, para a tela explicar.
+        O teto de gasto nao e conferido aqui: o registro entrega o provedor
+        embrulhado em `ProvedorComTetoDeCusto`, que vale para todos.
 
         Resposta malformada - JSON invalido, ou sem os vinculos que `validar`
         exige - e pedida de novo uma vez, com o mesmo prompt.
@@ -344,19 +341,6 @@ class ProvedorGemini:
                 'execucao_ia': None,
                 'fallback_usado': True,
                 'motivo_fallback': MOTIVO_SEM_IA,
-            }
-
-        try:
-            garantir_orcamento(oportunidade_id=oportunidade_id)
-        except TetoDeCustoExcedido as estouro:
-            logger.warning(f'{estouro} Executando fallback para {tipo}.')
-            return {
-                'dados': fallback_fn(),
-                'execucao_ia': None,
-                'fallback_usado': True,
-                'motivo_fallback': MOTIVO_DO_ESTOURO.get(
-                    estouro.codigo, MOTIVO_LIMITE_DO_MES
-                ),
             }
 
         execucao = self._criar_execucao(
@@ -443,7 +427,7 @@ class ProvedorGemini:
             prompt_versao=prompts.VERSAO_SINTESE,
             prompt=prompts.prompt_sintese(entrada=entrada),
             parametros={'entrada_len': len(entrada)},
-            fallback_fn=lambda: {'problema': '', 'contexto': '', 'o_que_falta': []},
+            fallback_fn=lambda: resposta_vazia('sintetizar_entrada'),
             executado_por=executado_por,
         )
 
@@ -475,7 +459,7 @@ class ProvedorGemini:
                 respostas=respostas,
             ),
             parametros={'vazios': len(vazios), 'respostas': len(respostas)},
-            fallback_fn=lambda: {'preenchimentos': {}, 'sugestoes': [], 'avaliacao': []},
+            fallback_fn=lambda: resposta_vazia('estruturar_proposta'),
             executado_por=executado_por,
         )
 
@@ -494,7 +478,7 @@ class ProvedorGemini:
             prompt_versao=prompts.VERSAO_COMPETENCIAS,
             prompt=prompts.prompt_competencias(proposta_texto=proposta_texto),
             parametros={'proposta_len': len(proposta_texto)},
-            fallback_fn=lambda: {'competencias': []},
+            fallback_fn=lambda: resposta_vazia('derivar_competencias'),
             executado_por=executado_por,
         )
 
@@ -516,7 +500,7 @@ class ProvedorGemini:
                 competencias=competencias_necessarias, candidatos=candidatos
             ),
             parametros={'num_candidatos': len(candidatos), 'num_competencias': len(competencias_necessarias)},
-            fallback_fn=lambda: {'matches': []},
+            fallback_fn=lambda: resposta_vazia('executar_matching'),
             executado_por=executado_por,
         )
 
@@ -548,12 +532,7 @@ class ProvedorGemini:
                 equipe_texto=equipe_texto,
             ),
             parametros={'proposta_len': len(proposta_texto), 'equipe_len': len(equipe_texto)},
-            fallback_fn=lambda: {
-                'dimensoes': [],
-                'lacunas': [],
-                'recomendacoes': [],
-                'sintese': 'Pré-análise indisponível agora: o serviço de IA não respondeu.',
-            },
+            fallback_fn=lambda: resposta_vazia('pre_analise_pipe'),
             executado_por=executado_por,
             validar=recomendacoes_vinculadas,
         )
