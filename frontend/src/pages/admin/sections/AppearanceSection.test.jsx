@@ -50,7 +50,7 @@ describe('AppearanceSection', () => {
     }
 
     expect(document.querySelectorAll('.token-card')).toHaveLength(12)
-    expect(screen.getByText('12 cores · 0 alteradas')).toBeInTheDocument()
+    expect(screen.getByText('12 cores · 0 personalizadas')).toBeInTheDocument()
   })
 
   it('abre apenas o primeiro grupo, para a tela não nascer com doze cartões', () => {
@@ -75,17 +75,14 @@ describe('AppearanceSection', () => {
     expect(screen.getByText('Sucesso')).toBeVisible()
   })
 
-  it('esconde o nome da custom property ate abrir o bloco Avancado', async () => {
-    const user = userEvent.setup()
+  it('a linha da cor mostra so o que o admin edita, sem bloco Avancado', () => {
     renderAppearance()
 
     const cartao = cartaoDaCor('Laranja institucional')
-    expect(within(cartao).getByText('--accent-primary')).not.toBeVisible()
 
-    await user.click(within(cartao).getByRole('button', { name: /avançado/i }))
-
-    expect(within(cartao).getByText('--accent-primary')).toBeVisible()
-    expect(within(cartao).getByText('--shadow-focus')).toBeVisible()
+    expect(within(cartao).queryByRole('button', { name: /avançado/i })).not.toBeInTheDocument()
+    expect(within(cartao).queryByText('--accent-primary')).not.toBeInTheDocument()
+    expect(within(cartao).getByLabelText('Valor de Laranja institucional')).toBeInTheDocument()
   })
 
   it('filtra as cores pela busca, ignorando acentos', async () => {
@@ -137,7 +134,7 @@ describe('AppearanceSection', () => {
     await user.clear(campo)
     await user.type(campo, '#123456')
 
-    expect(within(cartao).getByText('alterado')).toBeInTheDocument()
+    expect(within(cartao).getByText('personalizada')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/não salvas?/i)
     expect(estado.salvarTema).not.toHaveBeenCalled()
   })
@@ -166,7 +163,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeDisabled()
   })
 
-  it('descarta o rascunho e volta para a paleta publicada', async () => {
+  it('descarta uma alteracao so sem perguntar e volta para a paleta publicada', async () => {
     const user = userEvent.setup()
     renderAppearance()
 
@@ -178,8 +175,52 @@ describe('AppearanceSection', () => {
 
     await user.click(screen.getByRole('button', { name: /descartar/i }))
 
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(estado.salvarTema).not.toHaveBeenCalled()
-    expect(screen.getByText('12 cores · 0 alteradas')).toBeInTheDocument()
+    expect(screen.getByText('12 cores · 0 personalizadas')).toBeInTheDocument()
+  })
+
+  it('pede confirmacao antes de descartar mais de uma alteracao', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    for (const [nome, valor] of [['Laranja institucional', '#123456'], ['Navy institucional', '#654321']]) {
+      const campo = within(cartaoDaCor(nome)).getByLabelText(`Valor de ${nome}`)
+      await user.clear(campo)
+      await user.type(campo, valor)
+    }
+
+    await user.click(screen.getByRole('button', { name: /^descartar$/i }))
+
+    const dialogo = screen.getByRole('dialog', { name: /descartar alterações/i })
+    expect(dialogo).toHaveTextContent(/2 alterações/i)
+    expect(screen.getByText(/2 alterações não salvas/i)).toBeInTheDocument()
+
+    await user.click(within(dialogo).getByRole('button', { name: /descartar alterações/i }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByText(/alterações não salvas/i)).not.toBeInTheDocument()
+    expect(screen.getByText('12 cores · 0 personalizadas')).toBeInTheDocument()
+  })
+
+  it('continuar editando fecha a confirmacao e mantem o rascunho', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    for (const [nome, valor] of [['Laranja institucional', '#123456'], ['Navy institucional', '#654321']]) {
+      const campo = within(cartaoDaCor(nome)).getByLabelText(`Valor de ${nome}`)
+      await user.clear(campo)
+      await user.type(campo, valor)
+    }
+
+    await user.click(screen.getByRole('button', { name: /^descartar$/i }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: /continuar editando/i })
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Valor de Navy institucional')).toHaveValue('#654321')
+    expect(screen.getByText(/2 alterações não salvas/i)).toBeInTheDocument()
   })
 
   it('so habilita "Restaurar padroes" quando ha algo alterado', async () => {
@@ -222,6 +263,43 @@ describe('AppearanceSection', () => {
   })
 })
 
+describe('AppearanceSection — exemplo das cores de estado', () => {
+  it('nao tem previa lateral com campos que nao fazem nada', () => {
+    renderAppearance()
+
+    expect(screen.queryByRole('region', { name: /prévia/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('o grupo Estados mostra onde as cores aparecem, sem nenhum controle', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    await user.click(screen.getByRole('button', { name: /estados/i }))
+
+    const exemplo = screen.getByRole('figure', { name: /onde essas cores aparecem/i })
+
+    expect(within(exemplo).getByText('Continuar')).toBeInTheDocument()
+    expect(within(exemplo).getByText('Arquivada')).toBeInTheDocument()
+
+    for (const papel of ['button', 'textbox', 'checkbox', 'combobox']) {
+      expect(within(exemplo).queryAllByRole(papel)).toHaveLength(0)
+    }
+  })
+
+  it('so o grupo Estados traz exemplo', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    for (const grupo of [/superfícies/i, /texto e bordas/i, /estados/i]) {
+      await user.click(screen.getByRole('button', { name: grupo }))
+    }
+
+    expect(screen.getAllByRole('figure')).toHaveLength(1)
+  })
+})
+
 describe('AppearanceSection — cor invalida', () => {
   it('marca o campo e nao deixa publicar o que nao e cor', async () => {
     const user = userEvent.setup()
@@ -248,6 +326,41 @@ describe('AppearanceSection — cor invalida', () => {
     await user.type(campo, 'banana')
 
     expect(screen.getByRole('alert')).toHaveTextContent(/laranja institucional/i)
+  })
+
+  it('o aviso cita os dois formatos que a plataforma aceita', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, 'banana')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/#1B5E20/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/rgba\(/)
+  })
+
+  it('explica o erro ao lado do campo recusado, para quem nao ve o aviso do topo', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const cartao = cartaoDaCor('Laranja institucional')
+    const campo = within(cartao).getByLabelText('Valor de Laranja institucional')
+
+    expect(campo).not.toHaveAccessibleDescription()
+
+    await user.clear(campo)
+    await user.type(campo, 'banana')
+
+    expect(campo).toHaveAccessibleDescription(/não é uma cor/i)
+    expect(within(cartao).getByText(/não é uma cor/i)).toBeVisible()
+
+    await user.clear(campo)
+    await user.type(campo, '#1B5E20')
+
+    expect(campo).not.toHaveAccessibleDescription()
   })
 
   it('nao apaga a cor da tela enquanto o hex esta pela metade', async () => {
@@ -325,12 +438,27 @@ describe('AppearanceSection — a paleta publicada vem do banco', () => {
       .toBeInTheDocument()
   })
 
+  it('conta a cor publicada fora do padrao como personalizada, sem dizer que ha algo por salvar', async () => {
+    estado.carregarTema = vi.fn().mockResolvedValue({
+      secao: 'tema',
+      payload: { light: { accentPrimary: '#1B5E20' }, dark: {} },
+      revisao: 2,
+      atualizado_por_nome: 'Administração da plataforma',
+    })
+
+    renderAppearance()
+
+    expect(await screen.findByText('12 cores · 1 personalizada')).toBeInTheDocument()
+    expect(within(cartaoDaCor('Laranja institucional')).getByText('personalizada')).toBeInTheDocument()
+    expect(screen.queryByText(/não salvas?/i)).not.toBeInTheDocument()
+  })
+
   it('sem servidor, a tela abre na paleta padrao em vez de ficar sem cor', async () => {
     estado.carregarTema = vi.fn().mockRejectedValue(new Error('Failed to fetch'))
 
     renderAppearance()
 
-    await screen.findByText('12 cores · 0 alteradas')
+    await screen.findByText('12 cores · 0 personalizadas')
 
     expect(document.documentElement.style.getPropertyValue('--accent-primary'))
       .toMatch(/^#[0-9a-f]{6}$/i)

@@ -22,6 +22,19 @@
   }
 }
 
+.admin-page__breadcrumb {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+
+  span {
+    margin: 0 6px;
+    opacity: 0.7;
+  }
+}
+
 .admin-section__header {
   display: flex;
   align-items: flex-start;
@@ -1645,12 +1658,6 @@
   .admin-page * {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
-  }
-
-  .token-card:hover,
-  .token-card:focus-within,
-  .preview-card:hover {
-    transform: none;
   }
 }
 

@@ -13,20 +13,6 @@
   margin-bottom: var(--admin-section-gap);
 }
 
-.admin-page__breadcrumb {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  opacity: 0.8;
-
-  span {
-    margin: 0 6px;
-    opacity: 0.7;
-  }
-}
-
 .admin-page__title {
   margin-top: 8px;
   font-size: clamp(2.125rem, 2.4vw, 2.5rem);
@@ -135,21 +121,9 @@
 .admin-nav__description {
   font-size: 0.8125rem;
   color: var(--text-muted);
-  opacity: 0.8;
 }
 
 .admin-content {
-  min-width: 0;
-}
-
-.appearance-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--admin-section-gap);
-  align-items: start;
-}
-
-.appearance-main {
   min-width: 0;
 }
 
@@ -164,14 +138,10 @@
 .appearance-toolbar__count {
   font-size: 0.8125rem;
   color: var(--text-muted);
-  opacity: 0.8;
 }
 
 .appearance-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
-  align-content: start;
-  align-items: start;
   gap: var(--admin-pad);
 }
 
@@ -232,31 +202,31 @@
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--text-muted);
-  opacity: 0.8;
 }
 
-.tokens-group__grid {
+.tokens-group__lista {
   margin-top: var(--admin-gap);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
-  gap: 12px;
+  gap: 8px;
+  container-name: cores;
+  container-type: inline-size;
 }
 
 .token-card {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) minmax(200px, 260px) 184px;
+  grid-template-areas: 'amostra info valor estado';
+  column-gap: 16px;
+  align-items: center;
+  padding: 12px 12px 12px 0;
   overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--admin-card-border);
   border-radius: var(--admin-radius-sm);
-  transition:
-    transform var(--admin-motion),
-    border-color var(--admin-motion),
-    box-shadow var(--admin-motion);
+  transition: border-color var(--admin-motion), box-shadow var(--admin-motion);
 
   &:hover,
   &:focus-within {
-    transform: translateY(-2px);
     border-color: var(--admin-card-border-hover);
     box-shadow: var(--admin-glow);
 
@@ -271,9 +241,11 @@
 }
 
 .token-card__swatch {
+  grid-area: amostra;
   position: relative;
-  display: block;
-  height: 54px;
+  align-self: stretch;
+  min-height: 64px;
+  margin-block: -12px;
   cursor: pointer;
 
   input[type='color'] {
@@ -283,6 +255,12 @@
     height: 100%;
     opacity: 0;
     cursor: pointer;
+  }
+
+  &:has(input[type='color']:focus-visible) .token-card__swatch-fill {
+    box-shadow:
+      inset 0 0 0 2px var(--accent-primary),
+      inset 0 0 0 4px var(--bg-card);
   }
 }
 
@@ -297,11 +275,13 @@
 
 .token-card__swatch-action {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 3px 8px;
-  font-size: 0.6875rem;
-  font-weight: 600;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: auto;
+  font-size: 0.875rem;
   color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-card) 82%, transparent);
   border: 1px solid var(--admin-card-border);
@@ -311,17 +291,18 @@
   pointer-events: none;
 }
 
-.token-card__body {
+.token-card__info {
+  grid-area: info;
   display: grid;
-  gap: 6px;
-  padding: 12px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .token-card__heading {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
 }
 
 .token-card__name {
@@ -336,7 +317,13 @@
   font-size: 0.75rem;
   line-height: 1.45;
   color: var(--text-muted);
-  opacity: 0.8;
+}
+
+.token-card__valor {
+  grid-area: valor;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
 }
 
 .token-card__controls {
@@ -362,6 +349,10 @@
     border-color: var(--accent-primary);
     box-shadow: var(--shadow-focus);
   }
+
+  &[aria-invalid='true'] {
+    border-color: var(--accent-error);
+  }
 }
 
 .token-card__copy {
@@ -369,16 +360,10 @@
   height: 32px;
 }
 
-.token-card__footer {
+.token-card__estado {
+  grid-area: estado;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 22px;
-}
-
-.token-card__state {
-  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -422,89 +407,44 @@
   }
 }
 
-.token-advanced {
-  display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--admin-card-border);
-}
-
-.token-advanced__row {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
-
-  dt {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
+@container cores (max-width: 819px) {
+  .token-card {
+    grid-template-columns: 72px minmax(0, 1fr) minmax(200px, 260px);
+    grid-template-areas:
+      'amostra info valor'
+      'amostra info estado';
   }
 
-  dd {
-    min-width: 0;
-  }
-
-  code {
-    display: inline-block;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    font-family: var(--font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace);
-    font-size: 0.6875rem;
-    color: var(--text-muted);
+  .token-card__estado {
+    margin-top: 6px;
   }
 }
 
-.token-advanced__derived {
+@container cores (max-width: 560px) {
+  .token-card {
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-areas:
+      'amostra info'
+      'amostra valor'
+      'amostra estado';
+    column-gap: 12px;
+  }
+
+  .token-card__valor {
+    margin-top: 8px;
+  }
+}
+
+.exemplo-de-estados {
   display: grid;
-  gap: 2px;
-  list-style: none;
+  gap: 10px;
+  margin-top: var(--admin-gap);
+  padding: 14px 16px;
+  border: 1px dashed var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
 }
 
-.appearance-aside {
-  position: sticky;
-  top: var(--admin-nav-offset);
-  max-height: calc(100vh - var(--admin-nav-offset) - 24px);
-  overflow-y: auto;
-}
-
-.preview {
-  display: grid;
-  gap: var(--admin-pad);
-  padding: var(--admin-pad);
-  background: var(--bg-card);
-  border: 1px solid var(--admin-card-border);
-  border-radius: var(--admin-radius);
-  box-shadow: var(--admin-glow-soft);
-}
-
-.preview__header {
-  display: grid;
-  gap: 4px;
-}
-
-.preview__eyebrow {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.11em;
-  color: var(--accent-primary-text);
-}
-
-.preview__note {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  opacity: 0.8;
-}
-
-.preview__block {
-  display: grid;
-  gap: 12px;
-  padding-top: var(--admin-gap);
-  border-top: 1px solid var(--admin-card-border);
-}
-
-.preview__block-title {
+.exemplo-de-estados__titulo {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -512,93 +452,34 @@
   color: var(--text-muted);
 }
 
-.preview__row {
+.exemplo-de-estados__selos {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
-}
-
-.preview__stack {
-  display: grid;
-  gap: 12px;
-}
-
-.preview__field {
-  display: grid;
-  gap: 6px;
-}
-
-.preview__label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-.preview-card {
-  display: grid;
   gap: 8px;
-  padding: var(--admin-gap);
-  background: var(--bg-secondary);
-  border: 1px solid var(--admin-card-border);
-  border-radius: var(--admin-radius-sm);
-  transition: transform var(--admin-motion), box-shadow var(--admin-motion);
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--admin-glow);
-  }
 }
 
-.preview-card__eyebrow {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent-secondary);
+.exemplo-de-estados__alertas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 8px;
 }
 
-.preview-card__title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  opacity: 0.96;
-}
-
-.preview-card__text {
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  color: var(--text-muted);
-  opacity: 0.8;
-}
-
-.preview-alert {
-  padding: 12px 14px;
+.exemplo-de-estados__alerta {
+  padding: 10px 14px;
   font-size: 0.8125rem;
   line-height: 1.5;
+  color: var(--text-primary);
   border-radius: var(--admin-radius-sm);
   border-left: 3px solid transparent;
 
   &--ok {
-    color: var(--text-primary);
     background: color-mix(in srgb, var(--accent-green) 12%, transparent);
     border-left-color: var(--accent-green);
   }
 
-  &--error {
-    color: var(--text-primary);
+  &--erro {
     background: var(--bg-danger-soft);
     border-left-color: var(--accent-error);
-  }
-}
-
-@media (max-width: 1180px) {
-  .appearance-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .appearance-aside {
-    position: static;
-    max-height: none;
   }
 }
 
@@ -633,10 +514,6 @@
 
   .admin-nav__description {
     display: block;
-  }
-
-  .tokens-group__grid {
-    grid-template-columns: 1fr;
   }
 }
 
