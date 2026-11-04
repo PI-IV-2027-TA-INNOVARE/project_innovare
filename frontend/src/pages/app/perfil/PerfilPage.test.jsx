@@ -67,43 +67,45 @@ beforeEach(() => {
 })
 
 describe('PerfilPage', () => {
-  it('mostra os campos mantidos por outro ator em leitura, e não escondidos', () => {
-    render(<PerfilPage />)
-
-    const identificacao = cartao('Identificação')
-
-    expect(within(identificacao).getByLabelText('Nome')).toHaveValue('Maria Ferreira')
-    expect(within(identificacao).getByLabelText('Nome')).toHaveAttribute('readonly')
-    expect(within(identificacao).getByText(/somente leitura/i)).toBeInTheDocument()
-
-    expect(within(cartao('Vínculo')).getByLabelText('Organização'))
-      .toHaveAttribute('readonly')
-  })
-
-  it('o campo que o dono da conta não edita continua alcançável', () => {
+  it('mostra nome, e-mail, papel e organização no cabeçalho, sem campos que parecem editáveis', () => {
     /**
-     * `readonly` e `disabled` parecem a mesma coisa na tela e nao sao: o
-     * `disabled` tira o campo da ordem de tabulacao. Quem usa teclado ou
-     * leitor de tela deixa de alcancar - e portanto de ler e de copiar - o
-     * proprio nome, e-mail, papel e organizacao.
-     *
-     * A tela mostra esses campos de proposito, em vez de esconder (ver o caso
-     * acima). Desligar o acesso a eles desfaz essa decisao sem que nada na
-     * tela mude de aparencia.
+     * Esses quatro dados sao mantidos por quem administra as contas. Eles
+     * ficavam em dois cartoes, como campos `readonly` - e o cabecalho ja
+     * mostrava nome, papel e organizacao. Campo que parece editavel e nao e
+     * faz a pessoa tentar, ou desconfiar. No cabecalho viram texto: continuam
+     * a vista e lidos pelo leitor de tela, sem nada para clicar.
      */
     render(<PerfilPage />)
 
-    for (const [secao, campos] of [
-      ['Identificação', ['Nome', 'E-mail']],
-      ['Vínculo', ['Papel', 'Organização']],
-    ]) {
-      for (const campo of campos) {
-        const alvo = within(cartao(secao)).getByLabelText(campo)
+    const cabecalho = document.querySelector('.perfil-page__header')
 
-        expect(alvo, `${secao} / ${campo}`).not.toBeDisabled()
-        expect(alvo, `${secao} / ${campo}`).toHaveAttribute('readonly')
-      }
+    expect(within(cabecalho).getByRole('heading', { name: 'Maria Ferreira', level: 1 })).toBeInTheDocument()
+    expect(within(cabecalho).getByText('maria.ferreira@ac2microbiologia.com.br')).toBeInTheDocument()
+    expect(within(cabecalho).getByText('Pesquisador')).toBeInTheDocument()
+    expect(within(cabecalho).getByText(/AC2 Microbiologia/)).toBeInTheDocument()
+
+    expect(document.querySelectorAll('input[readonly]')).toHaveLength(0)
+    expect(screen.queryByRole('heading', { name: 'Identificação' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Vínculo' })).not.toBeInTheDocument()
+  })
+
+  it('diz a quem pedir para mudar os dados da conta', () => {
+    render(<PerfilPage />)
+
+    expect(screen.getByText(/mantidos por quem administra as contas/i)).toBeInTheDocument()
+  })
+
+  it('ao Administrador, aponta onde ele mesmo muda os dados da conta', () => {
+    estado.user = {
+      displayName: 'Administração da plataforma',
+      email: 'admin@ac2.com.br',
+      role: 'administrador',
     }
+
+    render(<PerfilPage />)
+
+    expect(screen.getByText(/administração › usuários/i)).toBeInTheDocument()
+    expect(screen.queryByText(/mantidos por quem administra as contas/i)).not.toBeInTheDocument()
   })
 
   it('o que o dono da conta edita não vira campo bloqueado', () => {
@@ -124,21 +126,6 @@ describe('PerfilPage', () => {
         expect(campo, secao).toBeEnabled()
       }
     })
-  })
-
-  it('o dono da conta chega aos próprios dados pelo teclado', async () => {
-    const usuario = userEvent.setup()
-    render(<PerfilPage />)
-
-    const nome = within(cartao('Identificação')).getByLabelText('Nome')
-
-    nome.focus()
-
-    expect(nome).toHaveFocus()
-
-    await usuario.tab()
-
-    expect(within(cartao('Identificação')).getByLabelText('E-mail')).toHaveFocus()
   })
 
   it('carrega o perfil profissional da API', async () => {
@@ -302,9 +289,9 @@ describe('PerfilPage', () => {
 
     render(<PerfilPage />)
 
-    expect(cartao('Identificação')).toBeInTheDocument()
     expect(cartao('Senha')).toBeInTheDocument()
-    expect(within(cartao('Vínculo')).getByLabelText('Papel')).toHaveValue('Demandante Externo')
+    expect(within(document.querySelector('.perfil-page__header')).getByText('Demandante Externo'))
+      .toBeInTheDocument()
 
     expect(estado.obterMeuPerfil).not.toHaveBeenCalled()
     expect(screen.queryByRole('heading', { name: 'Competências', level: 2 })).not.toBeInTheDocument()
@@ -343,8 +330,136 @@ describe('PerfilPage', () => {
     await user.type(within(senha).getByLabelText('Confirmar nova senha'), 'outra-senha-9')
     await user.click(within(senha).getByRole('button', { name: /alterar senha/i }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/não corresponde/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/não coincidem/i)
     expect(estado.alterarSenha).not.toHaveBeenCalled()
+  })
+
+  it('mostra as regras reais da nova senha antes de enviar', () => {
+    /**
+     * O servidor aplica quatro regras: tamanho minimo, nao ser so numeros, nao
+     * parecer o nome ou o e-mail e nao ser senha comum. A tela so falava da
+     * primeira; as outras tres apareciam como recusa depois do envio.
+     */
+    render(<PerfilPage />)
+
+    const senha = cartao('Senha')
+
+    expect(within(senha).getByLabelText(/^Nova senha/)).toHaveAccessibleDescription(/só números/i)
+    expect(within(senha).getByText(/senha comum/i)).toBeInTheDocument()
+  })
+
+  it('cada campo de senha pode ser mostrado', () => {
+    render(<PerfilPage />)
+
+    expect(within(cartao('Senha')).getAllByRole('button', { name: 'Mostrar senha' })).toHaveLength(3)
+  })
+
+  it('aponta o erro no campo que falhou e leva o foco até ele', async () => {
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+
+    const senha = cartao('Senha')
+
+    await user.type(within(senha).getByLabelText(/^Nova senha/), '12345678')
+    await user.type(within(senha).getByLabelText('Confirmar nova senha'), '12345678')
+    await user.click(within(senha).getByRole('button', { name: /alterar senha/i }))
+
+    const atual = within(senha).getByLabelText('Senha atual')
+    const nova = within(senha).getByLabelText(/^Nova senha/)
+
+    expect(atual).toHaveAttribute('aria-invalid', 'true')
+    expect(atual).toHaveAccessibleDescription(/informe a senha atual/i)
+    expect(nova).toHaveAttribute('aria-invalid', 'true')
+    expect(nova).toHaveAccessibleDescription(/só números/i)
+    expect(within(senha).getByLabelText('Confirmar nova senha')).not.toHaveAttribute('aria-invalid')
+    expect(atual).toHaveFocus()
+    expect(estado.alterarSenha).not.toHaveBeenCalled()
+  })
+
+  it('a recusa do servidor aparece no campo que ela aponta, sem apagar o que foi digitado', async () => {
+    estado.alterarSenha = vi.fn().mockRejectedValue(
+      Object.assign(new Error('Senha atual incorreta.'), {
+        data: { senha_atual: ['Senha atual incorreta.'] },
+      })
+    )
+
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+
+    const senha = cartao('Senha')
+
+    await user.type(within(senha).getByLabelText('Senha atual'), 'senha-errada')
+    await user.type(within(senha).getByLabelText(/^Nova senha/), 'Bioinsumo!2026')
+    await user.type(within(senha).getByLabelText('Confirmar nova senha'), 'Bioinsumo!2026')
+    await user.click(within(senha).getByRole('button', { name: /alterar senha/i }))
+
+    expect(await within(senha).findByText('Senha atual incorreta.')).toBeInTheDocument()
+    expect(within(senha).getByLabelText('Senha atual')).toHaveAttribute('aria-invalid', 'true')
+    expect(within(senha).getByLabelText(/^Nova senha/)).toHaveValue('Bioinsumo!2026')
+  })
+
+  it('os três campos de senha ficam numa coluna só', () => {
+    render(<PerfilPage />)
+
+    expect(cartao('Senha').querySelector('.admin-form__row')).toBeNull()
+  })
+})
+
+describe('PerfilPage — para que serve cada dado do perfil profissional', () => {
+  /**
+   * Quem preenchia nao sabia o que Disponibilidade e Titulacao mudam. As duas
+   * entram na escolha de quem a plataforma sugere para a equipe: a
+   * disponibilidade pesa na nota (inteira, parcial, pouco ou nada), e a
+   * titulacao desempata, aparece nos motivos da sugestao e, para quem e
+   * Supervisor, da prioridade na supervisao a partir do mestrado.
+   */
+  it('Disponibilidade explica a opção escolhida e o efeito dela nas sugestões de equipe', async () => {
+    const user = userEvent.setup()
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    const disponibilidade = cartao('Disponibilidade')
+
+    expect(within(disponibilidade).getByText(/parte de um projeto/i)).toBeInTheDocument()
+    expect(within(disponibilidade).getAllByText(/sugest(ão|ões) de equipe/i).length).toBeGreaterThan(0)
+    expect(within(disponibilidade).queryByText(/^hoje:/i)).not.toBeInTheDocument()
+
+    await user.selectOptions(within(disponibilidade).getByRole('combobox'), 'indisponivel')
+
+    expect(within(disponibilidade).getByText(/continua na rede/i)).toBeInTheDocument()
+    expect(within(disponibilidade).queryByText(/parte de um projeto/i)).not.toBeInTheDocument()
+  })
+
+  it('Titulação diz para que serve, sem jargão', async () => {
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    const titulacao = cartao('Titulação')
+
+    expect(within(titulacao).getByText(/desempata/i)).toBeInTheDocument()
+    expect(within(titulacao).queryByText(/vocabulário controlado/i)).not.toBeInTheDocument()
+    expect(within(titulacao).queryByText(/supervisão/i)).not.toBeInTheDocument()
+  })
+
+  it('ao Supervisor, Titulação conta a prioridade na supervisão', async () => {
+    estado.user = { ...PESQUISADORA, role: 'supervisor' }
+
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    expect(within(cartao('Titulação')).getByText(/vagas de supervisão/i)).toBeInTheDocument()
+  })
+
+  it('as listas e a experiência dizem com o que são comparadas', async () => {
+    render(<PerfilPage />)
+    await esperarPerfil()
+
+    for (const titulo of ['Experiência', 'Competências', 'Técnicas', 'Linhas de pesquisa']) {
+      expect(
+        cartao(titulo).querySelector('.perfil-card__description').textContent,
+        titulo
+      ).toMatch(/oportunidade/i)
+    }
   })
 })
 
@@ -390,7 +505,7 @@ describe('PerfilPage — alcance do botão Salvar perfil', () => {
 
     const grupo = grupoProfissional()
 
-    for (const titulo of ['Identificação', 'Vínculo', 'Senha']) {
+    for (const titulo of ['Senha', 'Meus dados']) {
       expect(
         within(grupo).queryByRole('heading', { name: titulo }),
         titulo
@@ -496,7 +611,7 @@ describe('PerfilPage — grade dos cartões', () => {
       ])
   })
 
-  it('mantém os cartões de conta como irmãos diretos da grade da página', () => {
+  it('o Contato do Demandante fica acima da grade, e Senha e Meus dados dividem a linha', () => {
     estado.user = {
       displayName: 'Agroindústria Vale Verde',
       email: 'contato@valeverde.com.br',
@@ -508,7 +623,46 @@ describe('PerfilPage — grade dos cartões', () => {
     const grade = document.querySelector('.perfil-grid')
 
     expect([...grade.children].map((filho) => filho.querySelector('.perfil-card__title').textContent))
-      .toEqual(['Identificação', 'Vínculo', 'Contato', 'Senha', 'Meus dados'])
+      .toEqual(['Senha', 'Meus dados'])
+    expect(grade.previousElementSibling).toBe(cartao('Contato'))
+  })
+
+  it('o Contato do Demandante vira uma faixa, com o telefone e o botão na mesma linha', () => {
+    /**
+     * Com tres cartoes da mesma altura, o Contato - um campo e um botao -
+     * sobrava quase vazio ao lado da Senha. Como faixa na largura toda, o
+     * titulo fica de um lado e o campo do outro, e Senha e Meus dados dividem
+     * a linha de baixo.
+     */
+    estado.user = {
+      displayName: 'Agroindústria Vale Verde',
+      email: 'contato@valeverde.com.br',
+      role: 'demandante',
+    }
+
+    render(<PerfilPage />)
+
+    const contato = cartao('Contato')
+    const linha = contato.querySelector('.perfil-contato__linha')
+
+    expect(contato).toHaveClass('perfil-card--faixa')
+    expect(linha).toContainElement(screen.getByLabelText('Telefone'))
+    expect(within(linha).getByRole('button', { name: 'Salvar telefone' })).toBeInTheDocument()
+  })
+
+  it('o Administrador fica com Senha e Meus dados, um ao lado do outro', () => {
+    estado.user = {
+      displayName: 'Administração da plataforma',
+      email: 'admin@ac2.com.br',
+      role: 'administrador',
+    }
+
+    render(<PerfilPage />)
+
+    const grade = document.querySelector('.perfil-grid')
+
+    expect([...grade.children].map((filho) => filho.querySelector('.perfil-card__title').textContent))
+      .toEqual(['Senha', 'Meus dados'])
   })
 })
 

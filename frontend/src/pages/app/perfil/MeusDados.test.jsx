@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import MeusDados from './MeusDados'
@@ -66,5 +66,34 @@ describe('MeusDados', () => {
     render(<MeusDados aoConcluir={vi.fn()} />)
 
     expect(await screen.findByText(/pessoa removida/i)).toBeInTheDocument()
+  })
+
+  it('separa a cópia dos dados do pedido de exclusão, cada uma com a sua explicação', async () => {
+    render(<MeusDados aoConcluir={vi.fn()} />)
+
+    const copia = await screen.findByRole('group', { name: /cópia dos dados/i })
+    const exclusao = screen.getByRole('group', { name: /exclusão da conta/i })
+
+    expect(within(copia).getByRole('button', { name: /baixar uma cópia/i })).toBeInTheDocument()
+    expect(within(copia).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'a sua conta;',
+      'o seu perfil na rede;',
+      'as oportunidades que você cadastrou;',
+      'o que você fez na plataforma.',
+    ])
+    expect(within(copia).queryByRole('button', { name: /pedir a exclusão/i })).not.toBeInTheDocument()
+
+    expect(within(exclusao).getByRole('button', { name: /pedir a exclusão/i })).toBeInTheDocument()
+    expect(within(exclusao).getByText(/pessoa removida/i)).toBeInTheDocument()
+  })
+
+  it('baixar é a ação principal; o pedido de exclusão fica discreto', async () => {
+    render(<MeusDados aoConcluir={vi.fn()} />)
+
+    const baixar = await screen.findByRole('button', { name: /baixar uma cópia/i })
+
+    expect(baixar).toHaveClass('admin-btn')
+    expect(baixar).not.toHaveClass('admin-btn--outline')
+    expect(screen.getByRole('button', { name: /pedir a exclusão/i })).toHaveClass('admin-btn--ghost')
   })
 })

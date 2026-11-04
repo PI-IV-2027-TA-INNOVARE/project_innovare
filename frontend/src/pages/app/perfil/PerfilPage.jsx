@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import CampoDeSenha, { RegrasDaSenha } from '../../../components/CampoDeSenha'
 import { Avatar } from '../../../components/console/ConsoleTable'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
-import { ROLES, roleLabel } from '../../../lib/roles'
+import { ROLES, isAdministrador, roleLabel } from '../../../lib/roles'
+import { errosDosCampos, problemaNaConfirmacao, problemaNaNovaSenha } from '../../../lib/senha'
 import { mascararTelefone, telefoneValido } from '../../../lib/telefone'
 import {
   alterarSenha,
@@ -16,7 +18,6 @@ import {
   DISPONIBILIDADES,
   TITULACOES,
   completudeDoPerfil,
-  disponibilidadeLabel,
   formacoesParaApi,
   perfilDaApi,
   titulacaoLabel,
@@ -40,9 +41,34 @@ const PERFIL_VAZIO = {
 
 const SENHA_VAZIA = { senhaAtual: '', novaSenha: '', confirmarSenha: '' }
 
+const CAMPOS_DA_SENHA = {
+  senha_atual: 'senhaAtual',
+  nova_senha: 'novaSenha',
+  confirmar_senha: 'confirmarSenha',
+}
+
+const IDS_DA_SENHA = {
+  senhaAtual: 'campo-senha-atual',
+  novaSenha: 'campo-nova-senha',
+  confirmarSenha: 'campo-confirmar-senha',
+}
+
+const REGRAS_DA_NOVA_SENHA = 'regras-nova-senha'
+
+const EFEITO_DA_DISPONIBILIDADE = {
+  integral:
+    'Você pode se dedicar a um projeto novo. Nas sugestões de equipe, a disponibilidade conta inteira a seu favor.',
+  parcial:
+    'Você pode assumir parte de um projeto, junto com outras atividades. Nas sugestões de equipe, a disponibilidade conta em parte a seu favor.',
+  pontual:
+    'Você pode ajudar em consultas e tarefas curtas. Nas sugestões de equipe, a disponibilidade conta pouco a seu favor.',
+  indisponivel:
+    'Você não pode assumir projetos agora. Você continua na rede, mas a disponibilidade deixa de contar a seu favor nas sugestões de equipe.',
+}
+
 const TITULO_PROFISSIONAL = 'titulo-perfil-profissional'
 
-function Secao({ title, description, children, readOnly, hint, nivel = 2, className = '' }) {
+function Secao({ title, description, children, nivel = 2, className = '' }) {
   const Titulo = `h${nivel}`
 
   return (
@@ -52,13 +78,6 @@ function Secao({ title, description, children, readOnly, hint, nivel = 2, classN
           <Titulo className="perfil-card__title">{title}</Titulo>
           {description ? <p className="perfil-card__description">{description}</p> : null}
         </div>
-
-        {readOnly ? (
-          <span className="perfil-card__lock" title={hint}>
-            <Icone icon={appIcons.view} />
-            Somente leitura
-          </span>
-        ) : null}
       </header>
 
       <div className="perfil-card__body">{children}</div>
@@ -68,34 +87,43 @@ function Secao({ title, description, children, readOnly, hint, nivel = 2, classN
 
 function TrocaDeSenha({ onConcluido }) {
   const [valores, setValores] = useState(SENHA_VAZIA)
-  const [erro, setErro] = useState('')
+  const [erros, setErros] = useState({})
+  const [erroGeral, setErroGeral] = useState('')
   const [salvando, setSalvando] = useState(false)
 
-  const alterar = (campo) => (event) => {
-    const { value } = event.target
-    setValores((atual) => ({ ...atual, [campo]: value }))
-    setErro('')
+  const alterar = (campo) => (valor) => {
+    setValores((atual) => ({ ...atual, [campo]: valor }))
+    setErros((atual) => ({ ...atual, [campo]: '' }))
+    setErroGeral('')
+  }
+
+  const apontar = (encontrados) => {
+    setErros(encontrados)
+
+    const primeiro = Object.keys(IDS_DA_SENHA).find((campo) => encontrados[campo])
+
+    if (primeiro) document.getElementById(IDS_DA_SENHA[primeiro])?.focus()
   }
 
   const enviar = async (event) => {
     event.preventDefault()
 
-    if (!valores.senhaAtual || !valores.novaSenha) {
-      setErro('Informe a senha atual e a nova senha.')
-      return
-    }
+    const encontrados = Object.fromEntries(
+      Object.entries({
+        senhaAtual: valores.senhaAtual ? '' : 'Informe a senha atual.',
+        novaSenha: problemaNaNovaSenha(valores.novaSenha),
+        confirmarSenha: problemaNaConfirmacao(valores.novaSenha, valores.confirmarSenha),
+      }).filter(([, mensagem]) => mensagem)
+    )
 
-    if (valores.novaSenha.length < 8) {
-      setErro('A nova senha precisa de pelo menos 8 caracteres.')
-      return
-    }
-
-    if (valores.novaSenha !== valores.confirmarSenha) {
-      setErro('A confirmação não corresponde à nova senha.')
+    if (Object.keys(encontrados).length > 0) {
+      apontar(encontrados)
       return
     }
 
     setSalvando(true)
+    setErros({})
+    setErroGeral('')
 
     try {
       await alterarSenha({
@@ -107,56 +135,54 @@ function TrocaDeSenha({ onConcluido }) {
       setValores(SENHA_VAZIA)
       onConcluido('Senha alterada. Use a nova no próximo acesso.')
     } catch (problema) {
-      setErro(problema?.message || 'Não foi possível alterar a senha.')
+      const doServidor = errosDosCampos(problema, CAMPOS_DA_SENHA)
+
+      if (Object.keys(doServidor).length > 0) {
+        apontar(doServidor)
+      } else {
+        setErroGeral(problema?.message || 'Não foi possível alterar a senha.')
+      }
     } finally {
       setSalvando(false)
     }
   }
 
   return (
-    <form onSubmit={enviar} noValidate>
-      <label className="admin-field">
-        <span className="admin-field__label">Senha atual</span>
-        <input
-          type="password"
-          className="admin-input"
-          autoComplete="current-password"
-          value={valores.senhaAtual}
+    <form className="perfil-senha" onSubmit={enviar} noValidate>
+      <div className="perfil-senha__grade">
+        <CampoDeSenha
+          id={IDS_DA_SENHA.senhaAtual}
+          rotulo="Senha atual"
+          valor={valores.senhaAtual}
           onChange={alterar('senhaAtual')}
+          autoComplete="current-password"
+          erro={erros.senhaAtual}
         />
-      </label>
 
-      <div className="admin-form__row">
-        <div className="admin-field">
-          <label className="admin-field__label" htmlFor="campo-nova-senha">Nova senha</label>
-          <input
-            id="campo-nova-senha"
-            type="password"
-            className="admin-input"
-            autoComplete="new-password"
-            value={valores.novaSenha}
-            onChange={alterar('novaSenha')}
-            aria-describedby="dica-nova-senha"
-          />
-          <span id="dica-nova-senha" className="admin-field__hint">
-            Pelo menos 8 caracteres.
-          </span>
-        </div>
+        <CampoDeSenha
+          id={IDS_DA_SENHA.novaSenha}
+          rotulo="Nova senha"
+          valor={valores.novaSenha}
+          onChange={alterar('novaSenha')}
+          autoComplete="new-password"
+          erro={erros.novaSenha}
+          descricao={REGRAS_DA_NOVA_SENHA}
+        />
 
-        <label className="admin-field">
-          <span className="admin-field__label">Confirmar nova senha</span>
-          <input
-            type="password"
-            className="admin-input"
-            autoComplete="new-password"
-            value={valores.confirmarSenha}
-            onChange={alterar('confirmarSenha')}
-          />
-        </label>
+        <RegrasDaSenha id={REGRAS_DA_NOVA_SENHA} />
+
+        <CampoDeSenha
+          id={IDS_DA_SENHA.confirmarSenha}
+          rotulo="Confirmar nova senha"
+          valor={valores.confirmarSenha}
+          onChange={alterar('confirmarSenha')}
+          autoComplete="new-password"
+          erro={erros.confirmarSenha}
+        />
       </div>
 
-      {erro ? (
-        <p className="admin-field__error" role="alert">{erro}</p>
+      {erroGeral ? (
+        <p className="admin-field__error" role="alert">{erroGeral}</p>
       ) : null}
 
       <button type="submit" className="admin-btn" disabled={salvando}>
@@ -194,22 +220,31 @@ function TelefoneDeContato({ inicial, onConcluido }) {
   }
 
   return (
-    <form onSubmit={enviar} noValidate>
+    <form className="perfil-contato" onSubmit={enviar} noValidate>
       <div className="admin-field">
         <label className="admin-field__label" htmlFor="campo-telefone">Telefone</label>
-        <input
-          id="campo-telefone"
-          type="tel"
-          inputMode="numeric"
-          className="admin-input"
-          placeholder="(00) 00000-0000"
-          value={telefone}
-          onChange={(event) => {
-            setTelefone(mascararTelefone(event.target.value))
-            setErro('')
-          }}
-          aria-describedby="dica-telefone"
-        />
+
+        <div className="perfil-contato__linha">
+          <input
+            id="campo-telefone"
+            type="tel"
+            inputMode="numeric"
+            className="admin-input"
+            placeholder="(00) 00000-0000"
+            value={telefone}
+            onChange={(event) => {
+              setTelefone(mascararTelefone(event.target.value))
+              setErro('')
+            }}
+            aria-describedby="dica-telefone"
+          />
+
+          <button type="submit" className="admin-btn" disabled={salvando}>
+            <Icone icon={appIcons.save} />
+            {salvando ? 'Salvando...' : 'Salvar telefone'}
+          </button>
+        </div>
+
         <span id="dica-telefone" className="admin-field__hint">
           Opcional. Só você e quem administra as contas veem este número.
         </span>
@@ -218,11 +253,6 @@ function TelefoneDeContato({ inicial, onConcluido }) {
       {erro ? (
         <p className="admin-field__error" role="alert">{erro}</p>
       ) : null}
-
-      <button type="submit" className="admin-btn" disabled={salvando}>
-        <Icone icon={appIcons.save} />
-        {salvando ? 'Salvando...' : 'Salvar telefone'}
-      </button>
     </form>
   )
 }
@@ -320,6 +350,7 @@ export default function PerfilPage() {
               {organizacao} <span aria-hidden="true">·</span> Minha conta
             </p>
             <h1 className="perfil-page__name">{nome}</h1>
+            {email ? <p className="perfil-page__email">{email}</p> : null}
             <p className="perfil-page__meta">
               <span className={`role-badge role-badge--${user?.role || 'pesquisador'}`}>
                 {papel}
@@ -329,6 +360,11 @@ export default function PerfilPage() {
                   Último acesso {formatarUltimoAcesso(Date.parse(user.lastAccess)).toLowerCase()}
                 </span>
               ) : null}
+            </p>
+            <p className="perfil-page__nota">
+              {isAdministrador(user)
+                ? 'Para mudar nome, e-mail, papel ou organização, use Administração › Usuários.'
+                : 'Nome, e-mail, papel e organização são mantidos por quem administra as contas.'}
             </p>
           </div>
         </div>
@@ -360,50 +396,17 @@ export default function PerfilPage() {
         ) : null}
       </header>
 
+      {user?.role === ROLES.DEMANDANTE ? (
+        <Secao
+          className="perfil-card--faixa"
+          title="Contato"
+          description="Um telefone para a equipe da AC2 falar com a sua empresa."
+        >
+          <TelefoneDeContato inicial={user?.telefone || ''} onConcluido={showToast} />
+        </Secao>
+      ) : null}
+
       <div className="perfil-grid">
-        <Secao
-          title="Identificação"
-          description="Nome e e-mail são a sua credencial de acesso."
-          readOnly
-          hint="Para alterar nome ou e-mail, fale com quem administra as contas."
-        >
-          <label className="admin-field">
-            <span className="admin-field__label">Nome</span>
-            <input type="text" className="admin-input" value={nome} readOnly />
-          </label>
-
-          <label className="admin-field">
-            <span className="admin-field__label">E-mail</span>
-            <input type="email" className="admin-input" value={email} readOnly />
-          </label>
-        </Secao>
-
-        <Secao
-          title="Vínculo"
-          description="Como você entra na plataforma e em nome de quem."
-          readOnly
-          hint="Papel e organização são mantidos por quem administra as contas."
-        >
-          <label className="admin-field">
-            <span className="admin-field__label">Papel</span>
-            <input type="text" className="admin-input" value={papel} readOnly />
-          </label>
-
-          <label className="admin-field">
-            <span className="admin-field__label">Organização</span>
-            <input type="text" className="admin-input" value={organizacao} readOnly />
-          </label>
-        </Secao>
-
-        {user?.role === ROLES.DEMANDANTE ? (
-          <Secao
-            title="Contato"
-            description="Um telefone para a equipe da AC2 falar com a sua empresa."
-          >
-            <TelefoneDeContato inicial={user?.telefone || ''} onConcluido={showToast} />
-          </Secao>
-        ) : null}
-
         <Secao
           title="Senha"
           description="Troque quando quiser. A nova senha vale no próximo acesso."
@@ -412,6 +415,7 @@ export default function PerfilPage() {
         </Secao>
 
         <Secao
+          className="perfil-card--meus-dados"
           title="Meus dados"
           description="Baixe uma cópia do que a plataforma guarda sobre você, ou peça a exclusão da conta."
         >
@@ -435,8 +439,9 @@ export default function PerfilPage() {
                   Perfil profissional
                 </h2>
                 <p className="perfil-card__description">
-                  É o que o matching compara com as competências necessárias de
-                  cada oportunidade. As alterações valem depois que você salvar.
+                  É com estes dados que a plataforma sugere quem chamar para a
+                  equipe de cada oportunidade. As alterações valem depois que
+                  você salvar.
                 </p>
               </div>
 
@@ -467,7 +472,7 @@ export default function PerfilPage() {
               <Secao
                 nivel={3}
                 title="Titulação"
-                description="Vocabulário controlado — é por ele que o matching de supervisão filtra."
+                description="O seu maior título acadêmico."
               >
                 <label className="admin-field">
                   <span className="admin-field__label">Titulação</span>
@@ -482,12 +487,21 @@ export default function PerfilPage() {
                     ))}
                   </select>
                 </label>
+
+                <p className="perfil-card__note">
+                  Aparece para o Supervisor entre os motivos de cada sugestão de
+                  equipe e, quando duas pessoas empatam, desempata a favor de quem
+                  tem a titulação maior.
+                  {user?.role === ROLES.SUPERVISOR
+                    ? ' Como Supervisor, a partir do mestrado você vem na frente nas vagas de supervisão.'
+                    : ''}
+                </p>
               </Secao>
 
               <Secao
                 nivel={3}
                 title="Disponibilidade"
-                description="É o que torna a sugestão realista: competência sem disponibilidade produz equipe que não se sustenta."
+                description="Quanto tempo você tem hoje para entrar em novos projetos."
               >
                 <label className="admin-field">
                   <span className="admin-field__label">Disponibilidade atual</span>
@@ -503,14 +517,19 @@ export default function PerfilPage() {
                 </label>
 
                 <p className="perfil-card__note">
-                  Hoje: <strong>{disponibilidadeLabel(perfil.disponibilidade)}</strong>
+                  {EFEITO_DA_DISPONIBILIDADE[perfil.disponibilidade]}
+                </p>
+
+                <p className="perfil-card__note">
+                  O Supervisor vê a disponibilidade que você declarar junto de cada
+                  sugestão de equipe.
                 </p>
               </Secao>
 
               <Secao
                 nivel={3}
                 title="Experiência"
-                description="Projetos e tempo de atuação — texto livre."
+                description="Projetos de que você participou e há quanto tempo atua. As palavras daqui ajudam a ligar você a oportunidades da sua área."
               >
                 <label className="admin-field">
                   <span className="admin-field__label">Resumo da experiência</span>
@@ -527,7 +546,7 @@ export default function PerfilPage() {
               <Secao
                 nivel={3}
                 title="Competências"
-                description="Conhecimento científico e técnico que você domina."
+                description="O que você domina em conhecimento científico e técnico. É comparado com o que cada oportunidade precisa."
               >
                 <ListaEditavel
                   label="Competências"
@@ -540,7 +559,7 @@ export default function PerfilPage() {
               <Secao
                 nivel={3}
                 title="Técnicas"
-                description="Métodos e equipamentos que você opera."
+                description="Métodos e equipamentos que você opera. Também são comparados com o que cada oportunidade precisa."
               >
                 <ListaEditavel
                   label="Técnicas"
@@ -553,7 +572,7 @@ export default function PerfilPage() {
               <Secao
                 nivel={3}
                 title="Linhas de pesquisa"
-                description="Temas em que você atua."
+                description="Temas em que você pesquisa. Ajudam a ligar você a oportunidades da sua área."
               >
                 <ListaEditavel
                   label="Linhas de pesquisa"
