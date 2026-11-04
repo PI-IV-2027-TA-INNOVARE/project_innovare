@@ -33,7 +33,7 @@ async function definirSenha(senha = 'Bioinsumo!2026', confirmacao = senha) {
 
   await user.type(screen.getByLabelText(/^nova senha$|^senha de acesso$/i), senha)
   await user.type(screen.getByLabelText(/^confirmar/i), confirmacao)
-  await user.click(screen.getByRole('button'))
+  await user.click(screen.getByRole('button', { name: /^(definir|redefinir) senha$/i }))
 }
 
 beforeEach(() => {
@@ -97,7 +97,7 @@ describe('Primeiro acesso (RN-A04 / D06)', () => {
     primeiroAcesso()
     await definirSenha('curta')
 
-    expect(screen.getByText(/pelo menos 8 caracteres/i)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/pelo menos 8 caracteres/i)
     expect(resetPassword).not.toHaveBeenCalled()
   })
 
@@ -136,5 +136,56 @@ describe('Redefinição de senha — a variante padrão segue como era', () => {
       nova_senha: 'Bioinsumo!2026',
       confirmar_senha: 'Bioinsumo!2026',
     })
+  })
+})
+
+describe('Nova senha — as regras do servidor e o campo', () => {
+  it('mostra as regras que o servidor aplica antes de enviar', () => {
+    redefinicao()
+
+    expect(screen.getByLabelText(/^nova senha$/i)).toHaveAccessibleDescription(/só números/i)
+    expect(screen.getByText(/senha comum/i)).toBeInTheDocument()
+  })
+
+  it('deixa mostrar o que foi digitado nos dois campos', () => {
+    redefinicao()
+
+    expect(screen.getAllByRole('button', { name: 'Mostrar senha' })).toHaveLength(2)
+  })
+
+  it('recusa senha só com números antes de chamar a API', async () => {
+    primeiroAcesso()
+    await definirSenha('12345678')
+
+    expect(screen.getByLabelText(/^senha de acesso$/i)).toHaveAccessibleDescription(/só números/i)
+    expect(resetPassword).not.toHaveBeenCalled()
+  })
+
+  it('a recusa do servidor aparece no campo da senha', async () => {
+    resetPassword.mockRejectedValue(
+      Object.assign(new Error('nova_senha: Esta senha é muito comum.'), {
+        data: { nova_senha: ['Esta senha é muito comum.'] },
+      })
+    )
+
+    redefinicao()
+    await definirSenha()
+
+    expect(await screen.findByText('Esta senha é muito comum.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^nova senha$/i)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('a falha que não é de campo continua no aviso geral', async () => {
+    resetPassword.mockRejectedValue(
+      Object.assign(new Error('Link expirado. Peça um novo.'), {
+        data: { detail: 'Link expirado. Peça um novo.' },
+      })
+    )
+
+    redefinicao()
+    await definirSenha()
+
+    expect(await screen.findByText('Link expirado. Peça um novo.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^nova senha$/i)).not.toHaveAttribute('aria-invalid')
   })
 })
