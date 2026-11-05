@@ -36,6 +36,15 @@ import { getDefaultBranding } from '../theme/brandTokens'
  * da Saude e de Meus dados sem a cor. Agora mora no estilo comum do console. A
  * linha de quem pediu exclusao ganha um fundo de Alerta, e o texto do pedido,
  * tambem em Alerta, precisa manter 4,5:1 sobre esse fundo.
+ *
+ * Na tela de Permissoes, "Sim" e um selo cheio de Sucesso, com o texto da cor
+ * de destaque por cima, e os valores parciais sao uma tinta de azul-marinho.
+ * A tinta de Sucesso com texto verde nao serve: chega a 3,7:1 no tema claro.
+ * O aviso da tabela de provedores, na Saude, e texto de Alerta sobre uma tinta
+ * de Alerta. Os selos de estado da Saude seguem a mesma conta: atencao e texto
+ * de Alerta sobre tinta de Alerta, e critico e um selo cheio de Erro com o
+ * texto da cor de destaque, porque texto vermelho sobre tinta vermelha fica
+ * abaixo de 4,5:1 no tema claro.
  */
 
 const AA_TEXTO_NORMAL = 4.5
@@ -192,6 +201,76 @@ describe('selo do perfil Administrador — WCAG 2.2 AA', () => {
     expect(contraste(valorDeVariavel(cores, 'color-text-inverse-dark'), escuro))
       .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
   })
+})
+
+describe('selos da tela de Permissões — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+  const parcial = telaAdmin.match(
+    /\.permissoes__valor--administrativo\s*\{[^}]*color:\s*var\(--accent-secondary\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-secondary\) (\d+)%/
+  )
+
+  it('"Sim" é Sucesso cheio, e os valores parciais são tinta de azul-marinho', () => {
+    expect(telaAdmin).toMatch(
+      /\.permissoes__valor--sim\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-green\)/
+    )
+    expect(parcial).not.toBeNull()
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos selos entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundoParcial = sobre(paleta.accentSecondary, paleta.bgCard, Number(parcial[1]) / 100)
+
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentGreen))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(paleta.accentSecondary, fundoParcial)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+describe('aviso da tabela de provedores na Saúde — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+  const aviso = telaAdmin.match(
+    /\.saude__tabela-aviso\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%[^}]*color:\s*var\(--accent-warning\)/
+  )
+
+  it('usa a cor de Alerta, e não cores fixas de tema claro', () => {
+    expect(aviso).not.toBeNull()
+  })
+
+  for (const tema of ['light', 'dark']) {
+    it(`o texto do aviso entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundo = sobre(paleta.accentWarning, paleta.bgCard, Number(aviso[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundo)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+describe('selos de estado na Saúde — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+  const inicio = telaAdmin.indexOf('\n.saude__selo {')
+  const selo = telaAdmin.slice(inicio, telaAdmin.indexOf('\n}', inicio))
+  const atencao = selo.match(
+    /&--atencao\s*\{[^}]*color:\s*var\(--accent-warning\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/
+  )
+
+  it('atenção é tinta de Alerta, e crítico é Erro cheio com o texto da cor de destaque', () => {
+    expect(atencao).not.toBeNull()
+    expect(selo).toMatch(/&--critico\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-error\)/)
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos selos de atenção e de crítico entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundoAtencao = sobre(paleta.accentWarning, paleta.bgCard, Number(atencao[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundoAtencao)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentError))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
 })
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')

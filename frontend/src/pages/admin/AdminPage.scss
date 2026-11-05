@@ -583,7 +583,7 @@
 .saude__detalhes {
   margin-top: var(--admin-pad);
   padding: var(--admin-pad);
-  background: var(--admin-card-bg);
+  background: var(--bg-card);
   border: 1px solid var(--admin-card-border);
   border-radius: var(--radius-lg, 14px);
 }
@@ -611,11 +611,16 @@
     border-color: var(--accent-secondary);
   }
 
-  &--atencao,
+  &--atencao {
+    color: var(--accent-warning);
+    border-color: color-mix(in srgb, var(--accent-warning) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+  }
+
   &--critico {
-    color: var(--accent-primary-text);
-    border-color: var(--border-accent);
-    background: var(--accent-primary-dim);
+    color: var(--text-on-accent);
+    border-color: var(--accent-error);
+    background: var(--accent-error);
   }
 }
 
@@ -655,9 +660,12 @@
   transition: width 240ms ease;
 }
 
-.saude__barra--atencao .saude__barra-preenchida,
+.saude__barra--atencao .saude__barra-preenchida {
+  background: var(--accent-warning);
+}
+
 .saude__barra--critico .saude__barra-preenchida {
-  background: var(--accent-primary);
+  background: var(--accent-error);
 }
 
 .saude__barra-legenda {
@@ -677,6 +685,13 @@
   margin-top: var(--admin-pad);
   padding-top: var(--admin-pad);
   border-top: 1px solid var(--admin-card-border);
+}
+
+.saude__dica {
+  display: none;
+  margin: 8px 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
 
 .saude__tabela-rolagem {
@@ -714,13 +729,20 @@
   font-weight: 600;
 }
 
+.saude__tabela th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-card);
+}
+
 .saude__tabela-aviso {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--admin-callout-alerta-bg, #fef3c7);
-  color: var(--admin-callout-alerta-text, #92400e);
+  background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+  color: var(--accent-warning);
   font-size: 0.6875rem;
   font-weight: 600;
 }
@@ -862,7 +884,7 @@
   }
 
   &--atencao {
-    border-left-color: var(--accent-primary);
+    border-left-color: var(--accent-warning);
   }
 
   &--critico {
@@ -899,7 +921,7 @@
 }
 
 .saude__verificacao--atencao .saude__verificacao-resposta svg {
-  color: var(--accent-primary);
+  color: var(--accent-warning);
 }
 
 .saude__verificacao--critico .saude__verificacao-resposta svg {
@@ -933,8 +955,8 @@
   gap: 10px;
   margin-bottom: var(--admin-pad);
   padding: 12px 14px;
-  background: var(--accent-primary-dim);
-  border: 1px solid var(--border-accent);
+  background: color-mix(in srgb, var(--accent-warning) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-warning) 28%, transparent);
   border-radius: var(--radius-md, 10px);
 
   > svg {
@@ -942,7 +964,7 @@
     margin-top: 2px;
     width: 16px;
     height: 16px;
-    color: var(--accent-primary-text);
+    color: var(--accent-warning);
   }
 
   ul {
@@ -1024,9 +1046,10 @@
   align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
+  margin-bottom: var(--admin-gap);
   border: 1px solid var(--admin-card-border);
   border-radius: 10px;
-  background: var(--admin-card-bg);
+  background: var(--bg-card);
 
   p {
     margin: 0;
@@ -1046,16 +1069,23 @@
   color: var(--accent-primary-text);
 }
 
+.permissoes__dica {
+  display: none;
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 .permissoes__rolagem {
   overflow-x: auto;
   border: 1px solid var(--admin-card-border);
   border-radius: 10px;
-  background: var(--admin-card-bg);
+  background: var(--bg-card);
 }
 
 .permissoes__tabela {
   width: 100%;
-  min-width: 760px;
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 0.8125rem;
 }
@@ -1088,6 +1118,13 @@
   font-weight: 600;
 }
 
+.permissoes__tabela th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-card);
+}
+
 .permissoes__tabela tbody tr:last-child th,
 .permissoes__tabela tbody tr:last-child td {
   border-bottom: none;
@@ -1103,8 +1140,8 @@
 }
 
 .permissoes__valor--sim {
-  background: var(--admin-callout-sucesso-bg, #dcfce7);
-  color: var(--admin-callout-sucesso-text, #166534);
+  color: var(--text-on-accent);
+  background: var(--accent-green);
 }
 
 .permissoes__valor--nao {
@@ -1114,18 +1151,19 @@
 .permissoes__valor--acompanha,
 .permissoes__valor--proprias,
 .permissoes__valor--administrativo {
-  background: var(--admin-callout-info-bg, #e0f2fe);
-  color: var(--admin-callout-info-text, #075985);
+  color: var(--accent-secondary);
+  background: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
 }
 
 .permissoes__notas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px 18px;
-  margin: 0;
+  margin: var(--admin-gap) 0 0;
 
   div {
     display: grid;
+    align-content: start;
     gap: 2px;
   }
 
@@ -1140,5 +1178,30 @@
     font-size: 0.8125rem;
     line-height: 1.5;
     color: var(--text-muted);
+  }
+}
+
+.permissoes__nota {
+  margin: 12px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .permissoes__dica {
+    display: block;
+  }
+
+  .permissoes__tabela th:first-child {
+    box-shadow: inset -1px 0 0 var(--admin-card-border);
+  }
+
+  .saude__dica {
+    display: block;
+  }
+
+  .saude__tabela th:first-child {
+    box-shadow: inset -1px 0 0 var(--admin-card-border);
   }
 }

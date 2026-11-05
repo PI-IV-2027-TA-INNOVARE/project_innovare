@@ -432,6 +432,10 @@ function Provedores({ provedores }) {
         ver quem respondeu, quem falhou e quanto cada um custou.
       </p>
 
+      <p className="saude__dica">
+        Deslize a tabela para o lado para ver todas as colunas.
+      </p>
+
       <div className="saude__tabela-rolagem">
         <table className="saude__tabela">
           <caption className="saude__fonte">

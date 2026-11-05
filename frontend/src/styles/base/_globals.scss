@@ -57,6 +57,7 @@
   --text-inverse: #{$color-text-inverse};
   --text-inverse-muted: #{$color-text-inverse-muted};
   --text-on-accent: #{$color-text-inverse};
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --border-color: #{$color-border};
   --border-accent: #{$color-border-accent};

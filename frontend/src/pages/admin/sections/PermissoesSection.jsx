@@ -28,9 +28,8 @@ export default function PermissoesSection() {
         <div>
           <h2 className="admin-section__title">Permissões</h2>
           <p className="admin-section__description">
-            A matriz macro de responsabilidades por perfil. Ela é fixa: mudar
-            quem pode o quê é uma decisão de escopo, não uma configuração desta
-            tela.
+            O que cada perfil pode fazer na plataforma. Essas regras são fixas:
+            mudá-las é uma decisão do projeto, não uma configuração desta tela.
           </p>
         </div>
       </header>
@@ -43,6 +42,10 @@ export default function PermissoesSection() {
           continuam com o Supervisor.
         </p>
       </div>
+
+      <p className="permissoes__dica">
+        Deslize a tabela para o lado para ver os quatro perfis.
+      </p>
 
       <div className="permissoes__rolagem">
         <table className="permissoes__tabela">
@@ -81,13 +84,17 @@ export default function PermissoesSection() {
         </div>
         <div>
           <dt>Próprias</dt>
-          <dd>Somente as oportunidades que cadastrou.</dd>
+          <dd>As oportunidades da própria empresa, mesmo as cadastradas por outro Demandante dela.</dd>
         </div>
         <div>
           <dt>Administrativo</dt>
           <dd>Consulta para auditoria, sem conduzir o fluxo científico.</dd>
         </div>
       </dl>
+
+      <p className="permissoes__nota">
+        O Pesquisador não tem autocadastro: a conta dele nasce do cadastro feito pelo Supervisor.
+      </p>
     </div>
   )
 }

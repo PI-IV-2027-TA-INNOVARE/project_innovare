@@ -47,6 +47,46 @@ describe('PermissoesSection', () => {
     expect(within(decisao).getAllByRole('cell')[3]).toHaveTextContent('Não')
   })
 
+  it('explica que o Demandante acompanha as oportunidades da empresa dele (PB22)', () => {
+    render(<PermissoesSection />)
+
+    expect(
+      screen.getByText('As oportunidades da própria empresa, mesmo as cadastradas por outro Demandante dela.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/somente as oportunidades que cadastrou/i)).not.toBeInTheDocument()
+  })
+
+  it('o Administrador gerencia contas e acessos, e não permissões (PB04, opção A)', () => {
+    render(<PermissoesSection />)
+
+    const linha = screen.getByRole('row', { name: /gerenciar contas e acessos/i })
+
+    expect(within(linha).getAllByRole('cell')[3]).toHaveTextContent('Sim')
+    expect(screen.queryByRole('row', { name: /permissões/i })).not.toBeInTheDocument()
+  })
+
+  it('o subtítulo fala a língua de quem administra, sem jargão do projeto', () => {
+    render(<PermissoesSection />)
+
+    expect(screen.getByText(/^O que cada perfil pode fazer na plataforma\./)).toBeInTheDocument()
+    expect(screen.queryByText(/matriz macro/i)).not.toBeInTheDocument()
+  })
+
+  it('a falta de autocadastro vira nota, e não uma linha que ninguém faz', () => {
+    render(<PermissoesSection />)
+
+    expect(screen.queryByRole('row', { name: /autocadastro/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByText('O Pesquisador não tem autocadastro: a conta dele nasce do cadastro feito pelo Supervisor.')
+    ).toBeInTheDocument()
+  })
+
+  it('avisa que a tabela rola para o lado quando a tela é estreita', () => {
+    render(<PermissoesSection />)
+
+    expect(screen.getByText('Deslize a tabela para o lado para ver os quatro perfis.')).toBeInTheDocument()
+  })
+
   it('deixa claro que a tela é somente leitura', () => {
     render(<PermissoesSection />)
 

@@ -38,13 +38,6 @@ export const MATRIZ_DE_RESPONSABILIDADES = Object.freeze([
     [ROLES.ADMINISTRADOR]: 'Não',
   },
   {
-    acao: 'Autocadastro de pesquisador',
-    [ROLES.DEMANDANTE]: 'Não',
-    [ROLES.PESQUISADOR]: 'Não',
-    [ROLES.SUPERVISOR]: 'Não',
-    [ROLES.ADMINISTRADOR]: 'Não',
-  },
-  {
     acao: 'Editar o próprio perfil de pesquisador',
     [ROLES.DEMANDANTE]: 'Não',
     [ROLES.PESQUISADOR]: 'Sim',
@@ -73,7 +66,7 @@ export const MATRIZ_DE_RESPONSABILIDADES = Object.freeze([
     [ROLES.ADMINISTRADOR]: 'Não',
   },
   {
-    acao: 'Gerenciar contas e permissões',
+    acao: 'Gerenciar contas e acessos',
     [ROLES.DEMANDANTE]: 'Não',
     [ROLES.PESQUISADOR]: 'Não',
     [ROLES.SUPERVISOR]: 'Não',

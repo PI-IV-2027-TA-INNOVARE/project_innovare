@@ -138,6 +138,16 @@ describe('SaudeSection — consumo de IA', () => {
     ).toBeInTheDocument()
   })
 
+  it('avisa que a tabela de provedores rola para o lado quando a tela é estreita', async () => {
+    render(<SaudeSection />)
+
+    const consumo = await screen.findByRole('region', { name: /consumo de ia/i })
+
+    expect(
+      within(consumo).getByText('Deslize a tabela para o lado para ver todas as colunas.'),
+    ).toBeInTheDocument()
+  })
+
   it('um uso no singular, sem o "(s)" de formulário', async () => {
     api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(comConsumo({ chamadas: 1 }))
 
