@@ -977,20 +977,6 @@
   color: var(--text-muted);
 }
 
-.admin-callout--alerta {
-  background: color-mix(in srgb, var(--accent-warm) 9%, transparent);
-  border-color: color-mix(in srgb, var(--accent-warm) 28%, transparent);
-  border-left-color: var(--accent-warm);
-
-  .admin-callout__icon {
-    color: var(--accent-warm);
-  }
-
-  .admin-callout__text {
-    color: var(--text-primary);
-  }
-}
-
 .copiloto__corpo .admin-callout,
 .proposta__corpo .admin-callout,
 .preanalise__corpo .admin-callout,
@@ -1304,8 +1290,8 @@
   }
 
   &--pendente {
-    color: var(--accent-warm);
-    border-color: color-mix(in srgb, var(--accent-warm) 40%, transparent);
+    color: var(--accent-warning);
+    border-color: color-mix(in srgb, var(--accent-warning) 40%, transparent);
   }
 }
 
@@ -1406,8 +1392,8 @@
   }
 
   &--fragil {
-    color: var(--accent-warm);
-    border-color: color-mix(in srgb, var(--accent-warm) 40%, transparent);
+    color: var(--accent-warning);
+    border-color: color-mix(in srgb, var(--accent-warning) 40%, transparent);
   }
 }
 
@@ -1455,7 +1441,7 @@
   }
 
   &--recuou {
-    color: var(--accent-warm);
+    color: var(--accent-warning);
   }
 }
 

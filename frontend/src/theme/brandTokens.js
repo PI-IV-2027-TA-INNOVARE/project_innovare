@@ -67,7 +67,7 @@ export const BRAND_TOKEN_GROUPS = Object.freeze([
         id: 'accentWarm',
         label: 'Laranja claro (fundo de destaque)',
         kind: 'destaque',
-        hint: 'Fundo de avisos e faixas de destaque.',
+        hint: 'Fundo das mensagens de confirmação nas telas de acesso.',
         cssVar: '--accent-warm',
         light: AC2_PALETTE.orangeLight,
         dark: 'rgba(224, 123, 26, 0.16)',
@@ -145,7 +145,7 @@ export const BRAND_TOKEN_GROUPS = Object.freeze([
   {
     id: 'estados',
     label: 'Estados',
-    description: 'Feedback de sucesso e de erro.',
+    description: 'Feedback de sucesso, de alerta e de erro.',
     tokens: [
       {
         id: 'accentGreen',
@@ -155,6 +155,15 @@ export const BRAND_TOKEN_GROUPS = Object.freeze([
         cssVar: '--accent-green',
         light: '#2F7D5B',
         dark: '#5FB18A',
+      },
+      {
+        id: 'accentWarning',
+        label: 'Alerta',
+        kind: 'estado',
+        hint: 'Avisos de atenção, pendências e pontos frágeis.',
+        cssVar: '--accent-warning',
+        light: '#8A5300',
+        dark: '#F0B254',
       },
       {
         id: 'accentError',
@@ -259,7 +268,7 @@ export function isValidHex(color) {
 }
 
 const RGB_FUNCIONAL =
-  /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d+)\s*)?\)$/i
+  /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(0|1|0?\.\d+)\s*)?\)$/i
 
 /**
  * Se o valor pode virar custom property sem apagar a cor da tela.
@@ -269,13 +278,51 @@ const RGB_FUNCIONAL =
  * seis digitos que o seletor de cor produz. Aceitar so hex tornaria esses dois
  * tokens impossiveis de restaurar.
  *
- * `isValidHex` continua existindo para o `<input type="color">`, que so sabe
- * falar hex: la a pergunta e outra - "da para abrir o seletor neste valor".
+ * O `<input type="color">` so fala hex de seis digitos, sem alfa: `toPickerHex`
+ * traduz o valor para o seletor abrir na cor atual, e `withPickedHue` devolve o
+ * alfa ao que o admin escolher, para o veu nao virar cor solida.
  */
 export function isValidColor(color) {
   const texto = String(color || '').trim()
 
   return isValidHex(texto) || RGB_FUNCIONAL.test(texto)
+}
+
+function parseColor(color) {
+  const texto = String(color || '').trim()
+
+  if (isValidHex(texto)) return { ...parseHex(texto), alpha: 1 }
+
+  const partes = texto.match(RGB_FUNCIONAL)
+
+  if (!partes) return null
+
+  return {
+    r: Math.min(Number(partes[1]), 255),
+    g: Math.min(Number(partes[2]), 255),
+    b: Math.min(Number(partes[3]), 255),
+    alpha: partes[4] === undefined ? 1 : Number(partes[4]),
+  }
+}
+
+export function toPickerHex(color) {
+  const cor = parseColor(color)
+
+  if (!cor) return null
+
+  return '#' + [cor.r, cor.g, cor.b].map((canal) => canal.toString(16).padStart(2, '0')).join('')
+}
+
+export function alphaOf(color) {
+  const cor = parseColor(color)
+
+  return cor ? cor.alpha : null
+}
+
+export function withPickedHue(current, pickedHex) {
+  const cor = parseColor(current)
+
+  return cor && cor.alpha < 1 ? withAlpha(pickedHex, cor.alpha) : pickedHex
 }
 
 export function toRgbaString(color, alpha = 1) {

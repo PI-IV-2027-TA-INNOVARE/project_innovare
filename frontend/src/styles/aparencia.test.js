@@ -17,10 +17,25 @@ import { describe, expect, it } from 'vitest'
  * A coluna do valor precisa encolher abaixo da largura natural do campo hex,
  * uns 170 px; sem isso o botao de copiar sai cortado.
  *
+ * O cabecalho de cada grupo traz a descricao e uma amostra de cada cor, para o
+ * grupo recolhido dizer o que guarda sem precisar abrir. A amostra tem contorno
+ * porque a cor pode ser clara ou translucida como o proprio cartao. Em grupo
+ * estreito as amostras descem para baixo da descricao; ao lado do titulo elas
+ * o espremeriam contra a contagem.
+ *
  * O `<input type="color">` da amostra e transparente por cima dela, entao o
  * contorno de foco desenhado nele some junto: o foco do teclado aparece como
  * anel na propria amostra. O anel e duplo, laranja e cor do cartao, porque a
  * amostra pode ser justamente da cor do anel.
+ *
+ * A amostra da cor translucida mostra a cor como ela aparece na plataforma: o
+ * veu sobre o fundo do cartao. Xadrez, ou amostra metade cheia e metade xadrez,
+ * e convencao de editor de imagem; aqui parecia defeito de tela, e o admin quer
+ * ver o resultado, nao a transparencia. A opacidade vai escrita embaixo do
+ * valor, porque o seletor de cor abre na cor cheia e a amostra mostra o veu.
+ * A amostra tem contorno porque algumas cores sao o proprio fundo da linha: o
+ * Fundo secundario e a cor da linha nos dois temas, e sem contorno a amostra
+ * dele parecia um espaco vazio.
  *
  * Os textos de apoio usavam `--text-muted` com `opacity: .8`. No tema claro
  * isso chega ao olho a 3,70:1 sobre o cartao, abaixo dos 4,5:1 da WCAG 2.2 AA;
@@ -71,6 +86,17 @@ describe('tela Aparência', () => {
     )
   })
 
+  it('a amostra do cabeçalho tem contorno, para cor clara não sumir no cartão', () => {
+    expect(bloco('.tokens-group__amostra')).toMatch(/box-shadow:\s*inset/)
+  })
+
+  it('em grupo estreito as amostras do cabeçalho descem para baixo da descrição', () => {
+    expect(bloco('.tokens-group')).toMatch(/container:\s*grupo\s*\/\s*inline-size/)
+    expect(admin).toMatch(
+      /@container grupo[^{]*\{[\s\S]*?\.tokens-group__amostras\s*\{[^}]*grid-row:\s*2/
+    )
+  })
+
   it('a coluna do valor encolhe sem cortar o botão de copiar', () => {
     expect(bloco('.token-card__valor')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/)
   })
@@ -85,6 +111,16 @@ describe('tela Aparência', () => {
     expect(anel[1]).toMatch(/var\(--bg-card\)/)
   })
 
+  it('a amostra tem contorno, para a cor igual ao fundo da linha não sumir', () => {
+    expect(declaracoesProprias('.token-card__swatch-fill')).toMatch(/box-shadow:\s*inset 0 0 0 1px/)
+  })
+
+  it('a amostra mostra a cor translúcida como ela aparece, sobre o fundo do cartão', () => {
+    expect(declaracoesProprias('.token-card__swatch')).toMatch(/background:\s*var\(--bg-card\)/)
+    expect(declaracoesProprias('.token-card__swatch-fill')).not.toMatch(/background/)
+    expect(admin).not.toMatch(/conic-gradient|--amostra-opaca/)
+  })
+
   it('marca no próprio campo a cor recusada', () => {
     expect(bloco('.token-card__hex')).toMatch(
       /&\[aria-invalid='true'\]\s*\{[^}]*border-color:\s*var\(--accent-error\)/
@@ -96,6 +132,7 @@ describe('tela Aparência', () => {
     '.appearance-toolbar__count',
     '.tokens-group__description',
     '.token-card__hint',
+    '.token-card__opacidade',
     '.exemplo-de-estados__titulo',
   ])('%s não perde contraste por opacidade', (seletor) => {
     expect(declaracoesProprias(seletor)).not.toMatch(/opacity:\s*0?\.\d/)

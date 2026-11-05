@@ -405,6 +405,20 @@
   color: var(--text-muted);
 }
 
+.admin-callout--alerta {
+  background: color-mix(in srgb, var(--accent-warning) 9%, transparent);
+  border-color: color-mix(in srgb, var(--accent-warning) 28%, transparent);
+  border-left-color: var(--accent-warning);
+
+  .admin-callout__icon {
+    color: var(--accent-warning);
+  }
+
+  .admin-callout__text {
+    color: var(--text-primary);
+  }
+}
+
 .admin-callout__detail {
   flex-basis: 100%;
   padding-top: 8px;
@@ -734,6 +748,22 @@
       }
     }
   }
+
+  tbody tr.is-pedido {
+    background: color-mix(in srgb, var(--accent-warning) 8%, transparent);
+
+    td:first-child {
+      box-shadow: inset 3px 0 0 var(--accent-warning);
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+
+      td:first-child {
+        box-shadow: inset 3px 0 0 var(--accent-warning);
+      }
+    }
+  }
 }
 
 .admin-table__actions-col {
@@ -838,9 +868,12 @@
 }
 
 .user-cell__pedido {
-  display: block;
-  margin-top: 4px;
-  color: var(--accent-primary-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--accent-warning);
 }
 
 .user-cell__email {
@@ -864,7 +897,7 @@
 
   &--administrador {
     color: var(--text-on-accent, #fff);
-    background: var(--accent-primary);
+    background: var(--accent-primary-text);
   }
 
   &--pesquisador {
@@ -1597,6 +1630,7 @@
       grid-template-columns: 108px minmax(0, 1fr);
       gap: 12px;
       align-items: center;
+      justify-items: start;
       padding: 0;
       border: none;
 
@@ -1623,6 +1657,23 @@
 
     td.admin-table__actions-col {
       justify-items: end;
+    }
+
+    tbody tr.is-pedido {
+      box-shadow: inset 3px 0 0 var(--accent-warning);
+
+      td:first-child {
+        box-shadow: none;
+      }
+    }
+
+    .user-cell__pedido {
+      grid-column: 2;
+      margin-top: 0;
+    }
+
+    .user-cell__email {
+      overflow-wrap: anywhere;
     }
   }
 }

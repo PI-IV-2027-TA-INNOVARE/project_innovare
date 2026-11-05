@@ -3,7 +3,12 @@ import AdminModal from '../../../components/console/AdminModal'
 import { useBranding } from '../../../context/BrandingContext'
 import { useTheme } from '../../../context/ThemeContext'
 import { Icone, appIcons } from '../../../lib/icons'
-import { TOKEN_KIND_LABELS, isValidHex } from '../../../theme/brandTokens'
+import {
+  TOKEN_KIND_LABELS,
+  alphaOf,
+  toPickerHex,
+  withPickedHue,
+} from '../../../theme/brandTokens'
 import { SITUACOES } from '../../app/oportunidades/oportunidadesData'
 
 const TOAST_MS = 2600
@@ -17,10 +22,6 @@ function normalize(text) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
-}
-
-function toColorInputValue(value, fallback) {
-  return isValidHex(value) ? value : fallback
 }
 
 async function copyText(text) {
@@ -59,19 +60,23 @@ function TokenCard({
   copied,
 }) {
   const erroId = useId()
+  const opacidadeId = useId()
   const kindLabel = TOKEN_KIND_LABELS[token.kind] || 'Token'
+  const corDoSeletor = toPickerHex(value) || toPickerHex(token.light)
+  const alfa = alphaOf(value)
+  const opacidade = alfa !== null && alfa < 1 ? Math.round(alfa * 100) : null
 
   return (
     <article className={`token-card${isCustomized ? ' is-customized' : ''}`}>
       <label className="token-card__swatch" title={`Escolher ${token.label}`}>
-        <span className="token-card__swatch-fill" style={{ background: value }} aria-hidden="true" />
+        <span className="token-card__swatch-fill" style={{ backgroundColor: value }} aria-hidden="true" />
         <span className="token-card__swatch-action" aria-hidden="true">
           <Icone icon={appIcons.appearance} />
         </span>
         <input
           type="color"
-          value={toColorInputValue(value, token.light)}
-          onChange={(event) => onChange(event.target.value)}
+          value={corDoSeletor}
+          onChange={(event) => onChange(withPickedHue(value, event.target.value))}
           aria-label={`Escolher ${token.label}`}
         />
       </label>
@@ -95,7 +100,7 @@ function TokenCard({
             spellCheck="false"
             aria-label={`Valor de ${token.label}`}
             aria-invalid={invalido || undefined}
-            aria-describedby={invalido ? erroId : undefined}
+            aria-describedby={invalido ? erroId : opacidade === null ? undefined : opacidadeId}
           />
 
           <button
@@ -112,6 +117,12 @@ function TokenCard({
         {invalido ? (
           <p id={erroId} className="admin-field__error">
             Não é uma cor. Use hexadecimal, como #1B5E20, ou rgba().
+          </p>
+        ) : null}
+
+        {opacidade !== null ? (
+          <p id={opacidadeId} className="token-card__opacidade">
+            {`Translúcida, com ${opacidade}% de opacidade.`}
           </p>
         ) : null}
       </div>
@@ -152,6 +163,9 @@ function ExemploDeEstados() {
         <p className="exemplo-de-estados__alerta exemplo-de-estados__alerta--ok">
           Equipe potencial sugerida com 4 pesquisadores.
         </p>
+        <p className="exemplo-de-estados__alerta exemplo-de-estados__alerta--atencao">
+          Proposta aguardando revisão do Supervisor.
+        </p>
         <p className="exemplo-de-estados__alerta exemplo-de-estados__alerta--erro">
           Competência necessária sem correspondência na rede.
         </p>
@@ -174,6 +188,9 @@ function TokenGroup({
   cardProps,
 }) {
   const panelId = useId()
+  const tituloId = useId()
+  const totalId = useId()
+  const descricaoId = useId()
   const Exemplo = EXEMPLOS_POR_GRUPO[group.id]
 
   return (
@@ -183,21 +200,34 @@ function TokenGroup({
         className="tokens-group__toggle"
         aria-expanded={!collapsed}
         aria-controls={panelId}
+        aria-labelledby={`${tituloId} ${totalId}`}
+        aria-describedby={descricaoId}
         onClick={onToggle}
       >
         <Icone
           icon={appIcons.disclosure}
           className={`disclosure__chevron${collapsed ? '' : ' is-open'}`}
         />
-        <span className="tokens-group__title">{group.label}</span>
-        <span className="tokens-group__count">
+        <span className="tokens-group__cabecalho">
+          <span id={tituloId} className="tokens-group__title">{group.label}</span>
+          <span id={descricaoId} className="tokens-group__description">{group.description}</span>
+        </span>
+        <span className="tokens-group__amostras" aria-hidden="true">
+          {group.tokens.map((token) => (
+            <span
+              key={token.id}
+              className="tokens-group__amostra"
+              style={{ backgroundColor: branding[token.id] }}
+              title={token.label}
+            />
+          ))}
+        </span>
+        <span id={totalId} className="tokens-group__count">
           {group.tokens.length} {group.tokens.length === 1 ? 'cor' : 'cores'}
         </span>
       </button>
 
       <div id={panelId} className="tokens-group__panel" hidden={collapsed}>
-        <p className="tokens-group__description">{group.description}</p>
-
         <div className="tokens-group__lista">
           {group.tokens.map((token) => (
             <TokenCard

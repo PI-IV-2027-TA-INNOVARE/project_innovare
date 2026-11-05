@@ -23,6 +23,7 @@ import {
   PERFIS,
   STATUS,
   daApi,
+  formatarDataCompleta,
   formatarUltimoAcesso,
   paraApi,
   perfilLabel,
@@ -42,6 +43,19 @@ const COLUNAS = [
 
 const POR_PAGINA = [10, 25, 50]
 
+function temPedidoAberto(usuario) {
+  return Boolean(usuario.exclusaoSolicitadaEm) && !usuario.anonimizada
+}
+
+function ultimoAcessoPorExtenso(usuario) {
+  if (usuario.aguardandoPrimeiroAcesso) return 'Aguardando primeiro acesso'
+
+  const relativo = formatarUltimoAcesso(usuario.ultimoAcesso)
+  const completo = formatarDataCompleta(usuario.ultimoAcesso)
+
+  return completo ? `${relativo} (${completo})` : relativo
+}
+
 function comparar(a, b, campo) {
   if (campo === 'ultimoAcesso') return a.ultimoAcesso - b.ultimoAcesso
   if (campo === 'perfil') return perfilLabel(a.perfil).localeCompare(perfilLabel(b.perfil), 'pt-BR')
@@ -59,6 +73,7 @@ export default function UsersSection() {
   const [busca, setBusca] = useState('')
   const [perfilFiltro, setPerfilFiltro] = useState('todos')
   const [statusFiltro, setStatusFiltro] = useState('todos')
+  const [soPedidos, setSoPedidos] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
 
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
@@ -89,7 +104,7 @@ export default function UsersSection() {
 
   useEffect(() => {
     setPagina(1)
-  }, [busca, perfilFiltro, statusFiltro, porPagina])
+  }, [busca, perfilFiltro, statusFiltro, soPedidos, porPagina])
 
   const estatisticas = useMemo(() => ({
     total: usuarios.length,
@@ -98,20 +113,23 @@ export default function UsersSection() {
     demandantes: usuarios.filter((usuario) => usuario.perfil === 'demandante').length,
   }), [usuarios])
 
+  const pedidosAbertos = useMemo(() => usuarios.filter(temPedidoAberto).length, [usuarios])
+
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
     return usuarios.filter((usuario) => {
       const perfilOk = perfilFiltro === 'todos' || usuario.perfil === perfilFiltro
       const statusOk = statusFiltro === 'todos' || usuario.status === statusFiltro
+      const pedidoOk = !soPedidos || temPedidoAberto(usuario)
       const buscaOk =
         !termo ||
         usuario.nome.toLowerCase().includes(termo) ||
         usuario.email.toLowerCase().includes(termo)
 
-      return perfilOk && statusOk && buscaOk
+      return perfilOk && statusOk && pedidoOk && buscaOk
     })
-  }, [busca, perfilFiltro, statusFiltro, usuarios])
+  }, [busca, perfilFiltro, statusFiltro, soPedidos, usuarios])
 
   const ordenados = useMemo(() => {
     const fator = ordem.direcao === 'asc' ? 1 : -1
@@ -123,7 +141,8 @@ export default function UsersSection() {
   const inicio = (paginaAtual - 1) * porPagina
   const visiveis = ordenados.slice(inicio, inicio + porPagina)
 
-  const temFiltro = Boolean(busca) || perfilFiltro !== 'todos' || statusFiltro !== 'todos'
+  const temFiltro =
+    Boolean(busca) || perfilFiltro !== 'todos' || statusFiltro !== 'todos' || soPedidos
 
   const ordenarPor = (campo) => {
     setOrdem((atual) => ({
@@ -136,6 +155,7 @@ export default function UsersSection() {
     setBusca('')
     setPerfilFiltro('todos')
     setStatusFiltro('todos')
+    setSoPedidos(false)
   }
 
   const substituir = (registro) => {
@@ -295,6 +315,22 @@ export default function UsersSection() {
         </article>
       </div>
 
+      {pedidosAbertos > 0 ? (
+        <div className="admin-callout admin-callout--alerta">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">
+            {pedidosAbertos === 1
+              ? '1 pedido de exclusão aguardando atendimento.'
+              : `${pedidosAbertos} pedidos de exclusão aguardando atendimento.`}
+          </p>
+          {soPedidos ? null : (
+            <button type="button" className="admin-btn admin-btn--outline" onClick={() => setSoPedidos(true)}>
+              Ver pedidos
+            </button>
+          )}
+        </div>
+      ) : null}
+
       <div className="admin-toolbar">
         <div className="admin-search">
           <Icone icon={appIcons.search} className="admin-search__icon" />
@@ -444,6 +480,14 @@ export default function UsersSection() {
             </button>
           ) : null}
 
+          {soPedidos ? (
+            <button type="button" className="chip chip--removable" onClick={() => setSoPedidos(false)}>
+              Pedido de exclusão
+              <Icone icon={appIcons.clear} />
+              <span className="sr-only">Remover filtro de pedido de exclusão</span>
+            </button>
+          ) : null}
+
           <button type="button" className="link-button" onClick={limparFiltros}>
             Limpar filtros
           </button>
@@ -480,7 +524,7 @@ export default function UsersSection() {
             {carregando ? <SkeletonRows colunas={COLUNAS.length} /> : null}
 
             {!carregando && visiveis.map((usuario) => (
-              <tr key={usuario.id}>
+              <tr key={usuario.id} className={temPedidoAberto(usuario) ? 'is-pedido' : undefined}>
                 <td data-label="Usuário">
                   <BotaoPessoa
                     nome={usuario.nome}
@@ -504,19 +548,30 @@ export default function UsersSection() {
                     <span className="status-badge__dot" aria-hidden="true" />
                     {statusLabel(usuario.status)}
                   </span>
-                  {usuario.exclusaoSolicitadaEm && !usuario.anonimizada ? (
+                  {temPedidoAberto(usuario) ? (
                     <span className="user-cell__meta user-cell__pedido">
+                      <Icone icon={appIcons.warning} />
                       Pediu exclusão em {new Date(usuario.exclusaoSolicitadaEm).toLocaleDateString('pt-BR')}
                     </span>
                   ) : null}
                 </td>
 
                 <td data-label="Último acesso">
-                  <span className="user-cell__meta">
-                    {usuario.aguardandoPrimeiroAcesso
-                      ? 'Aguardando primeiro acesso'
-                      : formatarUltimoAcesso(usuario.ultimoAcesso)}
-                  </span>
+                  {usuario.aguardandoPrimeiroAcesso || !usuario.ultimoAcesso ? (
+                    <span className="user-cell__meta">
+                      {usuario.aguardandoPrimeiroAcesso
+                        ? 'Aguardando primeiro acesso'
+                        : formatarUltimoAcesso(usuario.ultimoAcesso)}
+                    </span>
+                  ) : (
+                    <time
+                      className="user-cell__meta"
+                      dateTime={new Date(usuario.ultimoAcesso).toISOString()}
+                      title={formatarDataCompleta(usuario.ultimoAcesso)}
+                    >
+                      {formatarUltimoAcesso(usuario.ultimoAcesso)}
+                    </time>
+                  )}
                 </td>
 
                 <td data-label="Ações" className="admin-table__actions-col">
@@ -539,7 +594,7 @@ export default function UsersSection() {
                         icon: appIcons.edit,
                         onSelect: () => setModal({ tipo: 'editar', usuario }),
                       },
-                      ...(usuario.exclusaoSolicitadaEm && !usuario.anonimizada
+                      ...(temPedidoAberto(usuario)
                         ? [{
                           label: 'Atender pedido de exclusão',
                           icon: appIcons.remove,
@@ -731,9 +786,7 @@ export default function UsersSection() {
             },
             {
               rotulo: 'Último acesso',
-              valor: modal.usuario.aguardandoPrimeiroAcesso
-                ? 'Aguardando primeiro acesso'
-                : formatarUltimoAcesso(modal.usuario.ultimoAcesso),
+              valor: ultimoAcessoPorExtenso(modal.usuario),
             },
           ]}
         />

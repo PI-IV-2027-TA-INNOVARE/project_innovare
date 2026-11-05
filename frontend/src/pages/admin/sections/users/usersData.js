@@ -11,7 +11,12 @@ export const STATUS = Object.freeze([
   { id: 'suspenso', label: 'Suspenso' },
 ])
 
-export { formatarUltimoAcesso, iniciais, tomDoAvatar } from '../../../../lib/people'
+export {
+  formatarDataCompleta,
+  formatarUltimoAcesso,
+  iniciais,
+  tomDoAvatar,
+} from '../../../../lib/people'
 
 const MINUTO = 60 * 1000
 const HORA = 60 * MINUTO

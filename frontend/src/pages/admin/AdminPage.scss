@@ -155,6 +155,7 @@
 }
 
 .tokens-group {
+  container: grupo / inline-size;
   padding: 20px;
   background: var(--bg-card);
   border: 1px solid var(--admin-card-border);
@@ -168,9 +169,10 @@
 }
 
 .tokens-group__toggle {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 12px;
   width: 100%;
   padding: 0;
   font-family: inherit;
@@ -180,8 +182,13 @@
   cursor: pointer;
 }
 
+.tokens-group__cabecalho {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .tokens-group__title {
-  flex: 1;
   font-size: 1.125rem;
   font-weight: 500;
   color: var(--text-primary);
@@ -198,10 +205,21 @@
 }
 
 .tokens-group__description {
-  margin-top: 8px;
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--text-muted);
+}
+
+.tokens-group__amostras {
+  display: flex;
+  gap: 4px;
+}
+
+.tokens-group__amostra {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent);
 }
 
 .tokens-group__lista {
@@ -247,6 +265,7 @@
   min-height: 64px;
   margin-block: -12px;
   cursor: pointer;
+  background: var(--bg-card);
 
   input[type='color'] {
     position: absolute;
@@ -267,10 +286,7 @@
 .token-card__swatch-fill {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 25%, transparent 25%),
-    linear-gradient(-45deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 25%, transparent 25%);
-  background-size: 12px 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent);
 }
 
 .token-card__swatch-action {
@@ -324,6 +340,12 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
+}
+
+.token-card__opacidade {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 .token-card__controls {
@@ -435,6 +457,18 @@
   }
 }
 
+@container grupo (max-width: 480px) {
+  .tokens-group__toggle {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
+  .tokens-group__amostras {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
 .exemplo-de-estados {
   display: grid;
   gap: 10px;
@@ -475,6 +509,11 @@
   &--ok {
     background: color-mix(in srgb, var(--accent-green) 12%, transparent);
     border-left-color: var(--accent-green);
+  }
+
+  &--atencao {
+    background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+    border-left-color: var(--accent-warning);
   }
 
   &--erro {

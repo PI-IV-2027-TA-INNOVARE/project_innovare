@@ -29,6 +29,11 @@ const DATA_CURTA = new Intl.DateTimeFormat('pt-BR', {
   month: '2-digit',
   year: 'numeric',
 })
+const DATA_E_HORA = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeStyle: 'short' })
+
+export function formatarDataCompleta(timestamp) {
+  return timestamp ? DATA_E_HORA.format(new Date(timestamp)) : ''
+}
 
 export function formatarUltimoAcesso(timestamp, referencia = Date.now()) {
   if (!timestamp) return 'Nunca acessou'

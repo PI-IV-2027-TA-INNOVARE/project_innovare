@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrandingProvider } from '../../../context/BrandingContext'
@@ -42,18 +42,18 @@ function cartaoDaCor(nome) {
 }
 
 describe('AppearanceSection', () => {
-  it('mostra os quatro grupos e as doze cores da paleta', () => {
+  it('mostra os quatro grupos e as treze cores da paleta', () => {
     renderAppearance()
 
     for (const grupo of ['Marca', 'Superfícies', 'Texto e bordas', 'Estados']) {
       expect(screen.getByRole('button', { name: new RegExp(grupo, 'i') })).toBeInTheDocument()
     }
 
-    expect(document.querySelectorAll('.token-card')).toHaveLength(12)
-    expect(screen.getByText('12 cores · 0 personalizadas')).toBeInTheDocument()
+    expect(document.querySelectorAll('.token-card')).toHaveLength(13)
+    expect(screen.getByText('13 cores · 0 personalizadas')).toBeInTheDocument()
   })
 
-  it('abre apenas o primeiro grupo, para a tela não nascer com doze cartões', () => {
+  it('abre apenas o primeiro grupo, para a tela não nascer com treze cartões', () => {
     renderAppearance()
 
     expect(screen.getByRole('button', { name: /marca/i })).toHaveAttribute('aria-expanded', 'true')
@@ -64,6 +64,60 @@ describe('AppearanceSection', () => {
     }
 
     expect(screen.getByText('Sucesso')).not.toBeVisible()
+  })
+
+  it('o grupo recolhido diz no cabeçalho o que guarda, com descrição e amostras', () => {
+    renderAppearance()
+
+    const toggle = screen.getByRole('button', { name: /superfícies/i })
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveAccessibleName('Superfícies 3 cores')
+    expect(toggle).toHaveAccessibleDescription('Fundo da aplicação e dos cartões.')
+    expect(within(toggle).getByText('Fundo da aplicação e dos cartões.')).toBeVisible()
+    expect(toggle.querySelectorAll('.tokens-group__amostra')).toHaveLength(3)
+  })
+
+  it('a amostra do cabeçalho acompanha a cor editada', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const campo = within(cartaoDaCor('Laranja institucional'))
+      .getByLabelText('Valor de Laranja institucional')
+
+    await user.clear(campo)
+    await user.type(campo, '#123456')
+
+    const [amostra] = screen.getByRole('button', { name: /marca/i })
+      .querySelectorAll('.tokens-group__amostra')
+
+    expect(amostra).toHaveStyle({ backgroundColor: '#123456' })
+  })
+
+  it('a busca deixa no cabeçalho só as amostras das cores encontradas', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    await user.type(screen.getByLabelText(/buscar configuração/i), 'navy')
+
+    const toggle = screen.getByRole('button', { name: /marca/i })
+
+    expect(toggle).toHaveAccessibleName('Marca 1 cor')
+    expect(toggle.querySelectorAll('.tokens-group__amostra')).toHaveLength(1)
+  })
+
+  it('o grupo Estados traz a cor de Alerta, com exemplo de onde ela aparece', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    const toggle = screen.getByRole('button', { name: /estados/i })
+
+    expect(toggle).toHaveAccessibleName('Estados 3 cores')
+
+    await user.click(toggle)
+
+    expect(screen.getByRole('heading', { name: 'Alerta', level: 4 })).toBeVisible()
+    expect(screen.getByText('Proposta aguardando revisão do Supervisor.')).toBeVisible()
   })
 
   it('a busca revela o que casa mesmo em grupo recolhido', async () => {
@@ -93,7 +147,7 @@ describe('AppearanceSection', () => {
 
     expect(screen.getByRole('heading', { name: 'Fundo da página', level: 4 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sucesso', level: 4 })).not.toBeInTheDocument()
-    expect(screen.getByText('3 de 12 cores')).toBeInTheDocument()
+    expect(screen.getByText('3 de 13 cores')).toBeInTheDocument()
   })
 
   it('avisa quando a busca nao encontra nada', async () => {
@@ -177,7 +231,7 @@ describe('AppearanceSection', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(estado.salvarTema).not.toHaveBeenCalled()
-    expect(screen.getByText('12 cores · 0 personalizadas')).toBeInTheDocument()
+    expect(screen.getByText('13 cores · 0 personalizadas')).toBeInTheDocument()
   })
 
   it('pede confirmacao antes de descartar mais de uma alteracao', async () => {
@@ -200,7 +254,7 @@ describe('AppearanceSection', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.queryByText(/alterações não salvas/i)).not.toBeInTheDocument()
-    expect(screen.getByText('12 cores · 0 personalizadas')).toBeInTheDocument()
+    expect(screen.getByText('13 cores · 0 personalizadas')).toBeInTheDocument()
   })
 
   it('continuar editando fecha a confirmacao e mantem o rascunho', async () => {
@@ -448,7 +502,7 @@ describe('AppearanceSection — a paleta publicada vem do banco', () => {
 
     renderAppearance()
 
-    expect(await screen.findByText('12 cores · 1 personalizada')).toBeInTheDocument()
+    expect(await screen.findByText('13 cores · 1 personalizada')).toBeInTheDocument()
     expect(within(cartaoDaCor('Laranja institucional')).getByText('personalizada')).toBeInTheDocument()
     expect(screen.queryByText(/não salvas?/i)).not.toBeInTheDocument()
   })
@@ -458,7 +512,7 @@ describe('AppearanceSection — a paleta publicada vem do banco', () => {
 
     renderAppearance()
 
-    await screen.findByText('12 cores · 0 personalizadas')
+    await screen.findByText('13 cores · 0 personalizadas')
 
     expect(document.documentElement.style.getPropertyValue('--accent-primary'))
       .toMatch(/^#[0-9a-f]{6}$/i)
@@ -503,6 +557,61 @@ describe('AppearanceSection — cada tema guarda a propria paleta', () => {
 
     expect(patch.light.accentPrimary).toBe('#1B5E20')
     expect(patch.dark.accentPrimary).toBe('#81C784')
+  })
+
+  it('a cor translúcida abre o seletor na própria cor, não na do tema claro', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    await user.click(screen.getByRole('button', { name: /tema: claro/i }))
+
+    const seletor = within(cartaoDaCor('Laranja claro (fundo de destaque)'))
+      .getByLabelText('Escolher Laranja claro (fundo de destaque)')
+
+    expect(seletor).toHaveValue('#e07b1a')
+  })
+
+  it('escolher no seletor mantém a transparência da cor translúcida', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    await user.click(screen.getByRole('button', { name: /tema: claro/i }))
+
+    const cartao = cartaoDaCor('Laranja claro (fundo de destaque)')
+
+    fireEvent.change(within(cartao).getByLabelText('Escolher Laranja claro (fundo de destaque)'), {
+      target: { value: '#1b5e20' },
+    })
+
+    expect(within(cartao).getByLabelText('Valor de Laranja claro (fundo de destaque)'))
+      .toHaveValue('rgba(27, 94, 32, 0.16)')
+  })
+
+  it('a cor translúcida diz a opacidade embaixo do valor', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    await user.click(screen.getByRole('button', { name: /tema: claro/i }))
+
+    const cartao = cartaoDaCor('Laranja claro (fundo de destaque)')
+
+    expect(within(cartao).getByText('Translúcida, com 16% de opacidade.')).toBeVisible()
+    expect(within(cartao).getByLabelText('Valor de Laranja claro (fundo de destaque)'))
+      .toHaveAccessibleDescription('Translúcida, com 16% de opacidade.')
+    expect(within(cartaoDaCor('Laranja institucional')).queryByText(/opacidade/)).not.toBeInTheDocument()
+  })
+
+  it('a amostra da cor translúcida é uma cor só, sem metade cheia', async () => {
+    const user = userEvent.setup()
+    renderAppearance()
+
+    await user.click(screen.getByRole('button', { name: /tema: claro/i }))
+
+    const preenchimento = cartaoDaCor('Laranja claro (fundo de destaque)')
+      .querySelector('.token-card__swatch-fill')
+
+    expect(preenchimento).toHaveStyle({ backgroundColor: 'rgba(224, 123, 26, 0.16)' })
+    expect(preenchimento.style.getPropertyValue('--amostra-opaca')).toBe('')
   })
 })
 

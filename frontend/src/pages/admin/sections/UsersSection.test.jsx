@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import UsersSection from './UsersSection'
 import {
   USUARIOS_EXEMPLO,
+  formatarDataCompleta,
   formatarUltimoAcesso,
   iniciais,
   usuariosParaCsv,
@@ -325,6 +326,37 @@ describe('UsersSection — pedido de exclusão', () => {
     expect(screen.queryByRole('menuitem', { name: /atender pedido de exclusão/i })).not.toBeInTheDocument()
   })
 
+  it('avisa no topo quantos pedidos de exclusão aguardam e destaca a linha', async () => {
+    comPedido()
+    await renderUsuarios()
+
+    expect(screen.getByText('1 pedido de exclusão aguardando atendimento.')).toBeInTheDocument()
+    expect(linhaDe('Maria Ferreira')).toHaveClass('is-pedido')
+    expect(linhaDe('Rafael Antunes')).not.toHaveClass('is-pedido')
+  })
+
+  it('o aviso filtra a lista pelos pedidos, e a etiqueta desfaz o filtro', async () => {
+    const user = userEvent.setup()
+    comPedido()
+    await renderUsuarios()
+
+    await user.click(screen.getByRole('button', { name: 'Ver pedidos' }))
+
+    expect(screen.queryByText('Rafael Antunes')).not.toBeInTheDocument()
+    expect(screen.getByText('Maria Ferreira')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ver pedidos' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /remover filtro de pedido de exclusão/i }))
+
+    expect(screen.getByText('Rafael Antunes')).toBeInTheDocument()
+  })
+
+  it('sem pedido em aberto, não mostra o aviso', async () => {
+    await renderUsuarios()
+
+    expect(screen.queryByText(/aguardando atendimento/i)).not.toBeInTheDocument()
+  })
+
   it('anonimiza só depois de confirmar e mostra a conta já sem o nome', async () => {
     const user = userEvent.setup()
     comPedido()
@@ -442,6 +474,34 @@ describe('usersData', () => {
     expect(formatarUltimoAcesso(tresDias, referencia)).toBe('Há 3 dias')
     expect(formatarUltimoAcesso(antigo, referencia)).toBe('12/03/2026')
     expect(formatarUltimoAcesso(null, referencia)).toBe('Nunca acessou')
+  })
+
+  it('escreve a data completa do último acesso, para o balão e a ficha', () => {
+    expect(formatarDataCompleta(new Date('2026-09-03T09:21:00').getTime()))
+      .toBe('3 de setembro de 2026 às 09:21')
+    expect(formatarDataCompleta(null)).toBe('')
+  })
+
+  it('mostra a data completa do último acesso ao passar o mouse', async () => {
+    await renderUsuarios()
+
+    const maria = USUARIOS_EXEMPLO.find((usuario) => usuario.nome === 'Maria Ferreira')
+    const acesso = within(linhaDe('Maria Ferreira')).getByText(formatarUltimoAcesso(maria.ultimoAcesso))
+
+    expect(acesso.tagName).toBe('TIME')
+    expect(acesso).toHaveAttribute('title', formatarDataCompleta(maria.ultimoAcesso))
+    expect(acesso).toHaveAttribute('datetime', new Date(maria.ultimoAcesso).toISOString())
+  })
+
+  it('a ficha escreve a data completa do último acesso, para quem não usa mouse', async () => {
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    const maria = USUARIOS_EXEMPLO.find((usuario) => usuario.nome === 'Maria Ferreira')
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent(formatarDataCompleta(maria.ultimoAcesso))
   })
 
   it('escapa aspas ao montar o CSV', () => {
