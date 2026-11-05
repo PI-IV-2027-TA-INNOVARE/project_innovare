@@ -309,7 +309,21 @@ class NotificacaoDoFluxoChegaTests(CaixaBaseTests):
         self.como(self.demandante)
 
         self.assertIn(
-            f'{self.oportunidade.codigo} precisa de complementacao',
+            f'{self.oportunidade.codigo} precisa de complementação',
+            self.titulos(self.caixa(apenas_nao_lidas='true')),
+        )
+
+    def test_pedido_de_complemento_chega_com_titulo_acentuado(self):
+        self.como(self.supervisor)
+        self.client.post(
+            reverse('oportunidade-solicitar-complemento', args=[self.oportunidade.codigo]),
+            {'mensagem': 'Faltam os laudos microbiologicos dos lotes.'},
+            format='json',
+        )
+        self.como(self.demandante)
+
+        self.assertIn(
+            f'{self.oportunidade.codigo} precisa de complementação',
             self.titulos(self.caixa(apenas_nao_lidas='true')),
         )
 

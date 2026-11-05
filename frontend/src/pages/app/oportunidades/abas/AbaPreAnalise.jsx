@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
+import { LIMITES_DE_GASTO, MOTIVOS_SEM_IA } from '../../../../lib/glossario'
 import { Icone, appIcons } from '../../../../lib/icons'
+import {
+  ROTULOS_DAS_DIMENSOES,
+  agruparPorLacuna,
+  rotuloDoCriterio,
+} from '../../../../lib/lacunas'
 import { ROLES } from '../../../../lib/roles'
 import {
   acatarRecomendacao,
@@ -19,15 +26,7 @@ const CODIGO_SEM_ANALISE = 'preanalise_inexistente'
 const CODIGO_SEM_PROPOSTA = 'proposta_inexistente'
 const CODIGO_SEM_CRITERIOS = 'criterios_ausentes'
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
-
-const ROTULOS_DAS_DIMENSOES = {
-  desafio_tecnologico: 'Desafio tecnológico',
-  inovacao: 'Inovação',
-  plano_pesquisa: 'Plano de pesquisa',
-  equipe_supervisao: 'Equipe e supervisão',
-  infraestrutura: 'Infraestrutura',
-  viabilidade: 'Viabilidade',
-}
+const STATUS_EM_ANDAMENTO = ['pendente', 'executando']
 
 const NIVEIS = [
   { id: 'consolidada', singular: 'consolidada', plural: 'consolidadas', rotulo: 'Consolidada' },
@@ -41,7 +40,12 @@ const NIVEIS = [
 ]
 
 const MOTIVOS_DE_FALHA = {
+  fila_indisponivel: 'a fila de processamento não estava disponível',
+  falha_na_execucao: 'a execução falhou antes de terminar',
+  ator_indisponivel: 'quem pediu a análise não está mais disponível',
   provedor_indisponivel: 'o serviço de IA não respondeu',
+  limite_da_oportunidade: MOTIVOS_SEM_IA.limite_da_oportunidade,
+  limite_do_mes: MOTIVOS_SEM_IA.limite_do_mes,
   saida_invalida: 'a resposta da IA veio incompleta',
   sem_dimensoes: 'a IA não avaliou nenhuma dimensão',
 }
@@ -78,7 +82,21 @@ function Resumo({ dimensoes }) {
   )
 }
 
+export function primeiraFrase(texto) {
+  const limpo = (texto || '').trim()
+  const fim = limpo.search(/[.!?](\s|$)/)
+
+  if (fim === -1) return { frase: limpo, resto: '' }
+
+  return { frase: limpo.slice(0, fim + 1), resto: limpo.slice(fim + 1).trim() }
+}
+
+const lacunasPorExtenso = (total) => `${total} ${total === 1 ? 'lacuna' : 'lacunas'}`
+
 function Dimensao({ dimensao, lacunas }) {
+  const { frase, resto } = primeiraFrase(dimensao.avaliacao)
+  const temDetalhe = Boolean(resto) || dimensao.evidencias?.length > 0
+
   return (
     <li className={`preanalise__dimensao preanalise__dimensao--${dimensao.nivel}`}>
       <div className="preanalise__dimensao-cabeca">
@@ -88,28 +106,29 @@ function Dimensao({ dimensao, lacunas }) {
         </span>
       </div>
 
-      <p className="preanalise__avaliacao">{dimensao.avaliacao}</p>
-
-      {dimensao.evidencias?.length > 0 ? (
-        <>
-          <p className="preanalise__rotulo">Evidências na proposta</p>
-          <ul className="preanalise__evidencias">
-            {dimensao.evidencias.map((evidencia, indice) => (
-              <li key={`${dimensao.id_dimensao}-${indice}`}>{evidencia}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+      <p className="preanalise__avaliacao">{frase}</p>
 
       {lacunas.length > 0 ? (
-        <>
-          <p className="preanalise__rotulo">O que falta</p>
-          <ul className="preanalise__lacunas">
-            {lacunas.map((lacuna) => (
-              <li key={lacuna.id_lacuna}>{lacuna.descricao}</li>
-            ))}
-          </ul>
-        </>
+        <p className="preanalise__dimensao-lacunas">
+          {lacunasPorExtenso(lacunas.length)} em O que melhorar
+        </p>
+      ) : null}
+
+      {temDetalhe ? (
+        <VerDetalhes>
+          {resto ? <p className="preanalise__avaliacao">{resto}</p> : null}
+
+          {dimensao.evidencias?.length > 0 ? (
+            <>
+              <p className="preanalise__rotulo">Evidências na proposta</p>
+              <ul className="preanalise__evidencias">
+                {dimensao.evidencias.map((evidencia, indice) => (
+                  <li key={`${dimensao.id_dimensao}-${indice}`}>{evidencia}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </VerDetalhes>
       ) : null}
     </li>
   )
@@ -124,8 +143,6 @@ const MOVIMENTOS = {
 }
 
 const rotuloDoNivelId = (id) => NIVEIS.find((nivel) => nivel.id === id)?.rotulo || '—'
-
-const lacunasPorExtenso = (total) => `${total} ${total === 1 ? 'lacuna' : 'lacunas'}`
 
 function Comparacao({ comparacao, versaoAtual }) {
   const data = formatarData(comparacao.anterior.executada_em)
@@ -169,13 +186,93 @@ function Comparacao({ comparacao, versaoAtual }) {
   )
 }
 
+function Recomendacoes({ itens, podeExecutar, ocupado, aoAlternar }) {
+  return (
+    <ul className="preanalise__recomendacoes">
+      {itens.map((recomendacao) => (
+        <li key={recomendacao.id_recomendacao} className="preanalise__recomendacao">
+          <span className={recomendacao.acatada ? 'preanalise__acatada' : undefined}>
+            {recomendacao.texto}
+          </span>
+
+          {podeExecutar ? (
+            <button
+              type="button"
+              className="admin-btn admin-btn--sm admin-btn--outline"
+              onClick={() => aoAlternar(recomendacao)}
+              disabled={Boolean(ocupado)}
+            >
+              <Icone icon={recomendacao.acatada ? appIcons.reset : appIcons.done} />
+              {recomendacao.acatada ? 'Reabrir' : 'Marcar como acatada'}
+            </button>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function OQueMelhorar({ lacunas, recomendacoes, ...acoes }) {
+  const { grupos, soltas } = agruparPorLacuna(lacunas, recomendacoes)
+  const acatadas = recomendacoes.filter((item) => item.acatada).length
+
+  if (grupos.length === 0 && soltas.length === 0) return null
+
+  return (
+    <div className="preanalise__bloco">
+      <h3 className="preanalise__subtitulo">
+        O que melhorar
+        {recomendacoes.length > 0 ? (
+          <span className="preanalise__contagem">
+            {' '}({acatadas} de {recomendacoes.length} acatadas)
+          </span>
+        ) : null}
+      </h3>
+
+      {grupos.length > 0 ? (
+        <ul className="preanalise__grupos">
+          {grupos.map(({ lacuna, recomendacoes: daLacuna }) => (
+            <li key={lacuna.id_lacuna} className="preanalise__grupo">
+              <div className="preanalise__grupo-cabeca">
+                {ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado] ? (
+                  <span className="preanalise__grupo-dimensao">
+                    {ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado]}
+                  </span>
+                ) : null}
+                <span
+                  className={`preanalise__criterio${
+                    lacuna.criterio_codigo ? '' : ' preanalise__criterio--sem-evidencia'
+                  }`}
+                >
+                  {rotuloDoCriterio(lacuna)}
+                </span>
+              </div>
+
+              <p className="preanalise__grupo-lacuna">{lacuna.descricao}</p>
+
+              {daLacuna.length > 0 ? <Recomendacoes itens={daLacuna} {...acoes} /> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {soltas.length > 0 ? (
+        <>
+          <p className="preanalise__rotulo">Outras recomendações</p>
+          <Recomendacoes itens={soltas} {...acoes} />
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 function AvisoSemEquipe({ irPara }) {
   return (
     <div className="admin-callout admin-callout--alerta" role="note">
       <Icone icon={appIcons.warning} className="admin-callout__icon" />
       <p className="admin-callout__text">
-        A equipe potencial ainda não foi definida. Sem ela, a dimensão Equipe e
-        supervisão sai como lacuna. O recomendado é rodar o matching antes.
+        A pré-análise avalia também a equipe: gere a equipe potencial, com ao
+        menos uma pessoa incluída, antes de pré-analisar.
       </p>
       {irPara ? (
         <button
@@ -201,6 +298,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   const [semAnalise, setSemAnalise] = useState(false)
   const [semProposta, setSemProposta] = useState(false)
   const [semEquipe, setSemEquipe] = useState(false)
+  const [propostaPendente, setPropostaPendente] = useState(false)
   const [erroCarga, setErroCarga] = useState('')
   const [ocupado, setOcupado] = useState('')
 
@@ -214,7 +312,10 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
     ])
 
     setSemEquipe(
-      equipe.status === 'rejected' && equipe.reason?.data?.codigo === CODIGO_SEM_EQUIPE,
+      (equipe.status === 'rejected' && equipe.reason?.data?.codigo === CODIGO_SEM_EQUIPE) ||
+        (equipe.status === 'fulfilled' &&
+          Boolean(equipe.value) &&
+          !(equipe.value.membros || []).some((membro) => membro.incluido)),
     )
 
     if (resultado.status === 'fulfilled') {
@@ -239,6 +340,18 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
     carregar()
   }, [carregar])
 
+  const emAndamento = Boolean(
+    analise && STATUS_EM_ANDAMENTO.includes(analise.status),
+  )
+
+  useEffect(() => {
+    if (!emAndamento) return undefined
+
+    const relogio = setInterval(() => carregar({ silencioso: true }), 3000)
+
+    return () => clearInterval(relogio)
+  }, [emAndamento, carregar])
+
   useEffect(() => {
     aoOcupar?.(ocupado === 'executar')
   }, [ocupado, aoOcupar])
@@ -253,7 +366,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
       setAnalise(resultado)
       setSemAnalise(false)
 
-      if (resultado.status === 'ok') {
+      if (STATUS_EM_ANDAMENTO.includes(resultado.status)) {
+        showToast('Pré-análise enviada. A tela atualiza sozinha.')
+      } else if (resultado.status === 'ok') {
         showToast('Pré-análise concluída.')
       }
     } catch (falha) {
@@ -286,7 +401,18 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   }
 
   const espera = ocupado === 'executar' ? (
-    <EsperaIA titulo="A pré-análise está lendo a proposta e a equipe potencial." />
+    <EsperaIA titulo="A prǸ-anǭlise estǭ lendo a proposta e a equipe potencial." />
+  ) : null
+
+  const esperaDaFila = emAndamento ? (
+    <EsperaIA
+      titulo={
+        analise.status === 'pendente'
+          ? 'A pré-análise está na fila para começar.'
+          : 'A pré-análise está em andamento.'
+      }
+      detalhe="A tela atualiza sozinha; você pode continuar em outra aba."
+    />
   ) : null
 
   if (carregando) {
@@ -360,7 +486,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={executar}
-              disabled={Boolean(ocupado)}
+              disabled={
+                Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
+              }
             >
               <Icone icon={appIcons.researcher} />
               {ocupado === 'executar' ? 'Analisando...' : 'Executar pré-análise'}
@@ -372,8 +500,11 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           {espera}
           {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 
-        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
-          <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
           <p className="oportunidade-page__vazio">
             {podeExecutar
               ? 'Nenhuma pré-análise foi executada ainda.'
@@ -386,13 +517,10 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
     )
   }
 
-  const falhou = analise?.status !== 'ok'
+  const falhou = analise?.status === 'erro'
   const dimensoes = analise.dimensoes || []
   const lacunas = analise.lacunas || []
   const recomendacoes = analise.recomendacoes || []
-  const chaves = new Set(dimensoes.map((dimensao) => dimensao.dimensao))
-  const lacunasSoltas = lacunas.filter((lacuna) => !chaves.has(lacuna.campo_afetado))
-  const acatadas = recomendacoes.filter((item) => item.acatada).length
   const data = formatarData(analise.executada_em)
 
   return (
@@ -419,7 +547,9 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={executar}
-              disabled={Boolean(ocupado)}
+              disabled={
+                Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
+              }
             >
               <Icone icon={appIcons.reset} />
               {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
@@ -443,8 +573,17 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         </div>
 
         {espera}
+        {esperaDaFila}
 
         {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
+
+        {podeExecutar ? (
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
+        ) : null}
 
         {falhou ? (
           <div className="admin-callout admin-callout--alerta" role="alert">
@@ -452,7 +591,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
             <p className="admin-callout__text">
               A última execução não produziu resultado
               {MOTIVOS_DE_FALHA[analise.erro] ? `: ${MOTIVOS_DE_FALHA[analise.erro]}` : ''}.
-              Tente reavaliar em alguns minutos.
+              {LIMITES_DE_GASTO.includes(analise.erro) ? '' : ' Tente reavaliar em alguns minutos.'}
             </p>
           </div>
         ) : null}
@@ -486,52 +625,13 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           </div>
         ) : null}
 
-        {lacunasSoltas.length > 0 ? (
-          <div className="preanalise__bloco">
-            <h3 className="preanalise__subtitulo">Outras lacunas</h3>
-            <ul className="preanalise__lacunas">
-              {lacunasSoltas.map((lacuna) => (
-                <li key={lacuna.id_lacuna}>{lacuna.descricao}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {recomendacoes.length > 0 ? (
-          <div className="preanalise__bloco">
-            <h3 className="preanalise__subtitulo">
-              Recomendações{' '}
-              <span className="preanalise__contagem">
-                ({acatadas} de {recomendacoes.length} acatadas)
-              </span>
-            </h3>
-            <ul className="preanalise__recomendacoes">
-              {recomendacoes.map((recomendacao) => (
-                <li key={recomendacao.id_recomendacao} className="preanalise__recomendacao">
-                  <span
-                    className={recomendacao.acatada ? 'preanalise__acatada' : undefined}
-                  >
-                    {recomendacao.texto}
-                  </span>
-
-                  {podeExecutar ? (
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn--sm admin-btn--outline"
-                      onClick={() => alternarRecomendacao(recomendacao)}
-                      disabled={Boolean(ocupado)}
-                    >
-                      <Icone
-                        icon={recomendacao.acatada ? appIcons.reset : appIcons.done}
-                      />
-                      {recomendacao.acatada ? 'Reabrir' : 'Marcar como acatada'}
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <OQueMelhorar
+          lacunas={lacunas}
+          recomendacoes={recomendacoes}
+          podeExecutar={podeExecutar}
+          ocupado={ocupado}
+          aoAlternar={alternarRecomendacao}
+        />
 
         {!falhou && podeExecutar ? (
           <ProximoPasso

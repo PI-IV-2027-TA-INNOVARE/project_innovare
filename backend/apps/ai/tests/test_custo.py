@@ -408,6 +408,7 @@ class TetoPorOportunidadeTests(TestCase):
 
     def test_o_gateway_cai_no_fallback_quando_a_oportunidade_estourou(self):
         from apps.ai.services import ProvedorGemini
+        from apps.ai.services.teto import ProvedorComTetoDeCusto
 
         execucao(oportunidade=self.oportunidade, custo_estimado=Decimal('5.00'))
 
@@ -415,7 +416,9 @@ class TetoPorOportunidadeTests(TestCase):
             def generate_content(self, *args, **kwargs):
                 raise AssertionError('a chamada nao podia ter saido')
 
-        resultado = ProvedorGemini(cliente=ClienteQueNaoPodeSerChamado()).derivar_competencias(
+        resultado = ProvedorComTetoDeCusto(
+            ProvedorGemini(cliente=ClienteQueNaoPodeSerChamado())
+        ).derivar_competencias(
             oportunidade_id=self.oportunidade.id_oportunidade,
             proposta_texto='Deteccao rapida de contaminacao.',
             correlation_id=uuid.uuid4(),
@@ -423,4 +426,39 @@ class TetoPorOportunidadeTests(TestCase):
         )
 
         self.assertTrue(resultado['fallback_usado'])
+        self.assertEqual(resultado['motivo_fallback'], 'limite_da_oportunidade')
         self.assertEqual(ExecucaoIA.objects.count(), 1)
+
+    @override_settings(AI_CUSTO_TETO_MENSAL_BRL=1.0, AI_CUSTO_TETO_POR_OPORTUNIDADE_BRL=0)
+    def test_o_gateway_diz_que_foi_o_limite_do_mes(self):
+        from apps.ai.services import ProvedorGemini
+        from apps.ai.services.teto import ProvedorComTetoDeCusto
+
+        execucao(custo_estimado=Decimal('2.00'))
+
+        class ClienteQueNaoPodeSerChamado:
+            def generate_content(self, *args, **kwargs):
+                raise AssertionError('a chamada nao podia ter saido')
+
+        resultado = ProvedorComTetoDeCusto(
+            ProvedorGemini(cliente=ClienteQueNaoPodeSerChamado())
+        ).derivar_competencias(
+            oportunidade_id=self.oportunidade.id_oportunidade,
+            proposta_texto='Deteccao rapida de contaminacao.',
+            correlation_id=uuid.uuid4(),
+            executado_por='supervisor@ac2microbiologia.com.br',
+        )
+
+        self.assertEqual(resultado['motivo_fallback'], 'limite_do_mes')
+
+    def test_sem_chave_o_gateway_diz_que_a_ia_esta_indisponivel(self):
+        from apps.ai.services import ProvedorGemini
+
+        resultado = ProvedorGemini().derivar_competencias(
+            oportunidade_id=self.oportunidade.id_oportunidade,
+            proposta_texto='Deteccao rapida de contaminacao.',
+            correlation_id=uuid.uuid4(),
+            executado_por='supervisor@ac2microbiologia.com.br',
+        )
+
+        self.assertEqual(resultado['motivo_fallback'], 'ia_indisponivel')

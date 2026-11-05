@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiRequest } from './api'
+import { tokenDeAcesso } from '../test/tokenDeAcesso'
+import {
+  apiRequest,
+  baixarArquivo,
+  configureApiAuth,
+  getApiAuthSession,
+  renovarSessao,
+  setApiAuthSession,
+} from './api'
 
 function responderCom(status, corpo) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
@@ -46,12 +54,13 @@ describe('apiRequest', () => {
     expect(erro.data.codigo).toBe('proposta_inexistente')
   })
 
-  it('mantem o campo na frente das mensagens de validacao', async () => {
-    responderCom(400, { email: ['Ja existe uma conta com este e-mail.'] })
+  it('mostra a mensagem de validação sem o nome técnico do campo', async () => {
+    responderCom(400, { email: ['Já existe uma conta com este e-mail.'] })
 
-    await expect(apiRequest('/usuarios/', { method: 'POST', body: {} })).rejects.toThrow(
-      'email: Ja existe uma conta com este e-mail.'
-    )
+    const erro = await apiRequest('/usuarios/', { method: 'POST', body: {} }).catch((e) => e)
+
+    expect(erro.message).toBe('Já existe uma conta com este e-mail.')
+    expect(erro.data).toEqual({ email: ['Já existe uma conta com este e-mail.'] })
   })
 
   /**
@@ -131,5 +140,157 @@ describe('apiRequest', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(cancelamento))
 
     await expect(apiRequest('/oportunidades/')).rejects.toBe(cancelamento)
+  })
+})
+
+describe('baixarArquivo', () => {
+  it('devolve o conteúdo e o nome que o servidor deu ao arquivo', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('%PDF', {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': "attachment; filename*=UTF-8''laudo%20t%C3%A9cnico.pdf",
+        },
+      })
+    ))
+
+    const arquivo = await baixarArquivo('/oportunidades/OP-1/anexos/3/')
+
+    expect(arquivo.nome).toBe('laudo técnico.pdf')
+    expect(await arquivo.conteudo.text()).toBe('%PDF')
+  })
+
+  it('transforma a recusa do servidor em erro legível', async () => {
+    responderCom(404, { detail: 'Documento não encontrado nesta oportunidade.' })
+
+    await expect(baixarArquivo('/oportunidades/OP-1/anexos/9/')).rejects.toThrow(
+      'Documento não encontrado nesta oportunidade.'
+    )
+  })
+})
+
+describe('renovação da sessão pelo cookie', () => {
+  function respostaJson(status, corpo) {
+    return new Response(JSON.stringify(corpo), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  afterEach(() => {
+    setApiAuthSession(null)
+  })
+
+  it('pede a renovação com o cookie e sem token no corpo', async () => {
+    const fetch = vi.fn().mockResolvedValue(respostaJson(200, { access: 'acesso-novo' }))
+    vi.stubGlobal('fetch', fetch)
+
+    const sessao = await renovarSessao()
+
+    const [url, init] = fetch.mock.calls[0]
+    expect(url).toMatch(/\/auth\/token\/refresh\/$/)
+    expect(init.credentials).toBe('include')
+    expect(init.body).toBe('{}')
+    expect(sessao).toEqual({ accessToken: 'acesso-novo' })
+    expect(getApiAuthSession()).toEqual({ accessToken: 'acesso-novo' })
+  })
+
+  it('acesso vencido é renovado pelo cookie e o pedido é refeito', async () => {
+    setApiAuthSession({ accessToken: 'vencido' })
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(respostaJson(401, { detail: 'token_not_valid' }))
+      .mockResolvedValueOnce(respostaJson(200, { access: 'acesso-novo' }))
+      .mockResolvedValueOnce(respostaJson(200, { ok: true }))
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(apiRequest('/oportunidades/')).resolves.toEqual({ ok: true })
+
+    expect(fetch.mock.calls[2][1].headers.get('Authorization')).toBe('Bearer acesso-novo')
+  })
+})
+
+describe('outra conta entrou neste navegador', () => {
+  function respostaJson(status, corpo) {
+    return new Response(JSON.stringify(corpo), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  function renovacaoQueDevolve(token, depois = []) {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(respostaJson(401, { detail: 'token_not_valid' }))
+      .mockResolvedValueOnce(respostaJson(200, { access: token }))
+
+    for (const resposta of depois) fetch.mockResolvedValueOnce(resposta)
+
+    vi.stubGlobal('fetch', fetch)
+    return fetch
+  }
+
+  afterEach(() => {
+    setApiAuthSession(null)
+    configureApiAuth()
+  })
+
+  it('a renovação que traz outra conta não refaz o pedido em nome dela', async () => {
+    setApiAuthSession({ accessToken: tokenDeAcesso(7) })
+    const fetch = renovacaoQueDevolve(tokenDeAcesso(9), [respostaJson(201, { ok: true })])
+
+    const erro = await apiRequest('/oportunidades/5/decisao/', { method: 'POST', body: {} })
+      .catch((problema) => problema)
+
+    expect(erro.data).toEqual({ codigo: 'conta_trocada' })
+    expect(erro.message).toMatch(/outra conta entrou neste navegador/i)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('a renovação da mesma conta refaz o pedido como antes', async () => {
+    setApiAuthSession({ accessToken: tokenDeAcesso(7, 'a') })
+    const fetch = renovacaoQueDevolve(tokenDeAcesso(7, 'b'), [respostaJson(200, { ok: true })])
+
+    await expect(apiRequest('/oportunidades/')).resolves.toEqual({ ok: true })
+
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('o download também não é refeito em nome de outra conta', async () => {
+    setApiAuthSession({ accessToken: tokenDeAcesso(7) })
+    const fetch = renovacaoQueDevolve(tokenDeAcesso(9), [
+      new Response('conteudo', { status: 200, headers: { 'Content-Type': 'application/pdf' } }),
+    ])
+
+    const erro = await baixarArquivo('/oportunidades/5/anexos/1/conteudo/').catch((problema) => problema)
+
+    expect(erro.data).toEqual({ codigo: 'conta_trocada' })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('quem acompanha a sessão fica sabendo que a conta mudou', async () => {
+    const aoRenovar = vi.fn()
+    configureApiAuth({ onSessionRefresh: aoRenovar })
+    setApiAuthSession({ accessToken: tokenDeAcesso(7) })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respostaJson(200, { access: tokenDeAcesso(9) })))
+
+    await renovarSessao()
+
+    expect(aoRenovar).toHaveBeenCalledWith(
+      { accessToken: tokenDeAcesso(9) },
+      { contaTrocada: true }
+    )
+  })
+
+  it('retomar a sessão ao recarregar a página não conta como troca', async () => {
+    const aoRenovar = vi.fn()
+    configureApiAuth({ onSessionRefresh: aoRenovar })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respostaJson(200, { access: tokenDeAcesso(9) })))
+
+    await renovarSessao()
+
+    expect(aoRenovar).toHaveBeenCalledWith(
+      { accessToken: tokenDeAcesso(9) },
+      { contaTrocada: false }
+    )
   })
 })

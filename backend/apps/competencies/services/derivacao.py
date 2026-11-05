@@ -32,10 +32,13 @@ from apps.competencies.models import (
     NivelImportancia,
 )
 from apps.copilot.models import PropostaEstruturada
-from apps.copilot.services.proposta import proposta_de
+from apps.copilot.services.proposta import exigir_proposta_revisada, proposta_de
 from apps.network.models import Competencia
-from apps.opportunities.models import Oportunidade
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services.fluxo import avancar, conferir_avanco, exigir_em_curso
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
+
+COMPETENCIAS = SituacaoOportunidade.COMPETENCIAS
 
 ELEMENTOS_NO_TEXTO = (
     ('Problema de pesquisa', 'problema_pesquisa'),
@@ -95,9 +98,9 @@ class DerivarCompetenciasService:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.gemini_service import ProvedorGemini
+        from apps.ai.services.registro import provedor_principal
 
-        return ProvedorGemini()
+        return provedor_principal()
 
     def execute(
         self, *, oportunidade: Oportunidade, ator: Usuario
@@ -119,6 +122,8 @@ class DerivarCompetenciasService:
                 'proposta_vazia',
             )
 
+        exigir_proposta_revisada(proposta)
+        conferir_avanco(oportunidade, COMPETENCIAS)
         correlation_id = uuid.uuid4()
         resultado = self._resolver_provedor().derivar_competencias(
             oportunidade_id=oportunidade.id_oportunidade,
@@ -129,12 +134,16 @@ class DerivarCompetenciasService:
 
         execucao_ia = resultado.get('execucao_ia')
         fallback_usado = bool(resultado.get('fallback_usado'))
+        motivo_fallback = resultado.get('motivo_fallback') if fallback_usado else None
         saida = SaidaCompetenciasSerializer(data=resultado.get('dados') or {})
         aceita = saida.is_valid()
         itens = saida.validated_data.get('competencias', []) if aceita else []
 
         with transaction.atomic():
-            PropostaEstruturada.objects.select_for_update().get(pk=proposta.pk)
+            avancar(oportunidade, COMPETENCIAS, ator)
+            exigir_proposta_revisada(
+                PropostaEstruturada.objects.select_for_update().get(pk=proposta.pk)
+            )
 
             criadas = []
             existentes = {
@@ -181,6 +190,7 @@ class DerivarCompetenciasService:
             return {
                 'criadas': criadas,
                 'fallback_usado': fallback_usado,
+                'motivo_fallback': motivo_fallback,
                 'execucao_ia': execucao_ia,
             }
 
@@ -193,6 +203,8 @@ class AdicionarCompetenciaService:
         self, *, oportunidade: Oportunidade, dados: dict[str, Any], ator: Usuario
     ) -> CompetenciaNecessaria:
         proposta = proposta_de(oportunidade)
+        exigir_proposta_revisada(proposta)
+        avancar(oportunidade, COMPETENCIAS, ator)
         descricao = dados['descricao'].strip()
 
         if proposta.competencias_necessarias.filter(
@@ -235,6 +247,7 @@ class AtualizarCompetenciaService:
         dados: dict[str, Any],
         ator: Usuario,
     ) -> CompetenciaNecessaria:
+        exigir_em_curso(competencia.proposta.oportunidade)
         antes = {campo: getattr(competencia, campo) for campo in dados}
 
         for campo, valor in dados.items():
@@ -278,6 +291,7 @@ class RemoverCompetenciaService:
         self, *, competencia: CompetenciaNecessaria, ator: Usuario
     ) -> None:
         oportunidade = competencia.proposta.oportunidade
+        exigir_em_curso(oportunidade)
         identificador = competencia.id_competencia_necessaria
         descricao = competencia.descricao
 

@@ -77,6 +77,15 @@ describe('IdeiaFormPage', () => {
     expect(screen.getByText(/nasce em entrada/i)).toBeInTheDocument()
   })
 
+  it('marca título, resumo e responsável como obrigatórios e explica o asterisco', () => {
+    renderApp()
+
+    expect(screen.getByLabelText(/^Título/)).toBeRequired()
+    expect(screen.getByLabelText(/resumo da ideia/i)).toBeRequired()
+    expect(screen.getByLabelText(/supervisor responsável/i)).toBeRequired()
+    expect(screen.getByText('Campos com * são obrigatórios.')).toBeInTheDocument()
+  })
+
   it('não pede organização demandante — ideia interna não tem uma', () => {
     renderApp()
 
@@ -120,7 +129,7 @@ describe('IdeiaFormPage', () => {
 
     await screen.findByRole('option', { name: 'Rafael Antunes' })
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Cultura starter regional')
+    await user.type(screen.getByLabelText(/^título/i), 'Cultura starter regional')
     await user.type(screen.getByLabelText(/resumo da ideia/i), 'Isolar cultura nativa da região.')
     await user.type(screen.getByLabelText(/motivação/i), 'Padronizar o queijo artesanal.')
     await user.click(screen.getByRole('button', { name: /cadastrar ideia interna/i }))
@@ -142,12 +151,12 @@ describe('IdeiaFormPage', () => {
     renderApp()
     await screen.findByRole('option', { name: 'Rafael Antunes' })
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Cultura starter regional')
+    await user.type(screen.getByLabelText(/^título/i), 'Cultura starter regional')
     await user.type(screen.getByLabelText(/resumo da ideia/i), 'Isolar cultura nativa.')
     await user.click(screen.getByRole('button', { name: /cadastrar ideia interna/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/campo obrigatório/i)
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('Cultura starter regional')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('Cultura starter regional')
   })
 
   it('avisa quando não consegue carregar os supervisores', async () => {
@@ -174,7 +183,7 @@ describe('IdeiaFormPage — rascunho e guarda de saída', () => {
     const user = userEvent.setup({ delay: null })
     renderApp()
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Cultura starter regional')
+    await user.type(screen.getByLabelText(/^título/i), 'Cultura starter regional')
     await user.click(screen.getByRole('link', { name: /cancelar/i }))
 
     expect(await screen.findByRole('heading', { name: /sair sem cadastrar/i })).toBeInTheDocument()
@@ -184,7 +193,7 @@ describe('IdeiaFormPage — rascunho e guarda de saída', () => {
     const user = userEvent.setup({ delay: null })
     const primeira = renderApp()
 
-    await user.type(screen.getByLabelText(/^título$/i), 'Cultura starter regional')
+    await user.type(screen.getByLabelText(/^título/i), 'Cultura starter regional')
 
     expect(window.localStorage.getItem(
       'pdconnect.rascunho-ideia-interna:supervisor@ac2microbiologia.com.br'
@@ -196,7 +205,7 @@ describe('IdeiaFormPage — rascunho e guarda de saída', () => {
     primeira.unmount()
     renderApp()
 
-    expect(screen.getByLabelText(/^título$/i)).toHaveValue('Cultura starter regional')
+    expect(screen.getByLabelText(/^título/i)).toHaveValue('Cultura starter regional')
     expect(screen.getByText(/rascunho recuperado/i)).toBeInTheDocument()
   })
 })

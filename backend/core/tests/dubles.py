@@ -19,14 +19,24 @@ from typing import Any
 from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
 
 PROPOSTA_PADRAO = {
-    'problema_pesquisa': 'Contaminacao por Alicyclobacillus resiste a pasteurizacao.',
-    'hipotese': 'A deteccao por PCR antecipa o descarte do lote.',
-    'objetivo_geral': 'Desenvolver protocolo de deteccao rapida.',
-    'objetivos_especificos': ['Isolar cepas', 'Validar o metodo'],
-    'metodologia': 'Cultivo seletivo seguido de PCR em tempo real.',
-    'resultados_esperados': 'Protocolo validado em 48 horas.',
-    'caracterizacao_inovacao': 'Reduz de 10 dias para 48 horas.',
-    'infraestrutura_recursos': 'Laboratorio de microbiologia da AC2.',
+    'preenchimentos': {
+        'problema_pesquisa': 'Contaminacao por Alicyclobacillus resiste a pasteurizacao.',
+        'hipotese': 'A deteccao por PCR antecipa o descarte do lote.',
+        'objetivo_geral': 'Desenvolver protocolo de deteccao rapida.',
+        'objetivos_especificos': ['Isolar cepas', 'Validar o metodo'],
+        'metodologia': 'Cultivo seletivo seguido de PCR em tempo real.',
+        'resultados_esperados': 'Protocolo validado em 48 horas.',
+        'caracterizacao_inovacao': 'Reduz de 10 dias para 48 horas.',
+        'infraestrutura_recursos': 'Laboratorio de microbiologia da AC2.',
+    },
+    'sugestoes': [],
+    'avaliacao': [],
+}
+
+SINTESE_PADRAO = {
+    'problema': 'Lotes de suco perdidos por contaminacao.',
+    'contexto': 'Linha de envase.',
+    'o_que_falta': ['Volume perdido por mes'],
 }
 
 COMPETENCIAS_PADRAO = {
@@ -53,9 +63,21 @@ PREANALISE_PADRAO = {
         },
     ],
     'lacunas': [
-        {'dimensao': 'infraestrutura', 'descricao': 'Nao ha descricao do laboratorio.'}
+        {
+            'id': 'L1',
+            'dimensao': 'infraestrutura',
+            'criterio': 'F1',
+            'descricao': 'Nao ha descricao do laboratorio.',
+        }
     ],
-    'recomendacoes': ['Descrever a infraestrutura disponivel.'],
+    'recomendacoes': [
+        {
+            'lacuna': 'L1',
+            'criterio': 'F1',
+            'texto': 'Descrever a infraestrutura disponivel.',
+            'sem_evidencia': False,
+        }
+    ],
     'sintese': 'Proposta consistente, com lacuna de infraestrutura.',
 }
 
@@ -70,14 +92,17 @@ class ProvedorFake:
         competencias: dict[str, Any] | None = None,
         matches: dict[str, Any] | None = None,
         preanalise: dict[str, Any] | None = None,
+        sintese: dict[str, Any] | None = None,
     ) -> None:
         self._proposta = PROPOSTA_PADRAO if proposta is None else proposta
+        self._sintese = SINTESE_PADRAO if sintese is None else sintese
         self._competencias = (
             COMPETENCIAS_PADRAO if competencias is None else competencias
         )
         self._matches = {'matches': []} if matches is None else matches
         self._preanalise = PREANALISE_PADRAO if preanalise is None else preanalise
         self.chamadas: list[str] = []
+        self.pedidos: dict[str, dict[str, Any]] = {}
 
     @property
     def disponivel(self) -> bool:
@@ -101,14 +126,23 @@ class ProvedorFake:
 
         return {'dados': dados, 'execucao_ia': execucao, 'fallback_usado': False}
 
+    def sintetizar_entrada(self, **kwargs) -> dict[str, Any]:
+        self.chamadas.append('sintetizar_entrada')
+        self.pedidos['sintetizar_entrada'] = kwargs
+        return self._responder(
+            TipoExecucaoIA.COPILOTO, self._sintese, kwargs.get('executado_por', '')
+        )
+
     def estruturar_proposta(self, **kwargs) -> dict[str, Any]:
         self.chamadas.append('estruturar_proposta')
+        self.pedidos['estruturar_proposta'] = kwargs
         return self._responder(
             TipoExecucaoIA.COPILOTO, self._proposta, kwargs.get('executado_por', '')
         )
 
     def derivar_competencias(self, **kwargs) -> dict[str, Any]:
         self.chamadas.append('derivar_competencias')
+        self.pedidos['derivar_competencias'] = kwargs
         return self._responder(
             TipoExecucaoIA.COMPETENCIAS,
             self._competencias,
@@ -117,12 +151,14 @@ class ProvedorFake:
 
     def executar_matching(self, **kwargs) -> dict[str, Any]:
         self.chamadas.append('executar_matching')
+        self.pedidos['executar_matching'] = kwargs
         return self._responder(
             TipoExecucaoIA.MATCHING, self._matches, kwargs.get('executado_por', '')
         )
 
     def pre_analise_pipe(self, **kwargs) -> dict[str, Any]:
         self.chamadas.append('pre_analise_pipe')
+        self.pedidos['pre_analise_pipe'] = kwargs
         return self._responder(
             TipoExecucaoIA.PREANALISE,
             self._preanalise,
@@ -131,28 +167,33 @@ class ProvedorFake:
 
 
 class ProvedorIndisponivel:
-    """O gateway sem chave: fallback em toda operacao, sem execucao gravada."""
+    """
+    O gateway que nao chama a IA: fallback em toda operacao, sem execucao.
+
+    `motivo` e o que o gateway diz a quem consome: sem chave, limite da
+    oportunidade ou limite do mes.
+    """
+
+    def __init__(self, motivo: str = 'ia_indisponivel') -> None:
+        self._motivo = motivo
 
     @property
     def disponivel(self) -> bool:
         return False
 
     def _fallback(self, dados: dict[str, Any]) -> dict[str, Any]:
-        return {'dados': dados, 'execucao_ia': None, 'fallback_usado': True}
+        return {
+            'dados': dados,
+            'execucao_ia': None,
+            'fallback_usado': True,
+            'motivo_fallback': self._motivo,
+        }
+
+    def sintetizar_entrada(self, **kwargs) -> dict[str, Any]:
+        return self._fallback({'problema': '', 'contexto': '', 'o_que_falta': []})
 
     def estruturar_proposta(self, **kwargs) -> dict[str, Any]:
-        return self._fallback(
-            {
-                'problema_pesquisa': '',
-                'hipotese': None,
-                'objetivo_geral': '',
-                'objetivos_especificos': [],
-                'metodologia': '',
-                'resultados_esperados': '',
-                'caracterizacao_inovacao': '',
-                'infraestrutura_recursos': '',
-            }
-        )
+        return self._fallback({'preenchimentos': {}, 'sugestoes': [], 'avaliacao': []})
 
     def derivar_competencias(self, **kwargs) -> dict[str, Any]:
         return self._fallback({'competencias': []})

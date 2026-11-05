@@ -231,6 +231,7 @@ class MembroRedeBuilder:
         self._experiencia = ''
         self._usuario: Usuario | None = None
         self._liberar_acesso = False
+        self._inativo = False
         self._competencias: list[tuple[str, str]] = []
 
     def supervisor(self) -> MembroRedeBuilder:
@@ -263,6 +264,10 @@ class MembroRedeBuilder:
 
     def indisponivel(self) -> MembroRedeBuilder:
         self._disponibilidade = Disponibilidade.INDISPONIVEL
+        return self
+
+    def inativo(self) -> MembroRedeBuilder:
+        self._inativo = True
         return self
 
     def com_experiencia(self, texto: str) -> MembroRedeBuilder:
@@ -314,7 +319,9 @@ class MembroRedeBuilder:
             experiencia=self._experiencia,
             usuario=usuario,
             situacao=(
-                SituacaoMembro.ATIVO if usuario else SituacaoMembro.SEM_ACESSO
+                SituacaoMembro.INATIVO
+                if self._inativo
+                else SituacaoMembro.ATIVO if usuario else SituacaoMembro.SEM_ACESSO
             ),
         )
 

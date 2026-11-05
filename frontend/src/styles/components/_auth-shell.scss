@@ -19,6 +19,41 @@
   min-height: calc(100vh - 68px);
 }
 
+.aviso-de-conta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin: 16px var(--admin-gutter, 24px) 0;
+  padding: 14px 18px;
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-accent);
+  border-left: 4px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+}
+
+.aviso-de-conta__texto {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.authenticated-app__rodape {
+  padding: 16px var(--admin-gutter, 24px) 24px;
+  font-size: 0.8125rem;
+  text-align: center;
+  color: var(--text-muted);
+
+  a {
+    color: var(--text-muted);
+    text-decoration: underline;
+  }
+}
+
 .route-state {
   min-height: 100vh;
   display: flex;

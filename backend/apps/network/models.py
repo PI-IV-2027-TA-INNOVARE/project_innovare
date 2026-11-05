@@ -31,7 +31,7 @@ class Disponibilidade(models.TextChoices):
     INTEGRAL = 'integral', 'Integral'
     PARCIAL = 'parcial', 'Parcial'
     PONTUAL = 'pontual', 'Pontual / consultiva'
-    INDISPONIVEL = 'indisponivel', 'Indisponivel no momento'
+    INDISPONIVEL = 'indisponivel', 'Indisponível no momento'
 
 
 class SituacaoMembro(models.TextChoices):
@@ -41,13 +41,13 @@ class SituacaoMembro(models.TextChoices):
 
 
 class TipoCompetencia(models.TextChoices):
-    COMPETENCIA = 'competencia', 'Competencia'
-    TECNICA = 'tecnica', 'Tecnica'
+    COMPETENCIA = 'competencia', 'Competência'
+    TECNICA = 'tecnica', 'Técnica'
     LINHA_PESQUISA = 'linha_pesquisa', 'Linha de pesquisa'
 
 
 class DeclaradoPor(models.TextChoices):
-    MEMBRO = 'membro', 'O proprio membro'
+    MEMBRO = 'membro', 'O próprio membro'
     SUPERVISOR = 'supervisor', 'Supervisor'
 
 

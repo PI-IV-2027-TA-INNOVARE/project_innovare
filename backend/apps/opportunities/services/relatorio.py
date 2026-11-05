@@ -29,21 +29,21 @@ from apps.maturity.models import CriterioPreAnalise, PreAnalise
 from apps.opportunities.models import AnexoOportunidade, Oportunidade
 
 MOTIVO_PROPOSTA_NAO_INICIADA = (
-    'A proposta estruturada ainda nao foi iniciada para esta oportunidade.'
+    'A proposta estruturada ainda não foi iniciada para esta oportunidade.'
 )
 
 MOTIVO_SEM_COMPETENCIAS = (
-    'As competencias necessarias ainda nao foram derivadas da proposta '
+    'As competências necessárias ainda não foram derivadas da proposta '
     'estruturada.'
 )
 
 MOTIVO_SEM_EQUIPE = (
-    'A equipe potencial ainda nao foi gerada: o matching roda a partir das '
-    'competencias necessarias.'
+    'A equipe potencial ainda não foi gerada: ela parte das competências '
+    'necessárias.'
 )
 
 MOTIVO_SEM_PRE_ANALISE = (
-    'A pre-analise de maturidade ainda nao foi executada para esta proposta.'
+    'A pré-análise de maturidade ainda não foi feita para esta proposta.'
 )
 
 
@@ -213,6 +213,96 @@ class FluxoDaOportunidade:
         return tuple(pendentes)
 
 
+PARCELAS_DA_NOTA = (
+    ('semantico', 'afinidade com o tema'),
+    ('lexical', 'palavras em comum'),
+    ('area', 'área de atuação'),
+    ('disponibilidade', 'disponibilidade'),
+)
+
+
+def _porcento(valor) -> str:
+    try:
+        return f'{round(float(valor) * 100)}%'
+    except (TypeError, ValueError):
+        return '-'
+
+
+def como_foi_calculado(equipe: EquipePotencial) -> tuple[str, ...]:
+    """
+    A explicacao da nota, montada com os pesos da propria rodada.
+
+    E o texto que sai da aba Equipe para o relatorio: na tela fica o essencial,
+    aqui fica como cada numero foi produzido.
+    """
+    execucao = equipe.execucao
+    pesos = (execucao.pesos or {}).get('componentes', {}) if execucao else {}
+
+    parcelas = ', '.join(
+        f'{nome} ({_porcento(pesos[chave])})'
+        for chave, nome in PARCELAS_DA_NOTA
+        if chave in pesos
+    )
+
+    paragrafos = [
+        'A nota de cada pessoa soma quatro parcelas, cada uma com o seu peso: '
+        f'{parcelas}.' if parcelas else
+        'A nota de cada pessoa soma a afinidade com o tema, as palavras em '
+        'comum, a área de atuação e a disponibilidade.',
+        'A afinidade com o tema compara o sentido das competências necessárias '
+        'com o perfil da pessoa, mesmo com palavras diferentes. Palavras em '
+        'comum contam os termos iguais. Área de atuação compara as linhas de '
+        'pesquisa, e disponibilidade pesa o tempo que a pessoa declarou.',
+    ]
+
+    if execucao is not None and execucao.fallback_usado:
+        paragrafos.append(
+            'Nesta rodada a afinidade com o tema não estava disponível: a nota '
+            'saiu das outras três parcelas, reescaladas para somar 100%.'
+        )
+
+    desejavel = (execucao.pesos or {}).get('desejavel') if execucao else None
+
+    if desejavel is not None:
+        paragrafos.append(
+            'Na cobertura das competências, uma competência desejável vale '
+            f'{_porcento(desejavel)} de uma essencial.'
+        )
+
+    if execucao is not None and execucao.usou_rerank:
+        paragrafos.append(
+            'Depois do cálculo, a IA revisou a ordem das pessoas e acrescentou '
+            'motivos. A nota de cada pessoa não muda com essa revisão.'
+        )
+
+    paragrafos.append(
+        'A composição é uma sugestão: o Supervisor valida e ajusta a equipe. '
+        'Ninguém é convidado nem convocado pelo sistema.'
+    )
+
+    return tuple(paragrafos)
+
+
+def como_ler_a_preanalise(analise: PreAnalise) -> tuple[str, ...]:
+    """O texto que explica a leitura do relatorio da pre-analise."""
+    versao = analise.versao_criterio.versao if analise.versao_criterio_id else '-'
+
+    return (
+        'A pré-análise compara a proposta com os critérios da chamada '
+        f'PIPE/FAPESP na versão {versao}, agrupados em seis dimensões.',
+        'Cada dimensão recebe um de três níveis. Consolidada: o que a dimensão '
+        'pede está demonstrado na proposta. Em desenvolvimento: está em parte '
+        'demonstrado, com lacunas a fechar. Frágil: está ausente ou pouco '
+        'demonstrado.',
+        'As lacunas dizem o que falta. As recomendações dizem o que fazer para '
+        'fechar cada lacuna. Uma recomendação marcada como acatada já foi '
+        'aplicada pela equipe, e a próxima pré-análise mostra se a dimensão '
+        'avançou.',
+        'É orientação interna do P&D Connect: não é nota, parecer nem decisão '
+        'da FAPESP.',
+    )
+
+
 @dataclass(frozen=True)
 class RelatorioDaPreAnalise:
     """
@@ -230,6 +320,7 @@ class RelatorioDaPreAnalise:
     criterios: tuple[CriterioPreAnalise, ...]
     equipe: EquipePotencial | None
     gerado_em: datetime
+    como_ler: tuple[str, ...] = ()
 
 
 class PreAnaliseDaOportunidade:
@@ -263,6 +354,7 @@ class PreAnaliseDaOportunidade:
             ),
             equipe=self._equipe(),
             gerado_em=timezone.now(),
+            como_ler=como_ler_a_preanalise(analise),
         )
 
     def _equipe(self) -> EquipePotencial | None:
@@ -287,6 +379,7 @@ class RelatorioDaEquipe:
     equipe: EquipePotencial
     competencias: tuple[CompetenciaNecessaria, ...]
     gerado_em: datetime
+    como_foi_calculado: tuple[str, ...] = ()
 
 
 class EquipeDaOportunidade:
@@ -318,4 +411,5 @@ class EquipeDaOportunidade:
                 else ()
             ),
             gerado_em=timezone.now(),
+            como_foi_calculado=como_foi_calculado(equipe),
         )

@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import AdminModal from '../../../components/console/AdminModal'
 import { useBranding } from '../../../context/BrandingContext'
 import { useTheme } from '../../../context/ThemeContext'
 import { Icone, appIcons } from '../../../lib/icons'
 import {
   TOKEN_KIND_LABELS,
-  getDerivedVariables,
-  isValidHex,
-  toRgbaString,
+  alphaOf,
+  toPickerHex,
+  withPickedHue,
 } from '../../../theme/brandTokens'
-import LivePreview from './LivePreview'
+import { SITUACOES } from '../../app/oportunidades/oportunidadesData'
 
 const TOAST_MS = 2600
 const COPIED_MS = 1600
+
+const SELOS_DE_EXEMPLO = SITUACOES.filter(({ id }) => id === 'continuar' || id === 'arquivada')
 
 function normalize(text) {
   return String(text || '')
@@ -19,10 +22,6 @@ function normalize(text) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
-}
-
-function toColorInputValue(value, fallback) {
-  return isValidHex(value) ? value : fallback
 }
 
 async function copyText(text) {
@@ -60,35 +59,38 @@ function TokenCard({
   onCopy,
   copied,
 }) {
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const advancedId = useId()
+  const erroId = useId()
+  const opacidadeId = useId()
   const kindLabel = TOKEN_KIND_LABELS[token.kind] || 'Token'
-  const derived = useMemo(
-    () => (advancedOpen ? getDerivedVariables(token, value) : []),
-    [advancedOpen, token, value]
-  )
+  const corDoSeletor = toPickerHex(value) || toPickerHex(token.light)
+  const alfa = alphaOf(value)
+  const opacidade = alfa !== null && alfa < 1 ? Math.round(alfa * 100) : null
 
   return (
     <article className={`token-card${isCustomized ? ' is-customized' : ''}`}>
       <label className="token-card__swatch" title={`Escolher ${token.label}`}>
-        <span className="token-card__swatch-fill" style={{ background: value }} aria-hidden="true" />
-        <span className="token-card__swatch-action" aria-hidden="true">Escolher cor</span>
+        <span className="token-card__swatch-fill" style={{ backgroundColor: value }} aria-hidden="true" />
+        <span className="token-card__swatch-action" aria-hidden="true">
+          <Icone icon={appIcons.appearance} />
+        </span>
         <input
           type="color"
-          value={toColorInputValue(value, token.light)}
-          onChange={(event) => onChange(event.target.value)}
+          value={corDoSeletor}
+          onChange={(event) => onChange(withPickedHue(value, event.target.value))}
           aria-label={`Escolher ${token.label}`}
         />
       </label>
 
-      <div className="token-card__body">
+      <div className="token-card__info">
         <div className="token-card__heading">
           <h4 className="token-card__name">{token.label}</h4>
           <span className={`token-badge token-badge--${token.kind}`}>{kindLabel}</span>
         </div>
 
         <p className="token-card__hint">{token.hint}</p>
+      </div>
 
+      <div className="token-card__valor">
         <div className="token-card__controls">
           <input
             type="text"
@@ -98,6 +100,7 @@ function TokenCard({
             spellCheck="false"
             aria-label={`Valor de ${token.label}`}
             aria-invalid={invalido || undefined}
+            aria-describedby={invalido ? erroId : opacidade === null ? undefined : opacidadeId}
           />
 
           <button
@@ -111,62 +114,68 @@ function TokenCard({
           </button>
         </div>
 
-        <div className="token-card__footer">
+        {invalido ? (
+          <p id={erroId} className="admin-field__error">
+            Não é uma cor. Use hexadecimal, como #1B5E20, ou rgba().
+          </p>
+        ) : null}
+
+        {opacidade !== null ? (
+          <p id={opacidadeId} className="token-card__opacidade">
+            {`Translúcida, com ${opacidade}% de opacidade.`}
+          </p>
+        ) : null}
+      </div>
+
+      {isCustomized ? (
+        <div className="token-card__estado">
+          <span className="token-card__flag">personalizada</span>
           <button
             type="button"
-            className="disclosure"
-            aria-expanded={advancedOpen}
-            aria-controls={advancedId}
-            onClick={() => setAdvancedOpen((open) => !open)}
+            className="link-button"
+            onClick={onReset}
+            title={`Restaurar o padrão da AC2 para ${token.label}`}
           >
-            <Icone
-              icon={appIcons.disclosure}
-              className={`disclosure__chevron${advancedOpen ? ' is-open' : ''}`}
-            />
-            Avançado
+            Desfazer
           </button>
-
-          {isCustomized ? (
-            <span className="token-card__state">
-              <span className="token-card__flag">alterado</span>
-              <button
-                type="button"
-                className="link-button"
-                onClick={onReset}
-                title={`Restaurar o padrão da AC2 para ${token.label}`}
-              >
-                Desfazer
-              </button>
-            </span>
-          ) : null}
         </div>
-
-        <dl id={advancedId} className="token-advanced" hidden={!advancedOpen}>
-          <div className="token-advanced__row">
-            <dt>Token CSS</dt>
-            <dd><code>{token.cssVar}</code></dd>
-          </div>
-          <div className="token-advanced__row">
-            <dt>RGBA</dt>
-            <dd><code>{toRgbaString(value)}</code></dd>
-          </div>
-
-          {derived.length > 0 ? (
-            <div className="token-advanced__row">
-              <dt>Recalcula</dt>
-              <dd>
-                <ul className="token-advanced__derived">
-                  {derived.map((variable) => (
-                    <li key={variable.name}><code>{variable.name}</code></li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
+      ) : null}
     </article>
   )
+}
+
+function ExemploDeEstados() {
+  const tituloId = useId()
+
+  return (
+    <figure className="exemplo-de-estados" aria-labelledby={tituloId}>
+      <figcaption id={tituloId} className="exemplo-de-estados__titulo">
+        Onde essas cores aparecem
+      </figcaption>
+
+      <div className="exemplo-de-estados__selos">
+        {SELOS_DE_EXEMPLO.map(({ id, label }) => (
+          <span key={id} className={`fluxo-badge fluxo-badge--${id}`}>{label}</span>
+        ))}
+      </div>
+
+      <div className="exemplo-de-estados__alertas">
+        <p className="exemplo-de-estados__alerta exemplo-de-estados__alerta--ok">
+          Equipe potencial sugerida com 4 pesquisadores.
+        </p>
+        <p className="exemplo-de-estados__alerta exemplo-de-estados__alerta--atencao">
+          Proposta aguardando revisão do Supervisor.
+        </p>
+        <p className="exemplo-de-estados__alerta exemplo-de-estados__alerta--erro">
+          Competência necessária sem correspondência na rede.
+        </p>
+      </div>
+    </figure>
+  )
+}
+
+const EXEMPLOS_POR_GRUPO = {
+  estados: ExemploDeEstados,
 }
 
 function TokenGroup({
@@ -179,6 +188,10 @@ function TokenGroup({
   cardProps,
 }) {
   const panelId = useId()
+  const tituloId = useId()
+  const totalId = useId()
+  const descricaoId = useId()
+  const Exemplo = EXEMPLOS_POR_GRUPO[group.id]
 
   return (
     <section className={`tokens-group${collapsed ? ' is-collapsed' : ''}`}>
@@ -187,22 +200,35 @@ function TokenGroup({
         className="tokens-group__toggle"
         aria-expanded={!collapsed}
         aria-controls={panelId}
+        aria-labelledby={`${tituloId} ${totalId}`}
+        aria-describedby={descricaoId}
         onClick={onToggle}
       >
         <Icone
           icon={appIcons.disclosure}
           className={`disclosure__chevron${collapsed ? '' : ' is-open'}`}
         />
-        <span className="tokens-group__title">{group.label}</span>
-        <span className="tokens-group__count">
+        <span className="tokens-group__cabecalho">
+          <span id={tituloId} className="tokens-group__title">{group.label}</span>
+          <span id={descricaoId} className="tokens-group__description">{group.description}</span>
+        </span>
+        <span className="tokens-group__amostras" aria-hidden="true">
+          {group.tokens.map((token) => (
+            <span
+              key={token.id}
+              className="tokens-group__amostra"
+              style={{ backgroundColor: branding[token.id] }}
+              title={token.label}
+            />
+          ))}
+        </span>
+        <span id={totalId} className="tokens-group__count">
           {group.tokens.length} {group.tokens.length === 1 ? 'cor' : 'cores'}
         </span>
       </button>
 
       <div id={panelId} className="tokens-group__panel" hidden={collapsed}>
-        <p className="tokens-group__description">{group.description}</p>
-
-        <div className="tokens-group__grid">
+        <div className="tokens-group__lista">
           {group.tokens.map((token) => (
             <TokenCard
               key={token.id}
@@ -214,6 +240,8 @@ function TokenGroup({
             />
           ))}
         </div>
+
+        {Exemplo ? <Exemplo /> : null}
       </div>
     </section>
   )
@@ -246,6 +274,7 @@ export default function AppearanceSection() {
   )
   const [copiedTokenId, setCopiedTokenId] = useState(null)
   const [toast, setToast] = useState(null)
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false)
 
   const toastTimer = useRef(null)
   const copiedTimer = useRef(null)
@@ -290,10 +319,22 @@ export default function AppearanceSection() {
     }
   }, [salvar, showToast])
 
-  const handleDescartar = useCallback(() => {
+  const descartar = useCallback(() => {
+    setConfirmandoDescarte(false)
     descartarRascunho()
     showToast('Alterações descartadas. A paleta publicada continua valendo.')
   }, [descartarRascunho, showToast])
+
+  const handleDescartar = useCallback(() => {
+    if (pendentes > 1) {
+      setConfirmandoDescarte(true)
+      return
+    }
+
+    descartar()
+  }, [descartar, pendentes])
+
+  const fecharConfirmacao = useCallback(() => setConfirmandoDescarte(false), [])
 
   const handleCopy = useCallback(async (tokenId, value) => {
     const ok = await copyText(value)
@@ -432,8 +473,9 @@ export default function AppearanceSection() {
             {invalidos.length === 1
               ? `${invalidos[0].label} não é uma cor válida.`
               : `${invalidos.map(({ label }) => label).join(', ')} não são cores válidas.`}
-            {' '}Use hexadecimal, como <code>#1B5E20</code>. Enquanto não
-            corrigir, a tela mantém a cor anterior e não dá para publicar.
+            {' '}Use hexadecimal, como <code>#1B5E20</code>, ou rgba(), como
+            {' '}<code>rgba(224, 123, 26, 0.16)</code>. Enquanto não corrigir, a
+            tela mantém a cor anterior e não dá para publicar.
           </p>
         </div>
       ) : null}
@@ -452,54 +494,70 @@ export default function AppearanceSection() {
         </p>
       ) : null}
 
-      <div className="appearance-layout">
-        <div className="appearance-main">
-          <div className="appearance-toolbar">
-            <div className="admin-search">
-              <Icone icon={appIcons.search} className="admin-search__icon" />
-              <input
-                type="search"
-                className="admin-search__input"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar configuração"
-                aria-label="Buscar configuração de aparência"
-              />
-            </div>
-
-            <p className="appearance-toolbar__count" aria-live="polite">
-              {query
-                ? `${visibleTokens} de ${totalTokens} cores`
-                : `${totalTokens} cores · ${customizedTokenIds.length} alteradas`}
-            </p>
-          </div>
-
-          {visibleGroups.length > 0 ? (
-            <div className="appearance-groups">
-              {visibleGroups.map((group) => (
-                <TokenGroup
-                  key={group.id}
-                  group={group}
-                  branding={branding}
-                  customized={customized}
-                  invalidos={idsInvalidos}
-                  collapsed={!query && collapsedGroups.has(group.id)}
-                  onToggle={() => toggleGroup(group.id)}
-                  cardProps={cardProps}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="appearance-empty" role="status">
-              Nenhuma configuração encontrada para <strong>{query}</strong>.
-            </p>
-          )}
+      <div className="appearance-toolbar">
+        <div className="admin-search">
+          <Icone icon={appIcons.search} className="admin-search__icon" />
+          <input
+            type="search"
+            className="admin-search__input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar configuração"
+            aria-label="Buscar configuração de aparência"
+          />
         </div>
 
-        <aside className="appearance-aside">
-          <LivePreview />
-        </aside>
+        <p className="appearance-toolbar__count" aria-live="polite">
+          {query
+            ? `${visibleTokens} de ${totalTokens} cores`
+            : `${totalTokens} cores · ${customizedTokenIds.length} ${
+              customizedTokenIds.length === 1 ? 'personalizada' : 'personalizadas'
+            }`}
+        </p>
       </div>
+
+      {visibleGroups.length > 0 ? (
+        <div className="appearance-groups">
+          {visibleGroups.map((group) => (
+            <TokenGroup
+              key={group.id}
+              group={group}
+              branding={branding}
+              customized={customized}
+              invalidos={idsInvalidos}
+              collapsed={!query && collapsedGroups.has(group.id)}
+              onToggle={() => toggleGroup(group.id)}
+              cardProps={cardProps}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="appearance-empty" role="status">
+          Nenhuma configuração encontrada para <strong>{query}</strong>.
+        </p>
+      )}
+
+      {confirmandoDescarte ? (
+        <AdminModal
+          title="Descartar alterações"
+          description={
+            `Você perde as ${pendentes} alterações que ainda não salvou, contando os dois temas. ` +
+            'A paleta publicada continua valendo para todos.'
+          }
+          size="sm"
+          onClose={fecharConfirmacao}
+          footer={
+            <>
+              <button type="button" className="admin-btn admin-btn--outline" onClick={fecharConfirmacao}>
+                Continuar editando
+              </button>
+              <button type="button" className="admin-btn admin-btn--danger" onClick={descartar}>
+                Descartar alterações
+              </button>
+            </>
+          }
+        />
+      ) : null}
 
       {toast ? (
         <div className="admin-toast" role="status" aria-live="polite">

@@ -7,6 +7,7 @@ import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
+  definirPrioridade,
   listarHistorico,
   obterOportunidade,
   registrarDecisao as registrarDecisaoNaApi,
@@ -20,29 +21,52 @@ import AbaEquipe from './abas/AbaEquipe'
 import AbaHistorico from './abas/AbaHistorico'
 import AbaPreAnalise from './abas/AbaPreAnalise'
 import AbaProposta from './abas/AbaProposta'
-import { ETAPAS, REGISTROS } from './etapas'
-import { daApi, eventoDaApi, origemLabel, situacaoLabel } from './oportunidadesData'
+import {
+  CONCLUIDA,
+  EM_ANDAMENTO,
+  ETAPAS,
+  REGISTROS,
+  andamentoDasEtapas,
+  etapaPorId,
+} from './etapas'
+import {
+  PRIORIDADES,
+  daApi,
+  eventoDaApi,
+  origemLabel,
+  prioridadeLabel,
+  situacaoLabel,
+} from './oportunidadesData'
 import './OportunidadesPage.scss'
 
 const ABAS = [...ETAPAS, ...REGISTROS]
 
-function BotaoAba({ item, ativa, bloqueada, onClick }) {
+function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
+  const classes = [
+    'oportunidade-aba',
+    ativa ? 'is-active' : '',
+    andamento === CONCLUIDA ? 'is-concluida' : '',
+    andamento === EM_ANDAMENTO ? 'is-em-andamento' : '',
+  ]
+
   return (
     <button
       type="button"
-      className={`oportunidade-aba${ativa ? ' is-active' : ''}`}
+      className={classes.filter(Boolean).join(' ')}
       aria-current={ativa ? 'step' : undefined}
       disabled={bloqueada}
       onClick={onClick}
     >
       {item.numero ? (
         <span className="oportunidade-aba__numero" aria-hidden="true">
-          {item.numero}
+          {andamento === CONCLUIDA ? <Icone icon={appIcons.done} /> : item.numero}
         </span>
       ) : (
         <Icone icon={item.icon} className="oportunidade-aba__icon" />
       )}
       {item.label}
+      {andamento === CONCLUIDA ? <span className="sr-only"> concluída</span> : null}
+      {andamento === EM_ANDAMENTO ? <span className="sr-only"> em andamento</span> : null}
     </button>
   )
 }
@@ -108,6 +132,19 @@ export default function OportunidadePage() {
     window.scrollTo?.({ top: 0, behavior: 'smooth' })
   }, [trocarAba])
 
+  const mudarPrioridade = async (event) => {
+    const prioridade = event.target.value
+
+    try {
+      await definirPrioridade(id, prioridade)
+      setRegistro((atual) => ({ ...atual, prioridade }))
+      showToast(`Prioridade ${prioridadeLabel(prioridade).toLowerCase()} na fila.`)
+      await atualizarEmSegundoPlano()
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível mudar a prioridade.')
+    }
+  }
+
   const registrarDecisao = async (tipo, justificativa) => {
     try {
       await registrarDecisaoNaApi(id, { tipo, justificativa })
@@ -146,6 +183,8 @@ export default function OportunidadePage() {
 
   const aba = ABAS.find((item) => item.id === abaAtiva) || ABAS[0]
   const decisao = registro.decisao
+  const andamento = andamentoDasEtapas(registro.situacao)
+  const etapaAtiva = etapaPorId(abaAtiva)
 
   return (
     <div className="console oportunidade-page">
@@ -174,6 +213,25 @@ export default function OportunidadePage() {
           <span className={`fluxo-badge fluxo-badge--${registro.situacao}`}>
             {situacaoLabel(registro.situacao)}
           </span>
+          {ehSupervisor && registro.prioridade ? (
+            <label className="oportunidade-page__prioridade">
+              <span>Prioridade</span>
+              <select
+                className="admin-input admin-input--select"
+                value={registro.prioridade}
+                onChange={mudarPrioridade}
+              >
+                {PRIORIDADES.map((opcao) => (
+                  <option key={opcao.id} value={opcao.id}>{opcao.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {!ehSupervisor && registro.prioridade ? (
+            <span className={`prioridade-badge prioridade-badge--${registro.prioridade}`}>
+              Prioridade {prioridadeLabel(registro.prioridade).toLowerCase()}
+            </span>
+          ) : null}
           <span className="oportunidade-page__demandante">{registro.demandante}</span>
           <span className="user-cell__meta">
             Atualizada {formatarUltimoAcesso(registro.atualizadaEm).toLowerCase()}
@@ -190,6 +248,7 @@ export default function OportunidadePage() {
                 ativa={item.id === abaAtiva}
                 bloqueada={abaOcupada && item.id !== abaAtiva}
                 onClick={() => trocarAba(item.id)}
+                andamento={andamento[item.id]}
               />
             </li>
           ))}
@@ -208,6 +267,12 @@ export default function OportunidadePage() {
           ))}
         </ul>
       </nav>
+
+      {etapaAtiva ? (
+        <p className="oportunidade-abas__posicao">
+          Etapa {etapaAtiva.numero} de {ETAPAS.length}
+        </p>
+      ) : null}
 
       {abaOcupada ? (
         <p className="oportunidade-abas__aviso" role="status">
@@ -256,13 +321,23 @@ export default function OportunidadePage() {
         {abaAtiva === 'decisao' ? (
           <AbaDecisao
             decisao={decisao}
+            situacao={registro.situacao}
             podeDecidir={ehSupervisor}
             onRegistrar={registrarDecisao}
+            irPara={irPara}
           />
         ) : null}
 
         {abaAtiva === 'anexos' ? (
-          <AnexosOportunidade codigo={id} podeEnviar={ehSupervisor} />
+          <AnexosOportunidade
+            codigo={id}
+            podeEnviar={ehSupervisor}
+            quemVe={
+              registro.origem === 'externo'
+                ? 'o Supervisor e a equipe indicada. A empresa demandante vê só os documentos que ela mesma enviou.'
+                : 'o Supervisor e a equipe indicada.'
+            }
+          />
         ) : null}
 
         {abaAtiva === 'historico' ? (

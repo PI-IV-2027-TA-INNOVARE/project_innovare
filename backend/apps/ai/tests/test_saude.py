@@ -96,6 +96,17 @@ class ConsumoDeIATests(SaudeBaseTests):
         self.assertFalse(saude_da_plataforma()['ia']['provedor_configurado'])
 
 
+class ProvedoresNaAPITests(SaudeBaseTests):
+    def test_api_expoe_uma_linha_por_provedor(self):
+        """O contrato que a tela consome: a lista nao fica so no servico."""
+        resposta = self.client.get(self.url())
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        provedores = resposta.data['ia']['provedores']
+        self.assertEqual([item['nome'] for item in provedores], ['google'])
+        self.assertEqual(provedores[0]['papel'], 'principal')
+
+
 class CartoesTests(SaudeBaseTests):
     def test_desempenho_traz_o_limite_de_tres_segundos(self):
         """Secao 6: a linha dos 3 s e critério de aceitacao, nao estimativa."""

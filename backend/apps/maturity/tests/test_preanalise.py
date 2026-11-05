@@ -35,6 +35,7 @@ from apps.maturity.models import (
 from apps.maturity.serializers import AVISO_ORIENTATIVO
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
 from apps.maturity.services.preanalise import _texto_da_equipe
+from core.exceptions import ConflitoDeEstado
 from core.tests.builders import (
     MembroRedeBuilder,
     OportunidadeBuilder,
@@ -78,7 +79,10 @@ class PreAnaliseBaseTests(TestCase):
             OportunidadeBuilder().interna().criada_por(self.supervisor).build()
         )
         self.proposta = PropostaEstruturada.objects.create(
-            oportunidade=self.oportunidade, **PROPOSTA
+            oportunidade=self.oportunidade, revisada_por_humano=True, **PROPOSTA
+        )
+        indicar_na_equipe(
+            self.oportunidade, MembroRedeBuilder().pesquisador().chamado('Helena Torres').build()
         )
 
         base_conhecimento.cache_clear()
@@ -275,6 +279,21 @@ class ExecucaoDaPreAnaliseTests(PreAnaliseBaseTests):
         self.assertEqual(analise.dimensoes.count(), 0)
         self.assertEqual(analise.sintese, '')
 
+    def test_execucao_barrada_pelo_limite_de_gasto_diz_o_motivo(self):
+        self.importar_criterios()
+
+        analise = self.analisar(provedor=ProvedorIndisponivel(motivo='limite_da_oportunidade'))
+
+        self.assertEqual(analise.status, StatusExecucao.ERRO)
+        self.assertEqual(analise.erro, 'limite_da_oportunidade')
+
+    def test_execucao_barrada_pelo_limite_do_mes_diz_o_motivo(self):
+        self.importar_criterios()
+
+        analise = self.analisar(provedor=ProvedorIndisponivel(motivo='limite_do_mes'))
+
+        self.assertEqual(analise.erro, 'limite_do_mes')
+
     def test_reavaliacao_cria_execucao_nova_sem_apagar_a_anterior(self):
         """RF10: reavaliar depois das melhorias e o caso previsto."""
         self.importar_criterios()
@@ -429,7 +448,7 @@ class TextoDaEquipeTests(PreAnaliseBaseTests):
 
     def _consultas_para(self, oportunidade):
         with CaptureQueriesContext(connection) as consultas:
-            texto = _texto_da_equipe(oportunidade)
+            texto, _ = _texto_da_equipe(oportunidade)
 
         return len(consultas), texto
 
@@ -438,7 +457,53 @@ class TextoDaEquipeTests(PreAnaliseBaseTests):
         cinco, texto = self._consultas_para(self._equipe_com(5))
 
         self.assertEqual(uma, cinco)
-        self.assertEqual(texto.count('Pessoa'), 5)
+        self.assertEqual(texto.count('- Pesquisador '), 5)
+        self.assertNotIn('Pessoa', texto)
+
+
+class MembroInativoNaPreAnaliseTests(PreAnaliseBaseTests):
+    """
+    Quem foi inativado continua na equipe antiga, marcado (SPEC-11), mas nao
+    vai mais para a pre-analise: a IA avaliaria uma equipe que nao existe.
+    """
+
+    def _equipe_com_inativo(self):
+        from apps.matching.models import EquipePotencial, MembroEquipe
+
+        oportunidade = (
+            OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        )
+        equipe = EquipePotencial.objects.create(oportunidade=oportunidade)
+
+        for membro in (
+            MembroRedeBuilder().pesquisador().chamado('Pessoa Ativa').build(),
+            MembroRedeBuilder().pesquisador().chamado('Pessoa Inativa').inativo().build(),
+        ):
+            MembroEquipe.objects.create(
+                equipe=equipe, membro=membro, papel=membro.papel_rede
+            )
+
+        return oportunidade
+
+    def test_membro_inativo_fica_fora_do_texto_da_equipe(self):
+        texto, apelidos = _texto_da_equipe(self._equipe_com_inativo())
+
+        self.assertEqual(texto.count('- Pesquisador '), 1)
+        self.assertEqual(apelidos.restaurar('Pesquisador A'), 'Pessoa Ativa')
+
+    def test_equipe_so_com_inativos_nao_vai_para_a_pre_analise(self):
+        from apps.matching.models import MembroEquipe
+
+        MembroEquipe.objects.filter(
+            equipe__oportunidade=self.oportunidade
+        ).update(incluido=True)
+        membro = MembroEquipe.objects.get(equipe__oportunidade=self.oportunidade).membro
+        membro.situacao = 'inativo'
+        membro.save(update_fields=['situacao'])
+        self.importar_criterios()
+
+        with self.assertRaisesMessage(ConflitoDeEstado, 'ativa'):
+            self.analisar()
 
 
 def _preanalise_com(niveis, lacunas=1):
@@ -453,10 +518,13 @@ def _preanalise_com(niveis, lacunas=1):
             for dimensao, nivel in niveis.items()
         ],
         'lacunas': [
-            {'dimensao': 'infraestrutura', 'descricao': f'Lacuna {indice}.'}
+            {'id': f'L{indice}', 'dimensao': 'infraestrutura', 'descricao': f'Lacuna {indice}.'}
             for indice in range(lacunas)
         ],
-        'recomendacoes': ['Descrever a infraestrutura disponivel.'],
+        'recomendacoes': [
+            {'lacuna': f'L{indice}', 'texto': 'Descrever a infraestrutura disponivel.'}
+            for indice in range(lacunas)
+        ],
         'sintese': 'Sintese da rodada.',
     }
 

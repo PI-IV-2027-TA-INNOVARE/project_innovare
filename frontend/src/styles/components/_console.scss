@@ -16,10 +16,22 @@
   --admin-glow: 0 10px 28px color-mix(in srgb, var(--accent-secondary) 16%, transparent);
   --admin-glow-soft: 0 2px 10px color-mix(in srgb, var(--accent-secondary) 8%, transparent);
 
-
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--accent-primary);
     outline-offset: 2px;
+  }
+}
+
+.admin-page__breadcrumb {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+
+  span {
+    margin: 0 6px;
+    opacity: 0.7;
   }
 }
 
@@ -221,7 +233,7 @@
   min-height: 44px;
   padding: 0 14px;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   color: var(--text-primary);
   background: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -391,6 +403,20 @@
   min-width: 200px;
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+
+.admin-callout--alerta {
+  background: color-mix(in srgb, var(--accent-warning) 9%, transparent);
+  border-color: color-mix(in srgb, var(--accent-warning) 28%, transparent);
+  border-left-color: var(--accent-warning);
+
+  .admin-callout__icon {
+    color: var(--accent-warning);
+  }
+
+  .admin-callout__text {
+    color: var(--text-primary);
+  }
 }
 
 .admin-callout__detail {
@@ -654,6 +680,27 @@
   flex-wrap: wrap;
 }
 
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: var(--admin-gap);
+}
+
+.paginacao__total,
+.paginacao__posicao {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.paginacao__controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .admin-table-wrap {
   overflow-x: auto;
   background: var(--bg-card);
@@ -698,6 +745,22 @@
 
       td:first-child {
         box-shadow: inset 3px 0 0 var(--accent-primary);
+      }
+    }
+  }
+
+  tbody tr.is-pedido {
+    background: color-mix(in srgb, var(--accent-warning) 8%, transparent);
+
+    td:first-child {
+      box-shadow: inset 3px 0 0 var(--accent-warning);
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+
+      td:first-child {
+        box-shadow: inset 3px 0 0 var(--accent-warning);
       }
     }
   }
@@ -804,6 +867,15 @@
   color: var(--text-muted);
 }
 
+.user-cell__pedido {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--accent-warning);
+}
+
 .user-cell__email {
   font-size: 0.875rem;
   color: var(--text-muted);
@@ -825,7 +897,7 @@
 
   &--administrador {
     color: var(--text-on-accent, #fff);
-    background: var(--accent-primary);
+    background: var(--accent-primary-text);
   }
 
   &--pesquisador {
@@ -929,6 +1001,22 @@
   }
 }
 
+.prioridade-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+
+  &--alta {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
 .row-menu {
   position: relative;
   display: inline-flex;
@@ -1015,6 +1103,16 @@
 
     svg {
       color: var(--accent-primary-text);
+    }
+  }
+
+  &:disabled {
+    color: var(--text-muted);
+    background: transparent;
+    cursor: progress;
+
+    svg {
+      color: var(--text-muted);
     }
   }
 
@@ -1226,7 +1324,7 @@
 }
 
 .admin-field__label {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -1237,7 +1335,7 @@
 }
 
 .admin-field__hint {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.45;
   color: var(--text-muted);
 }
@@ -1299,10 +1397,9 @@
 .perfil-card__description {
   margin-top: 6px;
   max-width: 54ch;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.55;
   color: var(--text-muted);
-  opacity: 0.85;
 }
 
 .criterios__resumo {
@@ -1533,6 +1630,7 @@
       grid-template-columns: 108px minmax(0, 1fr);
       gap: 12px;
       align-items: center;
+      justify-items: start;
       padding: 0;
       border: none;
 
@@ -1559,6 +1657,23 @@
 
     td.admin-table__actions-col {
       justify-items: end;
+    }
+
+    tbody tr.is-pedido {
+      box-shadow: inset 3px 0 0 var(--accent-warning);
+
+      td:first-child {
+        box-shadow: none;
+      }
+    }
+
+    .user-cell__pedido {
+      grid-column: 2;
+      margin-top: 0;
+    }
+
+    .user-cell__email {
+      overflow-wrap: anywhere;
     }
   }
 }
@@ -1595,12 +1710,6 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
-
-  .token-card:hover,
-  .token-card:focus-within,
-  .preview-card:hover {
-    transform: none;
-  }
 }
 
 .guarda-saida__nota {
@@ -1610,7 +1719,7 @@
 }
 
 .console-form {
-  @include cartoes-em-grade(2);
+  @include cartoes-em-grade(2, $altura-igual: false);
 
   margin-top: var(--admin-pad);
 }
@@ -1649,31 +1758,6 @@
   color: var(--text-muted);
 }
 
-.etapa-planejada {
-  border-style: dashed;
-}
-
-.etapa-planejada__selo {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.etapa-planejada__nota {
-  max-width: 72ch;
-  font-size: 0.875rem;
-  line-height: 1.65;
-  color: var(--text-muted);
-}
-
 .console-vazio {
   font-size: 0.875rem;
   line-height: 1.6;
@@ -1702,4 +1786,31 @@
   margin: 0 0 var(--admin-gap);
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.ver-detalhes {
+  margin-top: 8px;
+}
+
+.ver-detalhes__botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-primary-text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: 4px;
+  }
+}
+
+.ver-detalhes__conteudo {
+  margin-top: 8px;
 }

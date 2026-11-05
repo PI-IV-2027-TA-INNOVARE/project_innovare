@@ -21,7 +21,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import Papel, Usuario
 from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
-from apps.opportunities.models import Oportunidade
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
 from apps.organizations.models import Organizacao, TipoOrganizacao
 
 SENHA = 'Bioinsumo!2026'
@@ -164,6 +164,9 @@ class ConteudoDoRelatorioTests(RelatorioBaseTests):
         self.assertIsNone(self.relatorio().data['decisao'])
 
     def test_a_decisao_do_supervisor_entra_no_relatorio(self):
+        Oportunidade.objects.filter(codigo=self.codigo).update(
+            situacao=SituacaoOportunidade.AGUARDANDO_DECISAO
+        )
         self.como(self.supervisor)
         self.client.post(
             reverse('oportunidade-decisao', args=[self.codigo]),

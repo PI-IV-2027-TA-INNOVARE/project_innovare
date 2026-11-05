@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
-import { Icone, appIcons } from '../../../lib/icons'
+import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
 import { obterRelatorioOportunidade } from '../../../services/pdConnectApi'
 import './RelatorioPage.scss'
 
@@ -46,16 +46,7 @@ function formatarTamanho(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function Secao({ titulo, children }) {
-  const id = `relatorio-secao-${titulo.toLowerCase().replace(/\s+/g, '-')}`
-
-  return (
-    <section className="relatorio-secao" aria-labelledby={id}>
-      <h2 id={id} className="relatorio-secao__titulo">{titulo}</h2>
-      {children}
-    </section>
-  )
-}
+const Secao = SecaoDoRelatorio
 
 function Campo({ rotulo, children }) {
   return (
@@ -118,17 +109,17 @@ export default function RelatorioPage() {
   }
 
   const { oportunidade, anexos, historico, decisao, proposta, pendentes } = relatorio
+  const identificacao = [
+    { rotulo: 'Código', valor: oportunidade.codigo },
+    { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
+    { rotulo: 'Gerado em', valor: formatarData(relatorio.gerado_em) },
+  ]
 
   return (
-    <div className="console relatorio-page">
-      <div className="relatorio-page__acoes">
-        <BackLink to={`/oportunidades/${id}`}>Voltar para a oportunidade</BackLink>
-
-        <button type="button" className="admin-btn" onClick={() => window.print()}>
-          <Icone icon={appIcons.view} />
-          Imprimir
-        </button>
-      </div>
+    <LayoutDoRelatorio
+      voltarPara={`/oportunidades/${id}`}
+      identificacao={identificacao}
+    >
 
       <article className="relatorio-documento">
         <header className="relatorio-documento__header">
@@ -238,7 +229,9 @@ export default function RelatorioPage() {
                     {formatarData(evento.ocorrido_em)}
                   </span>
                   <span className="relatorio-trilha__o-que">{evento.tipo}</span>
-                  <span className="relatorio-trilha__quem">{evento.ator}</span>
+                  <span className="relatorio-trilha__quem">
+                    {evento.ator_nome || evento.ator}
+                  </span>
                 </li>
               ))}
             </ol>
@@ -267,6 +260,6 @@ export default function RelatorioPage() {
           Microbiologia
         </footer>
       </article>
-    </div>
+    </LayoutDoRelatorio>
   )
 }

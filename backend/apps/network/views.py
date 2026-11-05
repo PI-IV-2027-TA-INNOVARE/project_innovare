@@ -11,16 +11,22 @@ from rest_framework.response import Response
 
 from apps.network.models import MembroRede, Titulacao
 from apps.network.serializers import (
+    FiltroDaRedeSerializer,
     LiberarAcessoSerializer,
+    MudancaDeSituacaoSerializer,
     MembroRedeSerializer,
     PerfilProprioSerializer,
+    ResumoDaRedeSerializer,
     TitulacaoSerializer,
 )
+from apps.network.services.consulta import ordenar_rede, resumo_da_rede
 from apps.network.services.rede import (
     AtualizarMembroService,
     AtualizarPerfilProprioService,
     CadastrarMembroService,
+    InativarMembroService,
     LiberarAcessoMembroService,
+    ReativarMembroService,
 )
 from core.exceptions import RecursoNaoEncontrado
 from core.permissions import EhSupervisor, TemPapel
@@ -54,7 +60,7 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
     def get_permissions(self):
-        if self.action in ('list', 'retrieve'):
+        if self.action in ('list', 'retrieve', 'resumo'):
             return [permissions.IsAuthenticated(), PodeConsultarRede()]
 
         return [permissions.IsAuthenticated(), EhSupervisor()]
@@ -87,7 +93,19 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
                 | Q(vinculos_competencia__competencia__nome__icontains=busca)
             ).distinct()
 
+        filtro = FiltroDaRedeSerializer(data=self.request.query_params)
+        filtro.is_valid(raise_exception=True)
+
+        if 'ordenar' in filtro.validated_data:
+            queryset = ordenar_rede(queryset, filtro.validated_data['ordenar'])
+
         return queryset
+
+    @extend_schema(responses=ResumoDaRedeSerializer)
+    @action(detail=False, methods=['get'], url_path='resumo', url_name='resumo')
+    def resumo(self, request):
+        """Os numeros do topo da tela, sobre a rede inteira e nao sobre a pagina."""
+        return Response(ResumoDaRedeSerializer(resumo_da_rede()).data)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -133,6 +151,26 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(membro).data)
 
+    @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroRedeSerializer)
+    @action(detail=True, methods=['post'], url_path='inativar', url_name='inativar')
+    def inativar(self, request, pk=None):
+        """Sai das proximas rodadas de matching e perde o login (P3)."""
+        membro = InativarMembroService().execute(
+            membro=self.get_object(), ator=request.user
+        )
+
+        return Response(self.get_serializer(membro).data)
+
+    @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroRedeSerializer)
+    @action(detail=True, methods=['post'], url_path='reativar', url_name='reativar')
+    def reativar(self, request, pk=None):
+        """Volta ao matching e, se tinha conta, ao login (P3)."""
+        membro = ReativarMembroService().execute(
+            membro=self.get_object(), ator=request.user
+        )
+
+        return Response(self.get_serializer(membro).data)
+
 
 class PerfilProprioView(views.APIView):
     """
@@ -155,7 +193,7 @@ class PerfilProprioView(views.APIView):
 
         if membro is None:
             raise RecursoNaoEncontrado(
-                'Sua conta nao esta vinculada a um cadastro na rede interna.',
+                'Sua conta ainda não está ligada a um cadastro na rede interna. Fale com o Supervisor.',
                 codigo='sem_membro_rede',
             )
 

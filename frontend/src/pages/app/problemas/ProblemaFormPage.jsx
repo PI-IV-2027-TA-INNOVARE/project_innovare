@@ -4,6 +4,7 @@ import BackLink from '../../../components/console/BackLink'
 import GuardaDeSaida from '../../../components/console/GuardaDeSaida'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
+import { EXTENSOES_ACEITAS, TIPOS_POR_EXTENSO } from '../../../lib/anexos'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { useRascunho } from '../../../lib/rascunho'
@@ -205,6 +206,8 @@ export default function ProblemaFormPage() {
         </div>
       ) : null}
 
+      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+
       <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
           <header className="perfil-card__header">
@@ -236,18 +239,21 @@ export default function ProblemaFormPage() {
             <div>
               <h2 className="perfil-card__title">O problema</h2>
               <p className="perfil-card__description">
-                Título e resumo são obrigatórios. O resto ajuda a AC2 a entender o
-                contexto sem precisar voltar a você.
+                Quanto mais contexto, menos a AC2 precisa voltar a você com
+                perguntas.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
             <label className="admin-field">
-              <span className="admin-field__label">Título</span>
+              <span className="admin-field__label">
+                Título <span aria-hidden="true">*</span>
+              </span>
               <input
                 type="text"
                 className="admin-input"
+                aria-required="true"
                 value={valores.titulo}
                 onChange={alterarCampo('titulo')}
                 placeholder="Ex.: Contaminação microbiana na linha de envase"
@@ -263,10 +269,11 @@ export default function ProblemaFormPage() {
 
             <div className="admin-field">
               <label className="admin-field__label" htmlFor="campo-resumo-problema">
-                Resumo do problema
+                Resumo do problema <span aria-hidden="true">*</span>
               </label>
               <textarea
                 id="campo-resumo-problema"
+                aria-required="true"
                 className="admin-input admin-input--area"
                 rows={4}
                 value={valores.resumo}
@@ -318,7 +325,7 @@ export default function ProblemaFormPage() {
               <h2 className="perfil-card__title">Anexos</h2>
               <p className="perfil-card__description">
                 Laudos, fotos, relatórios de ensaio — o que ajudar a AC2 a
-                entender o problema.
+                entender o problema. {TIPOS_POR_EXTENSO}, até 10 MB por arquivo.
               </p>
             </div>
           </header>
@@ -328,6 +335,7 @@ export default function ProblemaFormPage() {
               <span className="admin-field__label">Selecionar arquivos</span>
               <input
                 type="file"
+                accept={EXTENSOES_ACEITAS}
                 className="admin-input"
                 multiple
                 onChange={escolherAnexos}

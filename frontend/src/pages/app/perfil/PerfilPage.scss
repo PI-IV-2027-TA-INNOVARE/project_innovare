@@ -32,6 +32,13 @@
   opacity: 0.96;
 }
 
+.perfil-page__email {
+  margin-top: 4px;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 .perfil-page__meta {
   display: flex;
   align-items: center;
@@ -39,6 +46,14 @@
   flex-wrap: wrap;
   margin-top: 10px;
   font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.perfil-page__nota {
+  max-width: 60ch;
+  margin-top: 10px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   color: var(--text-muted);
 }
 
@@ -96,9 +111,93 @@
 }
 
 .perfil-grid {
-  @include cartoes-em-grade(3);
+  @include cartoes-em-grade(2);
 
   margin-top: var(--admin-pad);
+}
+
+.perfil-card--faixa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--admin-gap) var(--admin-section-gap);
+  margin-top: var(--admin-pad);
+
+  > .perfil-card__header {
+    flex: 1 1 280px;
+    margin-bottom: 0;
+  }
+
+  > .perfil-card__body {
+    flex: 1 1 380px;
+  }
+
+  + .perfil-grid {
+    margin-top: var(--admin-gap);
+  }
+}
+
+.perfil-contato__linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+
+  > .admin-input {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+}
+
+.perfil-page .perfil-card__description {
+  max-width: none;
+}
+
+.perfil-grid > .perfil-card--meus-dados > .perfil-card__body {
+  align-content: stretch;
+}
+
+.perfil-senha {
+  display: grid;
+  gap: var(--admin-gap);
+  container-name: senha;
+  container-type: inline-size;
+
+  .admin-btn {
+    justify-self: start;
+  }
+}
+
+.perfil-senha__grade {
+  display: grid;
+  gap: var(--admin-gap);
+
+  > .regras-da-senha {
+    margin-top: -8px;
+  }
+}
+
+@container senha (min-width: 500px) {
+  .perfil-senha__grade {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+    align-items: start;
+
+    .admin-field__label {
+      line-height: 1.5;
+    }
+
+    > .campo-de-senha {
+      grid-column: 1;
+    }
+
+    > .regras-da-senha {
+      grid-column: 2;
+      grid-row: 1 / span 3;
+      margin-top: calc(0.875rem * 1.5 + 6px);
+      padding: 12px 14px;
+      background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+      border-radius: var(--admin-radius-sm);
+    }
+  }
 }
 
 .perfil-grid__aviso {
@@ -159,6 +258,55 @@
 
 @media (max-width: 620px) {
   .perfil-completude {
+    flex-basis: 100%;
+  }
+}
+
+.meus-dados {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-gap);
+}
+
+.meus-dados__bloco {
+  display: grid;
+  gap: 12px;
+
+  &--exclusao {
+    margin-top: auto;
+    padding-top: var(--admin-gap);
+    border-top: 1px solid var(--admin-card-border);
+  }
+}
+
+.meus-dados__lista {
+  margin: -6px 0 0;
+  padding-left: 1.2em;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  list-style: disc;
+}
+
+.meus-dados__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meus-dados .meus-dados__excluir {
+  color: var(--accent-error);
+
+  &:hover:not(:disabled) {
+    color: var(--accent-error);
+    background: var(--bg-danger-soft);
+  }
+}
+
+.meus-dados__confirmacao {
+  flex-wrap: wrap;
+
+  .meus-dados__acoes {
     flex-basis: 100%;
   }
 }

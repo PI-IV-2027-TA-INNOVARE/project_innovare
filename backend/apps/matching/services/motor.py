@@ -10,9 +10,9 @@ componentes vem de `AI_MATCH_WEIGHT_*`, o fator de disponibilidade de
 `AI_MATCH_DISP_*` e o desconto da competencia desejavel de
 `AI_MATCH_PESO_DESEJAVEL`.
 
-**A base semantica entra quando existir.** Enquanto nao houver embedding
-gravado (plano 8.3), `ProvedorDeEmbedding` devolve `None`, o componente
-semantico sai da conta e os pesos restantes sao **renormalizados** - dividir
+**A afinidade com o tema vem da base semantica** (`semantica.BaseSemantica`).
+Sem ela - modelo desligado ou fora do ar -, o componente semantico sai da conta
+e os pesos restantes sao **renormalizados** - dividir
 pelo peso disponivel mantem o score na escala 0..1 e mantem
 `AI_MATCH_MIN_SCORE` com o mesmo significado. E o fallback que o AGENTS.md 0.2
 nomeia: "embedding indisponivel -> busca lexical". A rodada fica marcada com
@@ -92,9 +92,34 @@ def cosseno(a: Sequence[float], b: Sequence[float]) -> float:
 
 
 class ProvedorDeEmbedding(Protocol):
-    """Contrato da base semantica. Hoje sem implementacao ativa (plano 8.3)."""
+    """
+    Contrato da base semantica que o motor consulta.
 
-    def vetor_de(self, texto: str) -> Sequence[float] | None:
+    `preparar` garante os vetores da rodada antes do calculo; depois, os dois
+    `vetor_*` so leem. Quem implementa e `semantica.BaseSemantica`.
+    """
+
+    @property
+    def disponivel(self) -> bool:
+        ...
+
+    @property
+    def modelo(self) -> str:
+        ...
+
+    def preparar(
+        self,
+        competencias: Sequence[CompetenciaNecessaria],
+        candidatos: Sequence[Candidato],
+    ) -> dict[str, int]:
+        ...
+
+    def vetor_do_candidato(self, candidato: Candidato) -> Sequence[float] | None:
+        ...
+
+    def vetor_da_competencia(
+        self, competencia: CompetenciaNecessaria
+    ) -> Sequence[float] | None:
         ...
 
 
@@ -106,7 +131,16 @@ class EmbeddingIndisponivel:
     `if` escondido no meio do calculo.
     """
 
-    def vetor_de(self, texto: str) -> None:
+    disponivel = False
+    modelo = ''
+
+    def preparar(self, competencias, candidatos) -> dict[str, int]:
+        return {'calculados': 0, 'reaproveitados': 0}
+
+    def vetor_do_candidato(self, candidato) -> None:
+        return None
+
+    def vetor_da_competencia(self, competencia) -> None:
         return None
 
 
@@ -194,7 +228,11 @@ class MotorDeMatching:
 
     @property
     def semantico_disponivel(self) -> bool:
-        return self._embedding.vetor_de('x') is not None
+        return bool(self._embedding.disponivel)
+
+    @property
+    def modelo_semantico(self) -> str:
+        return self._embedding.modelo if self.semantico_disponivel else ''
 
     def _peso_da_competencia(self, competencia: CompetenciaNecessaria) -> float:
         if competencia.nivel_importancia == NivelImportancia.DESEJAVEL:
@@ -224,6 +262,8 @@ class MotorDeMatching:
         candidatos: Sequence[Candidato],
     ) -> list[Avaliacao]:
         """As avaliacoes, da maior para a menor, com empate resolvido por titulacao."""
+        self._embedding.preparar(competencias, candidatos)
+
         avaliacoes = [
             self._avaliar_candidato(competencias, candidato)
             for candidato in candidatos
@@ -301,30 +341,23 @@ class MotorDeMatching:
         self,
         competencias: Sequence[CompetenciaNecessaria],
         candidato: Candidato,
-    ) -> float:
+    ) -> float | None:
         """
-        O componente semantico, quando houver provedor.
+        A afinidade com o tema: o cosseno entre o perfil e cada competencia.
 
-        Fica aqui, e nao no caso de uso, porque e parte do score: no dia em que
-        a coluna `float[]` entrar (plano 8.3), muda o provedor e mais nada.
+        `None` quando falta o vetor do perfil ou de todas as competencias - a
+        parcela sai da conta em vez de entrar como zero.
         """
-        perfil = self._embedding.vetor_de(
-            ' '.join(
-                candidato.competencias
-                + candidato.tecnicas
-                + candidato.linhas
-                + [candidato.membro.experiencia]
-            )
-        )
+        perfil = self._embedding.vetor_do_candidato(candidato)
 
         if perfil is None:
-            return 0.0
+            return None
 
         peso_total = 0.0
         soma = 0.0
 
         for competencia in competencias:
-            vetor = self._embedding.vetor_de(competencia.descricao)
+            vetor = self._embedding.vetor_da_competencia(competencia)
 
             if vetor is None:
                 continue
@@ -333,7 +366,7 @@ class MotorDeMatching:
             peso_total += peso
             soma += peso * cosseno(vetor, perfil)
 
-        return (soma / peso_total) if peso_total else 0.0
+        return (soma / peso_total) if peso_total else None
 
     def _combinar(self, componentes: dict[str, float | None]) -> float:
         disponivel = {
@@ -386,8 +419,12 @@ class MotorDeMatching:
 
         if componentes['semantico'] is None:
             motivos.append(
-                'Base semântica indisponível: score calculado por '
-                'correspondência de termos, área de atuação e disponibilidade.'
+                'Afinidade com o tema indisponível nesta rodada: a nota usa '
+                'palavras em comum, área de atuação e disponibilidade.'
+            )
+        else:
+            motivos.append(
+                f'Afinidade com o tema da oportunidade: {componentes["semantico"]:.0%}.'
             )
 
         return motivos

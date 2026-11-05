@@ -1,14 +1,48 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import {
   clearApiAuthSession,
   configureApiAuth,
   getApiAuthSession,
+  renovarSessao,
   setApiAuthSession,
 } from '../lib/api'
 import { encerrarSessao, getAuthenticatedProfile, requestAuthToken } from '../services/pdConnectApi'
 import { ROLES, roleLabel } from '../lib/roles'
 
-const STORAGE_KEY = 'pdconnect-auth-session-v2'
+const MARCA_DE_SESSAO = 'pdconnect-sessao'
+
+const CHAVE_ANTIGA = 'pdconnect-auth-session-v2'
+
+/**
+ * O navegador guarda só a marca de que havia sessão, nunca token.
+ *
+ * A marca evita pedir renovação a quem nunca entrou. O token de acesso fica na
+ * memória e o de renovação, no cookie que o JavaScript não lê.
+ */
+function lerMarca() {
+  try {
+    return window.localStorage.getItem(MARCA_DE_SESSAO) === '1'
+  } catch {
+    return false
+  }
+}
+
+function gravarMarca(ativa) {
+  try {
+    if (ativa) window.localStorage.setItem(MARCA_DE_SESSAO, '1')
+    else window.localStorage.removeItem(MARCA_DE_SESSAO)
+  } catch {
+    return
+  }
+}
+
+function apagarTokensAntigos() {
+  try {
+    window.localStorage.removeItem(CHAVE_ANTIGA)
+  } catch {
+    return
+  }
+}
 
 const AuthContext = createContext(null)
 
@@ -21,49 +55,24 @@ function resolveRole(profilePayload) {
 }
 
 function normalizeStoredSession(session) {
-  if (!session) return null
+  const accessToken = session?.accessToken?.trim() || ''
 
-  const accessToken = session.accessToken?.trim() || ''
-  const refreshToken = session.refreshToken?.trim() || ''
-
-  if (!accessToken && !refreshToken) return null
-
-  return { accessToken, refreshToken }
-}
-
-function readStoredSession() {
-  try {
-    const rawSession = window.localStorage.getItem(STORAGE_KEY)
-    return rawSession ? normalizeStoredSession(JSON.parse(rawSession)) : null
-  } catch {
-    return null
-  }
-}
-
-function persistSession(session) {
-  const normalizedSession = normalizeStoredSession(session)
-
-  if (!normalizedSession) {
-    window.localStorage.removeItem(STORAGE_KEY)
-    return
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedSession))
+  return accessToken ? { accessToken } : null
 }
 
 function translateApiMessage(message) {
   if (!message) return ''
 
   if (message.includes('No active account found with the given credentials')) {
-    return 'E-mail ou senha invalidos.'
+    return 'E-mail ou senha inválidos.'
   }
 
   if (message.includes('token_not_valid')) {
-    return 'Sua sessao expirou. Faca login novamente.'
+    return 'Sua sessão expirou. Entre novamente.'
   }
 
   if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
-    return 'Sessao encerrada'
+    return 'Sem conexão com o servidor. Verifique a rede e tente de novo.'
   }
 
   return message
@@ -79,7 +88,7 @@ function buildUser(profilePayload) {
   const role = resolveRole(profilePayload)
 
   if (!role) {
-    throw new Error('A API autenticada nao retornou um perfil reconhecido.')
+    throw new Error('Não foi possível reconhecer o perfil desta conta.')
   }
 
   return {
@@ -89,6 +98,7 @@ function buildUser(profilePayload) {
     roleLabel: profilePayload.papel_rotulo || roleLabel(role),
     displayName: profilePayload.nome || profilePayload.email,
     organizacao: profilePayload.organizacao || null,
+    telefone: profilePayload.telefone ?? null,
     permissions: profilePayload.permissoes || [],
     lastAccess: profilePayload.ultimo_acesso || null,
   }
@@ -99,22 +109,24 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [isBootstrapping, setIsBootstrapping] = useState(true)
   const [authError, setAuthError] = useState('')
+  const [contaTrocada, setContaTrocada] = useState(null)
 
   const clearAuthState = (message = '') => {
     setUser(null)
     setSession(null)
     setAuthError(message)
+    setContaTrocada(null)
     clearApiAuthSession()
-    window.localStorage.removeItem(STORAGE_KEY)
+    gravarMarca(false)
   }
 
-  const hydrateSession = async (nextSession, { persist = true } = {}) => {
+  const hydrateSession = async (nextSession, { trocouDeConta = false } = {}) => {
     const normalizedSession = normalizeStoredSession(nextSession)
 
     if (!normalizedSession) {
       clearAuthState('')
       setIsBootstrapping(false)
-      return { ok: false, message: 'Sessao invalida. Faca login novamente.' }
+      return { ok: false, message: 'Sessão inválida. Entre novamente.' }
     }
 
     setIsBootstrapping(true)
@@ -127,14 +139,17 @@ export function AuthProvider({ children }) {
 
       setSession(resolvedSession)
       setUser(nextUser)
+      gravarMarca(true)
 
-      if (persist) persistSession(resolvedSession)
+      if (trocouDeConta) {
+        setContaTrocada({ nome: nextUser.displayName, levarAoPainel: true })
+      }
 
       return { ok: true, user: nextUser }
     } catch (error) {
       const message = buildFriendlyErrorMessage(
         error,
-        'Nao foi possivel restaurar a sessao autenticada.'
+        'Não foi possível retomar a sua sessão.'
       )
 
       clearAuthState(message)
@@ -147,28 +162,36 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     configureApiAuth({
       onUnauthorized: () => {
-        clearAuthState('Sua sessao expirou. Faca login novamente.')
+        clearAuthState('Sua sessão expirou. Entre novamente.')
         setIsBootstrapping(false)
       },
-      onSessionRefresh: (nextSession) => {
+      onSessionRefresh: (nextSession, { contaTrocada: trocouDeConta = false } = {}) => {
         const normalizedSession = normalizeStoredSession(nextSession)
 
         if (!normalizedSession) return
 
+        if (trocouDeConta) {
+          hydrateSession(normalizedSession, { trocouDeConta })
+          return
+        }
+
         setSession(normalizedSession)
-        persistSession(normalizedSession)
       },
     })
 
-    const storedSession = readStoredSession()
+    apagarTokensAntigos()
 
-    if (!storedSession) {
+    if (!lerMarca()) {
       setIsBootstrapping(false)
       return () => { configureApiAuth() }
     }
 
-    setSession(storedSession)
-    hydrateSession(storedSession, { persist: false })
+    renovarSessao()
+      .then((retomada) => hydrateSession(retomada))
+      .catch(() => {
+        clearAuthState('Sua sessão expirou. Entre novamente.')
+        setIsBootstrapping(false)
+      })
 
     return () => { configureApiAuth() }
   }, [])
@@ -177,16 +200,13 @@ export function AuthProvider({ children }) {
     try {
       const tokenPayload = await requestAuthToken({ email: email.trim(), password })
 
-      return hydrateSession({
-        accessToken: tokenPayload?.access || '',
-        refreshToken: tokenPayload?.refresh || '',
-      })
+      return hydrateSession({ accessToken: tokenPayload?.access || '' })
     } catch (error) {
       return {
         ok: false,
         message: buildFriendlyErrorMessage(
           error,
-          'Nao foi possivel autenticar com as credenciais informadas.'
+          'Não foi possível entrar com o e-mail e a senha informados.'
         ),
       }
     }
@@ -194,26 +214,16 @@ export function AuthProvider({ children }) {
 
   const refreshUser = async () => {
     if (!session) {
-      return { ok: false, message: 'Nao existe sessao ativa para atualizar.' }
+      return { ok: false, message: 'Não há sessão ativa para atualizar.' }
     }
 
     return hydrateSession(session)
   }
 
   const revogarSessaoNoServidor = async () => {
-    const refreshToken = getApiAuthSession()?.refreshToken || ''
+    if (!getApiAuthSession()?.accessToken) return
 
-    if (!refreshToken) return
-
-    try {
-      await encerrarSessao(refreshToken)
-    } catch {
-      const refreshRotacionado = getApiAuthSession()?.refreshToken || ''
-
-      if (refreshRotacionado && refreshRotacionado !== refreshToken) {
-        await encerrarSessao(refreshRotacionado).catch(() => {})
-      }
-    }
+    await encerrarSessao().catch(() => {})
   }
 
   const logout = async () => {
@@ -223,16 +233,35 @@ export function AuthProvider({ children }) {
     setIsBootstrapping(false)
   }
 
+  const contaTrocadaNoPainel = useCallback(() => {
+    setContaTrocada((atual) => (atual ? { ...atual, levarAoPainel: false } : atual))
+  }, [])
+
+  const dispensarAvisoDeConta = useCallback(() => {
+    setContaTrocada(null)
+  }, [])
+
   const value = useMemo(() => ({
     user,
     session,
     isAuthenticated: Boolean(user),
     isBootstrapping,
     authError,
+    contaTrocada,
+    contaTrocadaNoPainel,
+    dispensarAvisoDeConta,
     signInWithCredentials,
     refreshUser,
     logout,
-  }), [authError, isBootstrapping, session, user])
+  }), [
+    authError,
+    contaTrocada,
+    contaTrocadaNoPainel,
+    dispensarAvisoDeConta,
+    isBootstrapping,
+    session,
+    user,
+  ])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

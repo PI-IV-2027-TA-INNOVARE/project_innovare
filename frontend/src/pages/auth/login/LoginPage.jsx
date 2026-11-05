@@ -248,6 +248,9 @@ export default function LoginPage() {
               <Link className="login-link" to="/esqueci-minha-senha">
                 Esqueci minha senha
               </Link>
+              <Link className="login-link" to="/privacidade">
+                Privacidade e seus dados
+              </Link>
             </form>
 
             <p className="login-note">

@@ -4,6 +4,7 @@ Contrato da Oportunidade (RF01, RF12).
 Vocabulario do cliente: oportunidade, origem, problema externo, ideia interna,
 contexto, anexo, decisao, historico.
 """
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import Papel
@@ -19,7 +20,9 @@ from apps.opportunities.models import (
     AnexoOportunidade,
     Oportunidade,
     OrigemOportunidade,
+    PrioridadeOportunidade,
 )
+from apps.opportunities.services.oportunidade import QUEM_AGIU_PELA_AC2, anexos_visiveis
 
 
 class DecisaoResumoSerializer(serializers.Serializer):
@@ -55,6 +58,9 @@ class OportunidadeSerializer(serializers.ModelSerializer):
     situacao_rotulo = serializers.CharField(
         source='get_situacao_display', read_only=True
     )
+    prioridade_rotulo = serializers.CharField(
+        source='get_prioridade_display', read_only=True
+    )
     demandante_nome = serializers.CharField(
         source='demandante.nome', read_only=True, default=None
     )
@@ -70,15 +76,16 @@ class OportunidadeSerializer(serializers.ModelSerializer):
         fields = [
             'codigo', 'titulo', 'origem', 'origem_rotulo', 'resumo', 'contexto',
             'demandante', 'demandante_nome', 'responsavel', 'responsavel_nome',
-            'situacao', 'situacao_rotulo', 'total_anexos', 'ultima_decisao',
-            'aguarda_minha_atuacao', 'criada_em', 'atualizada_em',
-        ]
-        read_only_fields = [
-            'codigo', 'origem', 'demandante', 'situacao', 'ultima_decisao',
+            'situacao', 'situacao_rotulo', 'prioridade', 'prioridade_rotulo',
+            'total_anexos', 'ultima_decisao', 'aguarda_minha_atuacao',
             'criada_em', 'atualizada_em',
         ]
+        read_only_fields = [
+            'codigo', 'origem', 'demandante', 'situacao', 'prioridade',
+            'ultima_decisao', 'criada_em', 'atualizada_em',
+        ]
 
-    def get_total_anexos(self, oportunidade):
+    def get_total_anexos(self, oportunidade) -> int:
         """
         Le a contagem que `fila_de` anotou; conta sozinho quando ela nao veio.
 
@@ -89,8 +96,18 @@ class OportunidadeSerializer(serializers.ModelSerializer):
         """
         anotado = getattr(oportunidade, 'total_anexos', None)
 
-        return oportunidade.anexos.count() if anotado is None else anotado
+        if anotado is not None:
+            return anotado
 
+        usuario = getattr(self.context.get('request'), 'user', None)
+
+        return (
+            anexos_visiveis(oportunidade, usuario).count()
+            if usuario is not None
+            else oportunidade.anexos.count()
+        )
+
+    @extend_schema_field(DecisaoResumoSerializer(allow_null=True))
     def get_ultima_decisao(self, oportunidade):
         """
         O desfecho mais recente.
@@ -114,8 +131,28 @@ class OportunidadeSerializer(serializers.ModelSerializer):
 
         se_demandante = getattr(usuario, 'papel', None) == Papel.DEMANDANTE
 
+        if se_demandante:
+            dados['autor_nome'] = QUEM_AGIU_PELA_AC2
+
         if se_demandante and decisao.tipo_decisao != TipoDecisao.REVISAR:
             dados['justificativa'] = ''
+
+        return dados
+
+    def to_representation(self, oportunidade):
+        """
+        O Demandante acompanha a AC2 como um todo (PB71): quem conduz a
+        oportunidade por dentro nao sai para ele, como no historico. A
+        prioridade e trabalho interno da fila e nem chega ao payload dele.
+        """
+        dados = super().to_representation(oportunidade)
+        usuario = getattr(self.context.get('request'), 'user', None)
+
+        if getattr(usuario, 'papel', None) == Papel.DEMANDANTE:
+            dados['responsavel'] = None
+            dados['responsavel_nome'] = None
+            dados.pop('prioridade', None)
+            dados.pop('prioridade_rotulo', None)
 
         return dados
 
@@ -150,16 +187,27 @@ class CadastroOportunidadeSerializer(serializers.Serializer):
         )
 
 
+class PrioridadeSerializer(serializers.Serializer):
+    """A prioridade que o Supervisor da a oportunidade na fila (PB61)."""
+
+    prioridade = serializers.ChoiceField(choices=PrioridadeOportunidade.choices)
+
+
 class FiltroDaFilaSerializer(serializers.Serializer):
     """
-    Os filtros de data da fila (PB28), no formato `AAAA-MM-DD`.
+    Os filtros de data da fila (PB28), no formato `AAAA-MM-DD`, e o filtro e a
+    ordem por prioridade (PB61).
 
-    Data malformada e recusada: ignorada, a fila voltaria inteira e quem
+    Valor malformado e recusado: ignorada, a fila voltaria inteira e quem
     filtrou leria o resultado como se o filtro tivesse valido.
     """
 
     cadastrada_de = serializers.DateField(required=False, input_formats=['iso-8601'])
     cadastrada_ate = serializers.DateField(required=False, input_formats=['iso-8601'])
+    prioridade = serializers.ChoiceField(
+        choices=PrioridadeOportunidade.choices, required=False
+    )
+    ordenar = serializers.ChoiceField(choices=[('prioridade', 'Prioridade')], required=False)
 
     def validate(self, dados):
         inicio = dados.get('cadastrada_de')
@@ -233,14 +281,44 @@ class ObservacaoRegistradaSerializer(serializers.Serializer):
 
 
 class EventoHistoricoSerializer(serializers.Serializer):
-    """Leitura da trilha. Append-only: nao existe escrita por aqui."""
+    """
+    Leitura da trilha. Append-only: nao existe escrita por aqui.
+
+    `ator_nome` vem do contexto `nomes` (`nomes_de_quem_agiu`), montado uma vez
+    para a pagina inteira. Na trilha do Demandante, quem agiu fora da empresa
+    dele sai como a AC2, sem e-mail (`contexto_do_historico`).
+    """
 
     ocorrido_em = serializers.DateTimeField(read_only=True)
     categoria = serializers.CharField(read_only=True)
     tipo = serializers.CharField(read_only=True)
-    ator = serializers.CharField(read_only=True)
+    ator = serializers.SerializerMethodField()
+    ator_nome = serializers.SerializerMethodField()
     status = serializers.CharField(read_only=True)
     detalhe = serializers.JSONField(read_only=True)
+
+    def _pela_ac2(self, evento) -> bool:
+        if 'organizacao_do_demandante' not in self.context:
+            return False
+
+        organizacao = self.context['organizacao_do_demandante']
+        conta = getattr(evento, 'conta_do_ator', None)
+
+        return (
+            organizacao is None
+            or conta is None
+            or conta.papel != Papel.DEMANDANTE
+            or conta.organizacao_id != organizacao
+        )
+
+    def get_ator(self, evento) -> str:
+        return '' if self._pela_ac2(evento) else evento.ator
+
+    def get_ator_nome(self, evento) -> str | None:
+        if self._pela_ac2(evento):
+            return self.context['quem_agiu_pela_ac2']
+
+        return self.context.get('nomes', {}).get(evento.ator)
 
 
 ORIGEM_POR_ATOR = {
@@ -294,6 +372,7 @@ class RelatorioPreAnaliseSerializer(serializers.Serializer):
     criterios = CriterioPreAnaliseSerializer(many=True, read_only=True)
     equipe = EquipePotencialSerializer(read_only=True, allow_null=True)
     gerado_em = serializers.DateTimeField(read_only=True)
+    como_ler = serializers.ListField(child=serializers.CharField(), read_only=True)
 
 
 class RelatorioEquipeSerializer(serializers.Serializer):
@@ -309,3 +388,6 @@ class RelatorioEquipeSerializer(serializers.Serializer):
     equipe = EquipePotencialSerializer(read_only=True)
     competencias = CompetenciaNecessariaSerializer(many=True, read_only=True)
     gerado_em = serializers.DateTimeField(read_only=True)
+    como_foi_calculado = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )

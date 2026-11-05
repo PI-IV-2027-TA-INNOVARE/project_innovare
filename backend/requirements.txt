@@ -5,22 +5,31 @@
 # de decisao (AGENTS.md 3.2) e precisa de aprovacao humana.
 
 # --- Nucleo ------------------------------------------------------------------
-Django==5.2.17
-djangorestframework==3.17.1
+Django==5.2.18
+djangorestframework==3.18.3
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
-drf-spectacular==0.29.0
+drf-spectacular==0.30.0
 psycopg[binary,pool]==3.3.6
 psycopg-pool==3.3.3
 python-decouple==3.8
+
+# --- Seguranca ----------------------------------------------------------------
+#
+# Cifra dos backups do banco (scripts/backup_cifrado.py). Ja vinha instalada
+# como dependencia do google-auth; a linha fixa a versao em uso. Aprovada em
+# 24/10/2026 (L5 do plano de integracao).
+cryptography==50.0.2
 
 # --- IA e Assincrono (Fases 3.2/3.3) ------------------------------------------
 #
 # `pgvector` nao esta aqui de proposito: o embedding fica em coluna `float[]` e
 # a similaridade e cosseno em `numpy`, dentro do servico de matching - ver
 # PLANO_IMPLEMENTACAO.md 8.3. Reintroduzir a extensao e portao de decisao (3.2).
-google-generativeai==0.8.5
-sentence-transformers==5.5.0
-celery==5.5.3
-redis==6.1.1
-scikit-learn==1.7.2
+# `google-genai` substituiu a `google-generativeai` em 24/10/2026 (SPEC-08): so
+# ela limita o raciocinio do modelo. Exige Python 3.11+ na pratica - o projeto
+# roda em 3.14 desde 31/10/2026.
+google-genai==2.34.0
+sentence-transformers==6.2.0
+celery==5.6.3
+redis==8.1.0

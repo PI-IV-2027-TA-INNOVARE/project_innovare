@@ -144,7 +144,9 @@ export function RowActionsMenu({ label, items }) {
               type="button"
               role="menuitem"
               className={`row-menu__item${item.tone === 'danger' ? ' row-menu__item--danger' : ''}`}
+              disabled={item.disabled}
               onClick={() => {
+                if (item.disabled) return
                 setAberto(false)
                 item.onSelect()
               }}
@@ -190,5 +192,45 @@ export function TableEmpty({ icon, title, text, action }) {
       {text ? <p className="table-empty__text">{text}</p> : null}
       {action}
     </div>
+  )
+}
+
+export function Paginacao({ pagina, total, porPagina, rotulo, onMudar }) {
+  const paginas = Math.max(1, Math.ceil(total / porPagina))
+
+  return (
+    <nav className="paginacao" aria-label="Paginação">
+      <span className="paginacao__total">
+        {total} {rotulo}
+      </span>
+
+      {paginas > 1 ? (
+        <div className="paginacao__controles">
+          <button
+            type="button"
+            className="admin-btn admin-btn--outline"
+            onClick={() => onMudar(pagina - 1)}
+            disabled={pagina <= 1}
+            aria-label="Página anterior"
+          >
+            <Icone icon={appIcons.back} />
+            Anterior
+          </button>
+          <span className="paginacao__posicao" aria-live="polite">
+            Página {pagina} de {paginas}
+          </span>
+          <button
+            type="button"
+            className="admin-btn admin-btn--outline"
+            onClick={() => onMudar(pagina + 1)}
+            disabled={pagina >= paginas}
+            aria-label="Próxima página"
+          >
+            Próxima
+            <Icone icon={appIcons.next} />
+          </button>
+        </div>
+      ) : null}
+    </nav>
   )
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RelatorioPreAnalisePage from './RelatorioPreAnalisePage'
@@ -116,6 +116,42 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     ).toBeInTheDocument()
   })
 
+  it('põe cada recomendação sob a lacuna, com o critério ou a falta de evidência', async () => {
+    api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      pre_analise: {
+        ...RELATORIO.pre_analise,
+        lacunas: [
+          {
+            id_lacuna: 4,
+            campo_afetado: 'plano_pesquisa',
+            descricao: 'Falta o controle negativo.',
+            criterio_codigo: 'A3',
+            criterio_rotulo: 'Metodologia adequada',
+          },
+          { id_lacuna: 5, campo_afetado: 'viabilidade', descricao: 'Não há prazo.' },
+        ],
+        recomendacoes: [
+          { id_recomendacao: 2, id_lacuna: 4, texto: 'Defina o controle negativo.', acatada: true },
+          { id_recomendacao: 3, id_lacuna: 5, texto: 'Monte um cronograma.', acatada: false },
+          { id_recomendacao: 6, id_lacuna: null, texto: 'Revise o resumo.', acatada: false },
+        ],
+      },
+    })
+
+    renderizar()
+
+    const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
+    expect(ligada).toHaveTextContent('Plano de pesquisa · A3 · Metodologia adequada')
+    expect(within(ligada).getByText(/Defina o controle negativo\./)).toHaveTextContent('(acatada)')
+
+    const semCriterio = screen.getByText('Não há prazo.').closest('li')
+    expect(semCriterio).toHaveTextContent('Sem evidência na proposta')
+    expect(within(semCriterio).getByText('Monte um cronograma.')).toBeInTheDocument()
+
+    expect(screen.getByRole('heading', { name: 'Outras recomendações' })).toBeInTheDocument()
+  })
+
   it('carrega o aviso de que o documento é orientativo', async () => {
     renderizar()
 
@@ -197,5 +233,19 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     expect(
       screen.getByRole('link', { name: /voltar para a oportunidade/i }),
     ).toHaveAttribute('href', '/oportunidades/OP-2026-014')
+  })
+})
+
+describe('RelatorioPreAnalisePage — como ler', () => {
+  it('explica como ler a pré-análise', async () => {
+    api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      como_ler: ['Cada dimensão recebe um de três níveis.'],
+    })
+    renderizar()
+
+    const secao = await screen.findByRole('region', { name: 'Como ler esta pré-análise' })
+
+    expect(secao).toHaveTextContent('Cada dimensão recebe um de três níveis.')
   })
 })

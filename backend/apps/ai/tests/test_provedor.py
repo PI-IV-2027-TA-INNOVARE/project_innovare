@@ -14,12 +14,14 @@ import inspect
 import pkgutil
 import uuid
 
-from google.api_core import exceptions as excecoes_google
+import httpx
+from google.genai import errors as erros_genai
 
 from django.test import TestCase, override_settings
 
 from apps.ai.models import ExecucaoIA, TipoExecucaoIA
 from apps.ai.services import ProvedorGemini
+from apps.ai.services.gemini_service import ClienteGenAI, tokens_da_resposta
 
 
 class ProvedorIndisponivelTests(TestCase):
@@ -126,7 +128,7 @@ class CamadaDoProvedorTests(TestCase):
 
 
 class ClienteFalso:
-    """Faz as vezes do `GenerativeModel`: devolve ou levanta, na ordem dada."""
+    """Faz as vezes do cliente do SDK: devolve ou levanta, na ordem dada."""
 
     def __init__(self, *respostas):
         self._respostas = list(respostas)
@@ -182,8 +184,8 @@ class TimeoutERetryTests(TestCase):
 
     def test_429_e_5xx_sao_tentados_de_novo_com_espera_crescente(self):
         provedor = self._provedor(
-            excecoes_google.TooManyRequests('cota'),
-            excecoes_google.ServiceUnavailable('fora'),
+            erros_genai.ClientError(429, {'error': {'message': 'cota'}}),
+            erros_genai.ServerError(503, {'error': {'message': 'fora'}}),
             RespostaFalsa(),
         )
 
@@ -195,7 +197,7 @@ class TimeoutERetryTests(TestCase):
 
     def test_timeout_estourado_conta_como_passageiro(self):
         provedor = self._provedor(
-            excecoes_google.DeadlineExceeded('demorou'), RespostaFalsa()
+            httpx.ReadTimeout('demorou'), RespostaFalsa()
         )
 
         resultado = self._derivar(provedor)
@@ -205,7 +207,7 @@ class TimeoutERetryTests(TestCase):
 
     def test_esgotadas_as_tentativas_cai_no_fallback_e_registra_o_erro(self):
         provedor = self._provedor(
-            *[excecoes_google.InternalServerError('quebrou')] * 3
+            *[erros_genai.ServerError(500, {'error': {'message': 'quebrou'}})] * 3
         )
 
         resultado = self._derivar(provedor)
@@ -218,7 +220,7 @@ class TimeoutERetryTests(TestCase):
 
     def test_erro_que_nao_e_passageiro_nao_e_repetido(self):
         provedor = self._provedor(
-            excecoes_google.InvalidArgument('prompt invalido'), RespostaFalsa()
+            erros_genai.ClientError(400, {'error': {'message': 'prompt invalido'}}), RespostaFalsa()
         )
 
         resultado = self._derivar(provedor)
@@ -295,3 +297,72 @@ class JsonInvalidoTests(TestCase):
         self._derivar(RespostaComTexto('{"competencias": []}'))
 
         self.assertEqual(len(self.cliente.chamadas), 1)
+
+
+class ModelosDoSDK:
+    def __init__(self):
+        self.pedidos = []
+
+    def generate_content(self, **kwargs):
+        self.pedidos.append(kwargs)
+        return RespostaFalsa()
+
+
+class SDKFalso:
+    def __init__(self):
+        self.models = ModelosDoSDK()
+
+
+@override_settings(AI_GEMINI_ORCAMENTO_RACIOCINIO=256, AI_GEMINI_MAX_TOKENS_SAIDA=2048)
+class ConfiguracaoDaChamadaTests(TestCase):
+    """
+    O "raciocinio" do Gemini 2.5 Flash e limitado por configuracao.
+
+    Sem limite, o modelo pensa o quanto quiser antes de responder: e o que fazia
+    a estruturacao levar 30 segundos. O cliente do SDK e trocado por um falso,
+    entao nada sai da maquina (AGENTS.md 0.1).
+    """
+
+    def chamar(self, orcamento=None):
+        cliente = ClienteGenAI.__new__(ClienteGenAI)
+        cliente._cliente = SDKFalso()
+        cliente._modelo = 'gemini-2.5-flash'
+        cliente._temperatura = 0.2
+        cliente._orcamento = orcamento
+
+        cliente.generate_content(
+            'prompt', request_options={'timeout': 40}, sistema='PROMPT DE SISTEMA'
+        )
+        return cliente._cliente.models.pedidos[0]
+
+    def test_o_limite_de_raciocinio_vem_das_settings(self):
+        configuracao = self.chamar()['config']
+
+        self.assertEqual(configuracao.thinking_config.thinking_budget, 256)
+
+    def test_o_limite_pedido_ao_provedor_vence_a_settings(self):
+        configuracao = self.chamar(orcamento=-1)['config']
+
+        self.assertEqual(configuracao.thinking_config.thinking_budget, -1)
+
+    def test_a_chamada_leva_o_sistema_o_teto_de_saida_e_o_tempo_maximo(self):
+        pedido = self.chamar()
+        configuracao = pedido['config']
+
+        self.assertEqual(pedido['model'], 'gemini-2.5-flash')
+        self.assertEqual(configuracao.system_instruction, 'PROMPT DE SISTEMA')
+        self.assertEqual(configuracao.max_output_tokens, 2048)
+        self.assertEqual(configuracao.response_mime_type, 'application/json')
+        self.assertEqual(configuracao.http_options.timeout, 40000)
+
+    def test_o_raciocinio_e_cobrado_como_saida(self):
+        class Uso:
+            prompt_token_count = 100
+            candidates_token_count = 40
+            thoughts_token_count = 60
+
+        class Resposta:
+            text = '{}'
+            usage_metadata = Uso()
+
+        self.assertEqual(tokens_da_resposta(Resposta(), prompt='x'), (100, 100))

@@ -227,3 +227,69 @@ class LacunaCompetenciaEquipe(models.Model):
 
     def __str__(self):
         return f'Lacuna da equipe {self.equipe_id}'
+
+
+class VetorMembro(models.Model):
+    """
+    O vetor do perfil de um membro da rede, para a afinidade com o tema.
+
+    Tabela satelite 1:1, e nao coluna em `Membro_Rede`: o vetor tem centenas de
+    numeros e `Membro_Rede` e lida em toda tela da rede. `texto_hash` resume o
+    texto que gerou o vetor; quando o perfil muda, o hash deixa de bater e o
+    vetor e refeito.
+
+    O tamanho do vetor sai do proprio vetor, e nao de uma coluna: guardado a
+    parte, ele poderia divergir do vetor gravado.
+    """
+
+    membro = models.OneToOneField(
+        'network.MembroRede',
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name='vetor',
+        db_column='id_membro',
+    )
+    vetor = models.JSONField(db_column='vetor')
+    modelo = models.CharField(max_length=120, db_column='modelo')
+    texto_hash = models.CharField(max_length=64, db_column='texto_hash')
+    gerado_em = models.DateTimeField(db_column='gerado_em')
+
+    class Meta:
+        db_table = 'Vetor_Membro'
+        verbose_name = 'vetor do membro'
+        verbose_name_plural = 'vetores dos membros'
+
+    def __str__(self):
+        return f'Vetor do membro {self.membro_id}'
+
+    @property
+    def dimensao(self) -> int:
+        return len(self.vetor)
+
+
+class VetorCompetenciaNecessaria(models.Model):
+    """O vetor de uma competencia necessaria, com a mesma regra do perfil."""
+
+    competencia_necessaria = models.OneToOneField(
+        'competencies.CompetenciaNecessaria',
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name='vetor',
+        db_column='id_competencia_necessaria',
+    )
+    vetor = models.JSONField(db_column='vetor')
+    modelo = models.CharField(max_length=120, db_column='modelo')
+    texto_hash = models.CharField(max_length=64, db_column='texto_hash')
+    gerado_em = models.DateTimeField(db_column='gerado_em')
+
+    class Meta:
+        db_table = 'Vetor_Competencia_Necessaria'
+        verbose_name = 'vetor da competencia necessaria'
+        verbose_name_plural = 'vetores das competencias necessarias'
+
+    def __str__(self):
+        return f'Vetor da competencia necessaria {self.competencia_necessaria_id}'
+
+    @property
+    def dimensao(self) -> int:
+        return len(self.vetor)

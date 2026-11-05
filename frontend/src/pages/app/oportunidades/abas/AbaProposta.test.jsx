@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaProposta from './AbaProposta'
@@ -49,6 +49,7 @@ const PREENCHIDA = {
   infraestrutura_recursos: 'Laboratório da AC2.',
   revisada_por_humano: true,
   revisor_nome: 'Rafael Antunes',
+  atualizado_em: '2026-10-30T20:42:00-03:00',
 }
 
 function naoIniciada() {
@@ -135,6 +136,20 @@ describe('AbaProposta — edição', () => {
     expect(payload).not.toHaveProperty('revisada_por_humano')
   })
 
+  /**
+   * A grade de cartões em duas colunas dos formulários de cadastro punha a
+   * legenda sozinha na coluna da esquerda e os campos na da direita.
+   */
+  it('o formulário da proposta ocupa uma coluna só', async () => {
+    const { container } = renderAba()
+
+    await screen.findByText('Revisada por')
+    const formulario = container.querySelector('form')
+
+    expect(formulario).toHaveClass('proposta__form')
+    expect(formulario).not.toHaveClass('console-form')
+  })
+
   it('mostra quem revisou, sem HTML cru na tela', async () => {
     renderAba()
 
@@ -155,11 +170,30 @@ describe('AbaProposta — somente leitura', () => {
     auth.user = { role: ROLES.PESQUISADOR, name: 'Maria Ferreira' }
   })
 
-  it('desabilita os campos para quem não é Supervisor', async () => {
+  it('deixa só ler os campos para quem não é Supervisor', async () => {
     renderAba()
 
-    expect(await screen.findByLabelText(/problema de pesquisa/i)).toBeDisabled()
+    expect(await screen.findByLabelText(/problema de pesquisa/i)).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: /salvar/i })).toBeNull()
+  })
+
+  it('mostra cada elemento preenchido recolhido nas duas primeiras linhas', async () => {
+    renderAba()
+
+    const campo = await screen.findByLabelText(/problema de pesquisa/i)
+
+    expect(campo).toHaveAttribute('rows', '2')
+    expect(campo).toHaveClass('proposta__texto--recolhido')
+  })
+
+  it('quem só lê também abre o texto inteiro clicando nele', async () => {
+    const user = userEvent.setup()
+    renderAba()
+
+    const campo = await screen.findByLabelText(/problema de pesquisa/i)
+    await user.click(campo)
+
+    expect(campo).not.toHaveClass('proposta__texto--recolhido')
   })
 })
 
@@ -185,15 +219,31 @@ describe('AbaProposta — revisão do que o Copiloto escreveu', () => {
     await waitFor(() => expect(api.atualizarProposta).toHaveBeenCalled())
   })
 
-  it('depois de revisada, aponta a próxima etapa', async () => {
+  it('depois de revisada, o próximo passo fica na barra de ações, ao lado do salvar', async () => {
     const irPara = vi.fn()
     render(<AbaProposta oportunidadeId="OP-2026-001" irPara={irPara} />)
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: /ir para competências/i }),
-    )
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+    expect(within(barra).getByRole('button', { name: /salvar proposta/i })).toBeInTheDocument()
+
+    await userEvent.click(within(barra).getByRole('button', { name: /continuar para competências/i }))
 
     expect(irPara).toHaveBeenCalledWith('competencias')
+  })
+
+  it('diz quando a proposta foi salva', async () => {
+    renderAba()
+
+    expect(await screen.findByText(/^Salvo (às|em) .*\d{2}:\d{2}\.$/)).toBeInTheDocument()
+  })
+
+  it('com alteração não salva, pede para salvar antes de continuar', async () => {
+    render(<AbaProposta oportunidadeId="OP-2026-001" irPara={vi.fn()} />)
+
+    await userEvent.type(await screen.findByLabelText(/hipótese/i), 'Nova hipótese')
+
+    expect(screen.getByText('Há alterações não salvas.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /continuar para competências/i })).not.toBeInTheDocument()
   })
 
   it('explica cada elemento com uma dica curta', async () => {

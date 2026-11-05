@@ -176,7 +176,7 @@ class FinalidadeToken(models.TextChoices):
     Um discriminador evita uma segunda tabela quase identica.
     """
 
-    RECUPERACAO = 'recuperacao', 'Recuperacao de senha'
+    RECUPERACAO = 'recuperacao', 'Recuperação de senha'
     CONVITE = 'convite', 'Primeiro acesso'
 
 

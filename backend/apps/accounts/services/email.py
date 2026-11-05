@@ -44,12 +44,12 @@ class EnviadorDjango:
         horas = settings.TOKEN_RECUPERACAO_HORAS
 
         send_mail(
-            subject='P&D Connect - redefinicao de senha',
+            subject='P&D Connect - redefinição de senha',
             message=(
-                f'Ola, {usuario.nome}.\n\n'
+                f'Olá, {usuario.nome}.\n\n'
                 f'Recebemos um pedido para redefinir a sua senha no P&D Connect.\n'
-                f'Use o link abaixo (valido por {horas} horas):\n\n{link}\n\n'
-                'Se nao foi voce, ignore esta mensagem: a senha atual continua valendo.'
+                f'Use o link abaixo (válido por {horas} horas):\n\n{link}\n\n'
+                'Se não foi você, ignore esta mensagem: a senha atual continua valendo.'
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[usuario.email],
@@ -63,9 +63,9 @@ class EnviadorDjango:
         send_mail(
             subject='P&D Connect - seu acesso foi liberado',
             message=(
-                f'Ola, {usuario.nome}.\n\n'
-                'O Nucleo de P&D liberou o seu acesso ao P&D Connect.\n'
-                f'Defina a sua senha pelo link abaixo (valido por {horas} horas):'
+                f'Olá, {usuario.nome}.\n\n'
+                'O Núcleo de P&D liberou o seu acesso ao P&D Connect.\n'
+                f'Defina a sua senha pelo link abaixo (válido por {horas} horas):'
                 f'\n\n{link}\n'
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,

@@ -211,25 +211,29 @@ export default function IdeiaFormPage() {
         </div>
       ) : null}
 
+      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+
       <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
           <header className="perfil-card__header">
             <div>
               <h2 className="perfil-card__title">A ideia</h2>
               <p className="perfil-card__description">
-                Título e resumo são obrigatórios. O Copiloto parte deste texto
-                para estruturar a proposta — quanto mais concreto, menos
-                pergunta orientadora depois.
+                O Copiloto parte deste texto para estruturar a proposta: quanto
+                mais concreto, menos pergunta orientadora depois.
               </p>
             </div>
           </header>
 
           <div className="perfil-card__body">
             <label className="admin-field">
-              <span className="admin-field__label">Título</span>
+              <span className="admin-field__label">
+                Título <span aria-hidden="true">*</span>
+              </span>
               <input
                 type="text"
                 className="admin-input"
+                aria-required="true"
                 value={valores.titulo}
                 onChange={alterarCampo('titulo')}
                 placeholder="Ex.: Cultura starter para queijo artesanal"
@@ -245,10 +249,11 @@ export default function IdeiaFormPage() {
 
             <div className="admin-field">
               <label className="admin-field__label" htmlFor="campo-resumo-ideia">
-                Resumo da ideia
+                Resumo da ideia <span aria-hidden="true">*</span>
               </label>
               <textarea
                 id="campo-resumo-ideia"
+                aria-required="true"
                 className="admin-input admin-input--area"
                 rows={4}
                 value={valores.resumo}
@@ -308,10 +313,11 @@ export default function IdeiaFormPage() {
           <div className="perfil-card__body">
             <div className="admin-field">
               <label className="admin-field__label" htmlFor="campo-responsavel">
-                Supervisor responsável
+                Supervisor responsável <span aria-hidden="true">*</span>
               </label>
               <select
                 id="campo-responsavel"
+                aria-required="true"
                 className="admin-input admin-input--select"
                 value={valores.responsavel}
                 onChange={alterarCampo('responsavel')}

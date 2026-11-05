@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   BRAND_TOKENS,
+  alphaOf,
   buildCssVariables,
   getDefaultBranding,
   isValidColor,
   isValidHex,
+  toPickerHex,
+  withPickedHue,
 } from './brandTokens'
 
 describe('isValidHex', () => {
@@ -104,5 +107,47 @@ describe('a paleta padrao da AC2', () => {
         expect(variaveis).toHaveProperty(token.cssVar)
       }
     }
+  })
+})
+
+describe('toPickerHex', () => {
+  it('traduz hex curto e rgba para o hex de seis dígitos que o seletor de cor entende', () => {
+    expect(toPickerHex('#1B5E20')).toBe('#1b5e20')
+    expect(toPickerHex('#f80')).toBe('#ff8800')
+    expect(toPickerHex('rgba(224, 123, 26, 0.16)')).toBe('#e07b1a')
+    expect(toPickerHex('rgb(27,94,32)')).toBe('#1b5e20')
+  })
+
+  it('devolve null para o que não é cor, inclusive hex pela metade', () => {
+    for (const cor of ['#12', 'banana', '', null]) {
+      expect(toPickerHex(cor)).toBeNull()
+    }
+  })
+})
+
+describe('alphaOf', () => {
+  it('lê a opacidade do rgba e trata hex e rgb como opacos', () => {
+    expect(alphaOf('rgba(237, 241, 247, 0.14)')).toBe(0.14)
+    expect(alphaOf('#E07B1A')).toBe(1)
+    expect(alphaOf('rgb(27, 94, 32)')).toBe(1)
+  })
+
+  it('devolve null para o que não é cor', () => {
+    expect(alphaOf('#12')).toBeNull()
+  })
+})
+
+describe('withPickedHue', () => {
+  it('mantém a transparência da cor translúcida ao trocar a cor', () => {
+    expect(withPickedHue('rgba(237, 241, 247, 0.14)', '#1b5e20')).toBe('rgba(27, 94, 32, 0.14)')
+  })
+
+  it('a cor opaca recebe o hex escolhido', () => {
+    expect(withPickedHue('#E07B1A', '#1b5e20')).toBe('#1b5e20')
+    expect(withPickedHue('rgba(0, 0, 0, 1)', '#1b5e20')).toBe('#1b5e20')
+  })
+
+  it('valor que ainda não é cor recebe o hex escolhido', () => {
+    expect(withPickedHue('#12', '#1b5e20')).toBe('#1b5e20')
   })
 })

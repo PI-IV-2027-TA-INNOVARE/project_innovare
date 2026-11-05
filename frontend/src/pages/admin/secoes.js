@@ -19,6 +19,14 @@ export const SECOES_ADMIN = Object.freeze([
     permissao: PERMISSOES.CONTAS,
   },
   {
+    id: 'permissoes',
+    rota: '/admin/permissoes',
+    label: 'Permissões',
+    description: 'Quem pode fazer o quê',
+    icon: appIcons.lock,
+    permissao: PERMISSOES.CONTAS,
+  },
+  {
     id: 'auditoria',
     rota: '/admin/auditoria',
     label: 'Auditoria',

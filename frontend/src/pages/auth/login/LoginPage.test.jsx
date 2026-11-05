@@ -252,3 +252,14 @@ describe('LoginPage — nao existe atalho de credencial', () => {
     expect(screen.getByLabelText('Senha')).toHaveValue('')
   })
 })
+
+describe('LoginPage — privacidade', () => {
+  it('leva ao aviso de privacidade antes de entrar', () => {
+    renderLogin()
+
+    expect(screen.getByRole('link', { name: 'Privacidade e seus dados' })).toHaveAttribute(
+      'href',
+      '/privacidade'
+    )
+  })
+})

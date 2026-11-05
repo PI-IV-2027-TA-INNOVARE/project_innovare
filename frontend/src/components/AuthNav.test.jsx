@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AuthNav from './AuthNav'
@@ -62,5 +63,28 @@ describe('Sino de notificações na barra autenticada', () => {
 
     expect(screen.getByRole('button', { name: 'Tema' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Oportunidades' })).toBeInTheDocument()
+  })
+})
+describe('Privacidade a um clique, sem rolar a página', () => {
+  it('fica no menu da conta, logo abaixo de Meu perfil', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.click(screen.getByRole('button', { name: /joana alves/i }))
+
+    const itens = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(itens.indexOf('Privacidade e seus dados')).toBe(itens.indexOf('Meu perfil') + 1)
+  })
+
+  it('também fica na gaveta do celular', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.click(screen.getByRole('button', { name: 'Abrir menu' }))
+
+    expect(screen.getByRole('link', { name: 'Privacidade e seus dados' })).toHaveAttribute(
+      'href',
+      '/privacidade'
+    )
   })
 })

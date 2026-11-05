@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import CampoDeSenha, { RegrasDaSenha } from '../../../components/CampoDeSenha'
+import { errosDosCampos, problemaNaConfirmacao, problemaNaNovaSenha } from '../../../lib/senha'
 import { resetPassword } from '../../../services/pdConnectApi'
 import './ResetPasswordPage.scss'
 
@@ -7,6 +9,18 @@ const defaultForm = {
   newPassword: '',
   confirmPassword: '',
 }
+
+const FIELD_IDS = {
+  newPassword: 'reset-new-password',
+  confirmPassword: 'reset-confirm-password',
+}
+
+const API_FIELDS = {
+  nova_senha: 'newPassword',
+  confirmar_senha: 'confirmPassword',
+}
+
+const RULES_ID = 'reset-password-rules'
 
 /**
  * As duas portas para a mesma mecânica.
@@ -55,19 +69,18 @@ function stripFieldPrefix(message) {
 }
 
 function validateForm(form) {
-  if (!form.newPassword) {
-    return 'Informe a nova senha.'
-  }
+  return Object.fromEntries(
+    Object.entries({
+      newPassword: problemaNaNovaSenha(form.newPassword),
+      confirmPassword: problemaNaConfirmacao(form.newPassword, form.confirmPassword),
+    }).filter(([, message]) => message)
+  )
+}
 
-  if (form.newPassword.length < 8) {
-    return 'A senha deve ter pelo menos 8 caracteres.'
-  }
+function focusFirstInvalid(errors) {
+  const first = Object.keys(FIELD_IDS).find((field) => errors[field])
 
-  if (form.newPassword !== form.confirmPassword) {
-    return 'As senhas não coincidem.'
-  }
-
-  return ''
+  if (first) document.getElementById(FIELD_IDS[first])?.focus()
 }
 
 export default function ResetPasswordPage({ variante = 'redefinicao' }) {
@@ -79,24 +92,28 @@ export default function ResetPasswordPage({ variante = 'redefinicao' }) {
   const [form, setForm] = useState(defaultForm)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [done, setDone] = useState(false)
 
   const handleChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
+    setFieldErrors((current) => ({ ...current, [field]: '' }))
     setErrorMessage('')
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
 
-    const validationMessage = validateForm(form)
-    if (validationMessage) {
-      setErrorMessage(validationMessage)
+    const validationErrors = validateForm(form)
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors)
+      focusFirstInvalid(validationErrors)
       return
     }
 
     setLoading(true)
     setErrorMessage('')
+    setFieldErrors({})
 
     try {
       await resetPassword({
@@ -106,9 +123,15 @@ export default function ResetPasswordPage({ variante = 'redefinicao' }) {
       })
       setDone(true)
     } catch (error) {
-      setErrorMessage(
-        stripFieldPrefix(error.message) || 'Não foi possível redefinir a senha. Tente novamente.'
-      )
+      const serverErrors = errosDosCampos(error, API_FIELDS)
+
+      if (Object.keys(serverErrors).length > 0) {
+        setFieldErrors(serverErrors)
+      } else {
+        setErrorMessage(
+          stripFieldPrefix(error.message) || 'Não foi possível redefinir a senha. Tente novamente.'
+        )
+      }
     } finally {
       setLoading(false)
     }
@@ -166,37 +189,31 @@ export default function ResetPasswordPage({ variante = 'redefinicao' }) {
             ) : (
               <form onSubmit={handleSubmit} className="login-form">
                 <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="reset-new-password">
-                      {copy.rotuloSenha}
-                    </label>
-                    <input
-                      id="reset-new-password"
-                      type="password"
-                      className="form-input"
-                      value={form.newPassword}
-                      onChange={(e) => handleChange('newPassword', e.target.value)}
-                      placeholder="Mínimo de 8 caracteres"
-                      autoComplete="new-password"
-                      disabled={loading}
-                    />
-                  </div>
+                  <CampoDeSenha
+                    estilo="acesso"
+                    id={FIELD_IDS.newPassword}
+                    rotulo={copy.rotuloSenha}
+                    valor={form.newPassword}
+                    onChange={(value) => handleChange('newPassword', value)}
+                    autoComplete="new-password"
+                    erro={fieldErrors.newPassword}
+                    descricao={RULES_ID}
+                    desabilitado={loading}
+                  />
 
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="reset-confirm-password">
-                      Confirmar nova senha
-                    </label>
-                    <input
-                      id="reset-confirm-password"
-                      type="password"
-                      className="form-input"
-                      value={form.confirmPassword}
-                      onChange={(e) => handleChange('confirmPassword', e.target.value)}
-                      placeholder="Repita a nova senha"
-                      autoComplete="new-password"
-                      disabled={loading}
-                    />
-                  </div>
+                  <RegrasDaSenha id={RULES_ID} />
+
+                  <CampoDeSenha
+                    estilo="acesso"
+                    id={FIELD_IDS.confirmPassword}
+                    rotulo="Confirmar nova senha"
+                    valor={form.confirmPassword}
+                    onChange={(value) => handleChange('confirmPassword', value)}
+                    placeholder="Repita a nova senha"
+                    autoComplete="new-password"
+                    erro={fieldErrors.confirmPassword}
+                    desabilitado={loading}
+                  />
                 </div>
 
                 {errorMessage ? <p className="login-message">{errorMessage}</p> : null}

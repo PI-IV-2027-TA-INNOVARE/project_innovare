@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminModal from '../../../../components/console/AdminModal'
+import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
 import { Icone, appIcons } from '../../../../lib/icons'
+import { PARCELAS_DA_NOTA, TERMOS } from '../../../../lib/glossario'
 import { ROLES } from '../../../../lib/roles'
+import { papelLabel } from '../../rede/redeData'
 import {
   adicionarMembroEquipe,
   ajustarMembroEquipe,
@@ -15,26 +18,21 @@ import {
 } from '../../../../services/pdConnectApi'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
-import ProximoPasso from './ProximoPasso'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
 import '../OportunidadesPage.scss'
 
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
 
-const ROTULOS_DAS_FEATURES = {
-  semantico: 'Semelhança de conteúdo',
-  lexical: 'Termos em comum',
-  area: 'Área de atuação',
-  disponibilidade: 'Disponibilidade',
-}
+const ROTULOS_DAS_FEATURES = PARCELAS_DA_NOTA
 
 const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
 
 function comoFoiCalculado(execucao) {
   if (execucao.fallback_usado) {
-    return 'Sugestões calculadas por termos em comum, área de atuação e disponibilidade. A comparação por semelhança de conteúdo não estava disponível nesta rodada.'
+    return 'Sugestões calculadas por palavras em comum, área de atuação e disponibilidade. A afinidade com o tema não estava disponível nesta rodada.'
   }
 
-  return `Sugestões calculadas por semelhança de conteúdo, termos em comum, área de atuação e disponibilidade.${execucao.usou_rerank ? ' A ordem foi revisada pela IA.' : ''}`
+  return `Sugestões calculadas por afinidade com o tema, palavras em comum, área de atuação e disponibilidade.${execucao.usou_rerank ? ' A ordem foi revisada pela IA.' : ''}`
 }
 
 function porcentagem(valor) {
@@ -44,7 +42,9 @@ function porcentagem(valor) {
 }
 
 function Features({ features }) {
-  const chaves = Object.keys(ROTULOS_DAS_FEATURES).filter((chave) => chave in features)
+  const chaves = Object.keys(ROTULOS_DAS_FEATURES).filter(
+    (chave) => chave in features && features[chave] !== null
+  )
 
   if (chaves.length === 0) return null
 
@@ -53,13 +53,20 @@ function Features({ features }) {
       {chaves.map((chave) => (
         <div key={chave} className="equipe__feature">
           <dt>{ROTULOS_DAS_FEATURES[chave]}</dt>
-          <dd>
-            {features[chave] === null ? 'indisponível' : porcentagem(features[chave])}
-          </dd>
+          <dd>{porcentagem(features[chave])}</dd>
         </div>
       ))}
     </dl>
   )
+}
+
+function gruposDaEquipe(membros) {
+  const grupos = [
+    { rotulo: 'Supervisão', membros: membros.filter((membro) => membro.papel === 'supervisor') },
+    { rotulo: 'Pesquisa', membros: membros.filter((membro) => membro.papel !== 'supervisor') },
+  ]
+
+  return grupos.filter((grupo) => grupo.membros.length > 0)
 }
 
 function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
@@ -67,7 +74,14 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
     <li className={`equipe__membro${membro.incluido ? '' : ' equipe__membro--fora'}`}>
       <div className="equipe__cabeca">
         <div>
-          <p className="equipe__nome">{membro.nome}</p>
+          <p className="equipe__nome">
+            {membro.nome}
+            {membro.inativo ? (
+              <span className="status-badge status-badge--inativo equipe__inativo">
+                Inativo na rede
+              </span>
+            ) : null}
+          </p>
           <p className="equipe__meta">
             {membro.papel_rotulo}
             {membro.titulacao ? ` · ${membro.titulacao}` : ''} ·{' '}
@@ -85,14 +99,20 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
       </div>
 
       {membro.match_reasons?.length > 0 ? (
-        <ul className="equipe__motivos">
-          {membro.match_reasons.map((motivo, indice) => (
-            <li key={`${membro.id_membro_equipe}-${indice}`}>{motivo}</li>
-          ))}
-        </ul>
+        <p className="equipe__motivo-principal">{membro.match_reasons[0]}</p>
       ) : null}
 
-      <Features features={membro.score_features || {}} />
+      <VerDetalhes>
+        {membro.match_reasons?.length > 1 ? (
+          <ul className="equipe__motivos" aria-label="Outros motivos da sugestão">
+            {membro.match_reasons.slice(1).map((motivo, indice) => (
+              <li key={`${membro.id_membro_equipe}-${indice}`}>{motivo}</li>
+            ))}
+          </ul>
+        ) : null}
+
+        <Features features={membro.score_features || {}} />
+      </VerDetalhes>
 
       {podeAjustar ? (
         <button
@@ -122,8 +142,10 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
   const [ocupado, setOcupado] = useState(false)
   const [rodando, setRodando] = useState(false)
   const [confirmarRodada, setConfirmarRodada] = useState(false)
-  const [rede, setRede] = useState([])
-  const [escolhido, setEscolhido] = useState('')
+  const [propostaPendente, setPropostaPendente] = useState(false)
+  const [termo, setTermo] = useState('')
+  const [achados, setAchados] = useState([])
+  const [escolhido, setEscolhido] = useState(null)
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!silencioso) setCarregando(true)
@@ -155,12 +177,29 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
   useEffect(() => () => aoOcupar?.(false), [aoOcupar])
 
   useEffect(() => {
-    if (!podeConduzir) return
+    const consulta = termo.trim()
 
-    listarRede({ page_size: 100 })
-      .then((pagina) => setRede(pagina?.results || []))
-      .catch(() => setRede([]))
-  }, [podeConduzir])
+    if (!podeConduzir || escolhido || consulta.length < 2) {
+      setAchados([])
+      return undefined
+    }
+
+    const relogio = setTimeout(() => {
+      listarRede({ busca: consulta, page_size: 10 })
+        .then((pagina) =>
+          setAchados((pagina?.results || []).filter((pessoa) => pessoa.situacao !== 'inativo')),
+        )
+        .catch(() => setAchados([]))
+    }, 300)
+
+    return () => clearTimeout(relogio)
+  }, [termo, escolhido, podeConduzir])
+
+  const escolher = (pessoa) => {
+    setEscolhido(pessoa)
+    setTermo(pessoa.nome)
+    setAchados([])
+  }
 
   const executar = async (acao, mensagem) => {
     setOcupado(true)
@@ -200,17 +239,16 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
 
     if (!escolhido) return
 
-    const pessoa = rede.find((item) => String(item.id_membro) === String(escolhido))
-
     await executar(
       () =>
         adicionarMembroEquipe(oportunidadeId, {
-          id_membro: Number(escolhido),
-          papel: pessoa?.papel_rede || 'pesquisador',
+          id_membro: escolhido.id_membro,
+          papel: escolhido.papel_rede || 'pesquisador',
         }),
       'Pessoa incluída na equipe potencial.',
     )
-    setEscolhido('')
+    setEscolhido(null)
+    setTermo('')
   }
 
   const validar = () =>
@@ -257,7 +295,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={rodar}
-              disabled={ocupado}
+              disabled={ocupado || propostaPendente}
             >
               <Icone icon={appIcons.users} />
               {rodando ? 'Rodando...' : 'Rodar matching'}
@@ -266,9 +304,11 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body equipe__corpo">
-        <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
-
-          <AvisoPropostaNaoRevisada oportunidadeId={oportunidadeId} irPara={irPara} />
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
 
           {rodando ? (
             <EsperaIA
@@ -290,6 +330,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
 
   const execucao = equipe?.execucao || null
   const incluidos = (equipe?.membros || []).filter((membro) => membro.incluido)
+  const validada = incluidos.length > 0 && incluidos.every((membro) => membro.validada)
 
   return (
     <section className="perfil-card equipe">
@@ -319,19 +360,10 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn admin-btn--outline"
               onClick={() => setConfirmarRodada(true)}
-              disabled={ocupado}
+              disabled={ocupado || propostaPendente}
             >
               <Icone icon={appIcons.reset} />
               {rodando ? 'Rodando...' : 'Rodar de novo'}
-            </button>
-            <button
-              type="button"
-              className="admin-btn"
-              onClick={validar}
-              disabled={ocupado || incluidos.length === 0}
-            >
-              <Icone icon={appIcons.done} />
-              Validar equipe
             </button>
           </div>
         ) : (
@@ -346,6 +378,14 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
       </header>
 
       <div className="perfil-card__body equipe__corpo">
+        {podeConduzir ? (
+          <AvisoPropostaNaoRevisada
+            oportunidadeId={oportunidadeId}
+            irPara={irPara}
+            aoVerificar={setPropostaPendente}
+          />
+        ) : null}
+
         {rodando ? (
           <EsperaIA
             titulo="Comparando as competências necessárias com a rede interna."
@@ -353,27 +393,28 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
           />
         ) : null}
 
-        {podeConduzir && incluidos.length > 0 && incluidos.every((membro) => membro.validada) ? (
-          <ProximoPasso etapa="pre-analise" irPara={irPara} />
-        ) : null}
-
         {(equipe?.membros || []).length === 0 ? (
           <p className="oportunidade-page__vazio">
-            Nenhum perfil alcançou o score mínimo configurado. As lacunas abaixo
+            Nenhum perfil alcançou a {TERMOS.notaMinima}. As lacunas abaixo
             dizem quais competências ficaram sem cobertura.
           </p>
         ) : (
-          <ul className="equipe__lista">
-            {equipe.membros.map((membro) => (
-              <Indicacao
-                key={membro.id_membro_equipe}
-                membro={membro}
-                podeAjustar={podeConduzir}
-                onAjustar={ajustar}
-                ocupado={ocupado}
-              />
-            ))}
-          </ul>
+          gruposDaEquipe(equipe.membros).map((grupo) => (
+            <div key={grupo.rotulo} className="equipe__grupo">
+              <h3 className="equipe__subtitulo">{grupo.rotulo}</h3>
+              <ul className="equipe__lista" aria-label={grupo.rotulo}>
+                {grupo.membros.map((membro) => (
+                  <Indicacao
+                    key={membro.id_membro_equipe}
+                    membro={membro}
+                    podeAjustar={podeConduzir}
+                    onAjustar={ajustar}
+                    ocupado={ocupado}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))
         )}
 
         {(equipe?.lacunas || []).length > 0 ? (
@@ -389,21 +430,47 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
 
         {podeConduzir ? (
           <form className="equipe__forma" onSubmit={incluir}>
-            <label className="admin-field">
-              <span className="admin-field__label">Incluir alguém da rede</span>
-              <select
+            <div className="admin-field equipe__busca">
+              <label className="admin-field__label" htmlFor="equipe-busca-rede">
+                Incluir alguém da rede
+              </label>
+              <input
+                id="equipe-busca-rede"
+                type="search"
                 className="admin-input"
-                value={escolhido}
-                onChange={(evento) => setEscolhido(evento.target.value)}
-              >
-                <option value="">Selecione uma pessoa</option>
-                {rede.map((pessoa) => (
-                  <option key={pessoa.id_membro} value={pessoa.id_membro}>
-                    {pessoa.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
+                value={termo}
+                onChange={(evento) => {
+                  setTermo(evento.target.value)
+                  setEscolhido(null)
+                }}
+                placeholder="Nome ou competência, ao menos 2 letras"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={achados.length > 0}
+                aria-controls="equipe-achados-rede"
+              />
+              {achados.length > 0 ? (
+                <ul id="equipe-achados-rede" className="equipe__achados" role="listbox">
+                  {achados.map((pessoa) => (
+                    <li
+                      key={pessoa.id_membro}
+                      role="option"
+                      aria-selected={false}
+                      tabIndex={0}
+                      onClick={() => escolher(pessoa)}
+                      onKeyDown={(evento) => {
+                        if (evento.key === 'Enter' || evento.key === ' ') {
+                          evento.preventDefault()
+                          escolher(pessoa)
+                        }
+                      }}
+                    >
+                      {pessoa.nome} · {papelLabel(pessoa.papel_rede)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
 
             <button
               type="submit"
@@ -414,6 +481,29 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               Incluir
             </button>
           </form>
+        ) : null}
+
+        {podeConduzir && equipe ? (
+          <BarraDeAcoes
+            estado={
+              validada
+                ? 'Equipe validada. Ninguém foi convocado.'
+                : incluidos.length > 0
+                  ? 'Revise a composição e valide a equipe.'
+                  : 'Inclua ao menos uma pessoa para validar.'
+            }
+          >
+            <button
+              type="button"
+              className={validada ? 'admin-btn admin-btn--outline' : 'admin-btn'}
+              onClick={validar}
+              disabled={ocupado || incluidos.length === 0}
+            >
+              <Icone icon={appIcons.done} />
+              Validar equipe
+            </button>
+            {validada ? <ContinuarPara etapa="pre-analise" irPara={irPara} /> : null}
+          </BarraDeAcoes>
         ) : null}
       </div>
 

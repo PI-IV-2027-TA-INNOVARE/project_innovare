@@ -221,7 +221,8 @@ export default function ProblemaPage() {
         codigo={id}
         podeEnviar
         titulo="Documentos"
-        descricao="Laudos, fotos e relatórios que você anexou — e o que a AC2 juntou ao registro. Até 10 MB por arquivo."
+        descricao="Laudos, fotos e relatórios que a sua empresa anexou a este problema."
+        quemVe="sua empresa, o Supervisor da AC2 e a equipe que ele indicar."
       />
 
       {problema.decisao && !pedeComplementacao ? (

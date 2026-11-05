@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
-import { Icone, appIcons } from '../../../lib/icons'
+import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
+import {
+  ROTULOS_DAS_DIMENSOES,
+  agruparPorLacuna,
+  rotuloDoCriterio,
+} from '../../../lib/lacunas'
 import { obterRelatorioPreAnalise } from '../../../services/pdConnectApi'
 import './RelatorioPage.scss'
 
@@ -32,14 +37,14 @@ function formatarData(valor) {
       })
 }
 
-function Secao({ titulo, children }) {
-  const id = `preanalise-secao-${titulo.toLowerCase().replace(/\s+/g, '-')}`
+const Secao = SecaoDoRelatorio
 
+function Recomendacao({ recomendacao }) {
   return (
-    <section className="relatorio-secao" aria-labelledby={id}>
-      <h2 id={id} className="relatorio-secao__titulo">{titulo}</h2>
-      {children}
-    </section>
+    <li>
+      {recomendacao.texto}
+      {recomendacao.acatada ? ' (acatada)' : ''}
+    </li>
   )
 }
 
@@ -140,18 +145,19 @@ export default function RelatorioPreAnalisePage() {
   }
 
   const { oportunidade, proposta, pre_analise: analise, criterios, equipe } = relatorio
+  const identificacao = [
+    { rotulo: 'Código', valor: oportunidade.codigo },
+    { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
+    { rotulo: 'Gerado em', valor: formatarData(relatorio.gerado_em) },
+  ]
   const falhou = analise.status !== 'ok'
+  const { grupos, soltas } = agruparPorLacuna(analise.lacunas, analise.recomendacoes)
 
   return (
-    <div className="console relatorio-page">
-      <div className="relatorio-page__acoes">
-        <BackLink to={`/oportunidades/${id}`}>Voltar para a oportunidade</BackLink>
-
-        <button type="button" className="admin-btn" onClick={() => window.print()}>
-          <Icone icon={appIcons.view} />
-          Imprimir
-        </button>
-      </div>
+    <LayoutDoRelatorio
+      voltarPara={`/oportunidades/${id}`}
+      identificacao={identificacao}
+    >
 
       <article className="relatorio-documento">
         <header className="relatorio-documento__header">
@@ -169,6 +175,14 @@ export default function RelatorioPreAnalisePage() {
 
           <p className="relatorio-documento__aviso">{analise.aviso}</p>
         </header>
+
+        {relatorio.como_ler?.length > 0 ? (
+          <Secao titulo="Como ler esta pré-análise">
+            {relatorio.como_ler.map((paragrafo) => (
+              <p key={paragrafo} className="relatorio-texto">{paragrafo}</p>
+            ))}
+          </Secao>
+        ) : null}
 
         <Secao titulo="Execução">
           <dl className="relatorio-campos">
@@ -214,24 +228,35 @@ export default function RelatorioPreAnalisePage() {
           </Secao>
         ) : null}
 
-        {analise.lacunas.length > 0 ? (
-          <Secao titulo="Lacunas">
+        {grupos.length > 0 ? (
+          <Secao titulo="Lacunas e recomendações">
             <ul className="relatorio-lista">
-              {analise.lacunas.map((lacuna) => (
-                <li key={lacuna.id_lacuna}>{lacuna.descricao}</li>
+              {grupos.map(({ lacuna, recomendacoes }) => (
+                <li key={lacuna.id_lacuna}>
+                  <span className="relatorio-lacuna__origem">
+                    {[ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado], rotuloDoCriterio(lacuna)]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                  <span className="relatorio-lacuna__texto">{lacuna.descricao}</span>
+                  {recomendacoes.length > 0 ? (
+                    <ul className="relatorio-lista">
+                      {recomendacoes.map((recomendacao) => (
+                        <Recomendacao key={recomendacao.id_recomendacao} recomendacao={recomendacao} />
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
               ))}
             </ul>
           </Secao>
         ) : null}
 
-        {analise.recomendacoes.length > 0 ? (
-          <Secao titulo="Recomendações">
+        {soltas.length > 0 ? (
+          <Secao titulo="Outras recomendações">
             <ul className="relatorio-lista">
-              {analise.recomendacoes.map((recomendacao) => (
-                <li key={recomendacao.id_recomendacao}>
-                  {recomendacao.texto}
-                  {recomendacao.acatada ? ' (acatada)' : ''}
-                </li>
+              {soltas.map((recomendacao) => (
+                <Recomendacao key={recomendacao.id_recomendacao} recomendacao={recomendacao} />
               ))}
             </ul>
           </Secao>
@@ -279,6 +304,6 @@ export default function RelatorioPreAnalisePage() {
           Microbiologia · gerado em {formatarData(relatorio.gerado_em)}
         </footer>
       </article>
-    </div>
+    </LayoutDoRelatorio>
   )
 }

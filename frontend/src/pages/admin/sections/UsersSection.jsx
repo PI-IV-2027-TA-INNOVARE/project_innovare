@@ -12,6 +12,7 @@ import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
 import UserFormModal from './users/UserFormModal'
 import {
+  anonimizarConta,
   createUsuario,
   listUsuarios,
   reenviarConvite,
@@ -22,11 +23,13 @@ import {
   PERFIS,
   STATUS,
   daApi,
+  formatarDataCompleta,
   formatarUltimoAcesso,
   paraApi,
   perfilLabel,
   statusLabel,
   usuariosParaCsv,
+  vinculoDe,
 } from './users/usersData'
 
 const COLUNAS = [
@@ -39,6 +42,19 @@ const COLUNAS = [
 ]
 
 const POR_PAGINA = [10, 25, 50]
+
+function temPedidoAberto(usuario) {
+  return Boolean(usuario.exclusaoSolicitadaEm) && !usuario.anonimizada
+}
+
+function ultimoAcessoPorExtenso(usuario) {
+  if (usuario.aguardandoPrimeiroAcesso) return 'Aguardando primeiro acesso'
+
+  const relativo = formatarUltimoAcesso(usuario.ultimoAcesso)
+  const completo = formatarDataCompleta(usuario.ultimoAcesso)
+
+  return completo ? `${relativo} (${completo})` : relativo
+}
 
 function comparar(a, b, campo) {
   if (campo === 'ultimoAcesso') return a.ultimoAcesso - b.ultimoAcesso
@@ -57,6 +73,7 @@ export default function UsersSection() {
   const [busca, setBusca] = useState('')
   const [perfilFiltro, setPerfilFiltro] = useState('todos')
   const [statusFiltro, setStatusFiltro] = useState('todos')
+  const [soPedidos, setSoPedidos] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
 
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
@@ -87,7 +104,7 @@ export default function UsersSection() {
 
   useEffect(() => {
     setPagina(1)
-  }, [busca, perfilFiltro, statusFiltro, porPagina])
+  }, [busca, perfilFiltro, statusFiltro, soPedidos, porPagina])
 
   const estatisticas = useMemo(() => ({
     total: usuarios.length,
@@ -96,20 +113,23 @@ export default function UsersSection() {
     demandantes: usuarios.filter((usuario) => usuario.perfil === 'demandante').length,
   }), [usuarios])
 
+  const pedidosAbertos = useMemo(() => usuarios.filter(temPedidoAberto).length, [usuarios])
+
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
     return usuarios.filter((usuario) => {
       const perfilOk = perfilFiltro === 'todos' || usuario.perfil === perfilFiltro
       const statusOk = statusFiltro === 'todos' || usuario.status === statusFiltro
+      const pedidoOk = !soPedidos || temPedidoAberto(usuario)
       const buscaOk =
         !termo ||
         usuario.nome.toLowerCase().includes(termo) ||
         usuario.email.toLowerCase().includes(termo)
 
-      return perfilOk && statusOk && buscaOk
+      return perfilOk && statusOk && pedidoOk && buscaOk
     })
-  }, [busca, perfilFiltro, statusFiltro, usuarios])
+  }, [busca, perfilFiltro, statusFiltro, soPedidos, usuarios])
 
   const ordenados = useMemo(() => {
     const fator = ordem.direcao === 'asc' ? 1 : -1
@@ -121,7 +141,8 @@ export default function UsersSection() {
   const inicio = (paginaAtual - 1) * porPagina
   const visiveis = ordenados.slice(inicio, inicio + porPagina)
 
-  const temFiltro = Boolean(busca) || perfilFiltro !== 'todos' || statusFiltro !== 'todos'
+  const temFiltro =
+    Boolean(busca) || perfilFiltro !== 'todos' || statusFiltro !== 'todos' || soPedidos
 
   const ordenarPor = (campo) => {
     setOrdem((atual) => ({
@@ -134,6 +155,7 @@ export default function UsersSection() {
     setBusca('')
     setPerfilFiltro('todos')
     setStatusFiltro('todos')
+    setSoPedidos(false)
   }
 
   const substituir = (registro) => {
@@ -182,6 +204,17 @@ export default function UsersSection() {
       showToast(`${usuario.nome}: acesso ${statusLabel(situacao).toLowerCase()}.`)
     } catch (erro) {
       showToast(erro.message || 'Não foi possível alterar a situação.', 'error')
+    }
+  }
+
+  const anonimizar = async (usuario) => {
+    setModal(null)
+
+    try {
+      substituir(await anonimizarConta(usuario.id))
+      showToast('Conta anonimizada. O histórico agora diz "pessoa removida".')
+    } catch (erro) {
+      showToast(erro.message || 'Não foi possível anonimizar a conta.', 'error')
     }
   }
 
@@ -281,6 +314,22 @@ export default function UsersSection() {
           </div>
         </article>
       </div>
+
+      {pedidosAbertos > 0 ? (
+        <div className="admin-callout admin-callout--alerta">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">
+            {pedidosAbertos === 1
+              ? '1 pedido de exclusão aguardando atendimento.'
+              : `${pedidosAbertos} pedidos de exclusão aguardando atendimento.`}
+          </p>
+          {soPedidos ? null : (
+            <button type="button" className="admin-btn admin-btn--outline" onClick={() => setSoPedidos(true)}>
+              Ver pedidos
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <div className="admin-toolbar">
         <div className="admin-search">
@@ -431,6 +480,14 @@ export default function UsersSection() {
             </button>
           ) : null}
 
+          {soPedidos ? (
+            <button type="button" className="chip chip--removable" onClick={() => setSoPedidos(false)}>
+              Pedido de exclusão
+              <Icone icon={appIcons.clear} />
+              <span className="sr-only">Remover filtro de pedido de exclusão</span>
+            </button>
+          ) : null}
+
           <button type="button" className="link-button" onClick={limparFiltros}>
             Limpar filtros
           </button>
@@ -467,11 +524,11 @@ export default function UsersSection() {
             {carregando ? <SkeletonRows colunas={COLUNAS.length} /> : null}
 
             {!carregando && visiveis.map((usuario) => (
-              <tr key={usuario.id}>
+              <tr key={usuario.id} className={temPedidoAberto(usuario) ? 'is-pedido' : undefined}>
                 <td data-label="Usuário">
                   <BotaoPessoa
                     nome={usuario.nome}
-                    meta={usuario.instituicao}
+                    meta={vinculoDe(usuario)}
                     onClick={() => setModal({ tipo: 'ver', usuario })}
                   />
                 </td>
@@ -491,20 +548,42 @@ export default function UsersSection() {
                     <span className="status-badge__dot" aria-hidden="true" />
                     {statusLabel(usuario.status)}
                   </span>
+                  {temPedidoAberto(usuario) ? (
+                    <span className="user-cell__meta user-cell__pedido">
+                      <Icone icon={appIcons.warning} />
+                      Pediu exclusão em {new Date(usuario.exclusaoSolicitadaEm).toLocaleDateString('pt-BR')}
+                    </span>
+                  ) : null}
                 </td>
 
                 <td data-label="Último acesso">
-                  <span className="user-cell__meta">
-                    {usuario.aguardandoPrimeiroAcesso
-                      ? 'Aguardando primeiro acesso'
-                      : formatarUltimoAcesso(usuario.ultimoAcesso)}
-                  </span>
+                  {usuario.aguardandoPrimeiroAcesso || !usuario.ultimoAcesso ? (
+                    <span className="user-cell__meta">
+                      {usuario.aguardandoPrimeiroAcesso
+                        ? 'Aguardando primeiro acesso'
+                        : formatarUltimoAcesso(usuario.ultimoAcesso)}
+                    </span>
+                  ) : (
+                    <time
+                      className="user-cell__meta"
+                      dateTime={new Date(usuario.ultimoAcesso).toISOString()}
+                      title={formatarDataCompleta(usuario.ultimoAcesso)}
+                    >
+                      {formatarUltimoAcesso(usuario.ultimoAcesso)}
+                    </time>
+                  )}
                 </td>
 
                 <td data-label="Ações" className="admin-table__actions-col">
                   <RowActionsMenu
                     label={usuario.nome}
-                    items={[
+                    items={usuario.anonimizada ? [
+                      {
+                        label: 'Visualizar perfil',
+                        icon: appIcons.view,
+                        onSelect: () => setModal({ tipo: 'ver', usuario }),
+                      },
+                    ] : [
                       {
                         label: 'Visualizar perfil',
                         icon: appIcons.view,
@@ -515,6 +594,14 @@ export default function UsersSection() {
                         icon: appIcons.edit,
                         onSelect: () => setModal({ tipo: 'editar', usuario }),
                       },
+                      ...(temPedidoAberto(usuario)
+                        ? [{
+                          label: 'Atender pedido de exclusão',
+                          icon: appIcons.remove,
+                          tone: 'danger',
+                          onSelect: () => setModal({ tipo: 'anonimizar', usuario }),
+                        }]
+                        : []),
                       ...(usuario.aguardandoPrimeiroAcesso
                         ? [{
                           label: 'Reenviar convite',
@@ -681,7 +768,13 @@ export default function UsersSection() {
           )}
           linhas={[
             { rotulo: 'E-mail', valor: modal.usuario.email },
-            { rotulo: 'Instituição', valor: modal.usuario.instituicao || '—' },
+            ...(modal.usuario.perfil === 'demandante'
+              ? [
+                  { rotulo: 'Empresa', valor: vinculoDe(modal.usuario) },
+                  { rotulo: 'CNPJ', valor: modal.usuario.cnpj || '—' },
+                  { rotulo: 'Telefone', valor: modal.usuario.telefone || 'Não informado' },
+                ]
+              : [{ rotulo: 'Instituição', valor: modal.usuario.instituicao || '—' }]),
             {
               rotulo: 'Situação',
               valor: (
@@ -693,9 +786,7 @@ export default function UsersSection() {
             },
             {
               rotulo: 'Último acesso',
-              valor: modal.usuario.aguardandoPrimeiroAcesso
-                ? 'Aguardando primeiro acesso'
-                : formatarUltimoAcesso(modal.usuario.ultimoAcesso),
+              valor: ultimoAcessoPorExtenso(modal.usuario),
             },
           ]}
         />
@@ -722,6 +813,41 @@ export default function UsersSection() {
               >
                 <Icone icon={appIcons.deactivate} />
                 {modal.alvo === 'suspenso' ? 'Suspender' : 'Inativar'}
+              </button>
+            </>
+          }
+        >
+          <div className="user-cell">
+            <Avatar nome={modal.usuario.nome} />
+            <span className="user-cell__text">
+              <span className="user-cell__name">{modal.usuario.nome}</span>
+              <span className="user-cell__meta">{modal.usuario.email}</span>
+            </span>
+          </div>
+        </AdminModal>
+      ) : null}
+
+      {modal?.tipo === 'anonimizar' ? (
+        <AdminModal
+          title="Atender pedido de exclusão"
+          description={
+            'O nome, o e-mail, o telefone e o perfil na rede deixam de identificar a pessoa, e a conta não entra mais. ' +
+            'O histórico das oportunidades continua, com "pessoa removida" no lugar dela. Isso não tem volta.'
+          }
+          size="sm"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button type="button" className="admin-btn admin-btn--outline" onClick={() => setModal(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--danger"
+                onClick={() => anonimizar(modal.usuario)}
+              >
+                <Icone icon={appIcons.remove} />
+                Anonimizar
               </button>
             </>
           }

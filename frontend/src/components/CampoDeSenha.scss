@@ -1,0 +1,56 @@
+.campo-de-senha__controle {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.campo-de-senha__entrada {
+  width: 100%;
+  padding-right: 48px;
+
+  &[aria-invalid='true'] {
+    border-color: var(--accent-error);
+  }
+}
+
+.campo-de-senha__alternar {
+  position: absolute;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 0.95rem;
+  color: var(--accent-primary-text);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--accent-primary-dim);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 0;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.regras-da-senha {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.regras-da-senha__lista {
+  margin: 2px 0 0;
+  padding-left: 1.2em;
+  list-style: disc;
+}

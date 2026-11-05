@@ -8,7 +8,7 @@ import {
   criarProposta,
   obterProposta,
 } from '../../../../services/pdConnectApi'
-import ProximoPasso from './ProximoPasso'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
 import '../OportunidadesPage.scss'
 
 const SECOES = [
@@ -95,12 +95,18 @@ const CAMPOS_PROPOSTA = SECOES.flatMap((secao) => secao.campos)
 
 const CODIGO_NAO_INICIADA = 'proposta_inexistente'
 
-function Campo({ campo, valor, onChange, erro }) {
+const LINHAS_RECOLHIDAS = 2
+
+function Campo({ campo, valor, onChange, erro, somenteLeitura }) {
   const { id, label, rows, requerido, isList, dica } = campo
+  const [focado, setFocado] = useState(false)
+
+  const texto = isList ? (valor || []).join('\n') : valor || ''
+  const recolhido = !focado && texto.trim() !== ''
 
   const aoDigitar = (event) => {
-    const texto = event.target.value
-    onChange(isList ? texto.split('\n') : texto)
+    const digitado = event.target.value
+    onChange(isList ? digitado.split('\n') : digitado)
   }
 
   const descritores = [`dica-${id}`, erro ? `erro-${id}` : null].filter(Boolean).join(' ')
@@ -115,10 +121,13 @@ function Campo({ campo, valor, onChange, erro }) {
       </span>
       <textarea
         id={id}
-        className="admin-input admin-input--area"
-        rows={rows}
-        value={isList ? (valor || []).join('\n') : valor || ''}
+        className={`admin-input admin-input--area${recolhido ? ' proposta__texto--recolhido' : ''}`}
+        rows={recolhido ? LINHAS_RECOLHIDAS : rows}
+        value={texto}
         onChange={aoDigitar}
+        onFocus={() => setFocado(true)}
+        onBlur={() => setFocado(false)}
+        readOnly={somenteLeitura}
         aria-invalid={Boolean(erro)}
         aria-describedby={descritores}
       />
@@ -135,6 +144,18 @@ function vazio(campo, valor) {
   return campo.isList
     ? !valor || valor.filter((linha) => linha.trim()).length === 0
     : !valor || String(valor).trim() === ''
+}
+
+function quandoFoiSalva(instante) {
+  if (!instante) return 'Tudo salvo.'
+
+  const data = new Date(instante)
+  const hora = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  if (data.toDateString() === new Date().toDateString()) return `Salvo às ${hora}.`
+
+  const dia = data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return `Salvo em ${dia} às ${hora}.`
 }
 
 export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
@@ -358,10 +379,6 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           </div>
         ) : null}
 
-        {revisada && !alterado ? (
-          <ProximoPasso etapa="competencias" irPara={irPara} />
-        ) : null}
-
         {temErro ? (
           <div className="admin-callout admin-callout--alerta" role="alert">
             <Icone icon={appIcons.warning} className="admin-callout__icon" />
@@ -376,14 +393,18 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
         ) : null}
 
         <form
-          className="console-form"
+          className="proposta__form"
           onSubmit={(evento) => {
             evento.preventDefault()
             salvar()
           }}
           noValidate
         >
-          <fieldset className="proposta__campos" disabled={!podeEditar}>
+          <p className="proposta__legenda">
+            Cada elemento mostra as duas primeiras linhas. Clique no texto para ver tudo.
+          </p>
+
+          <fieldset className="proposta__campos">
             {SECOES.map((secao) => (
               <fieldset key={secao.titulo} className="proposta__secao">
                 <legend className="proposta__secao-titulo">{secao.titulo}</legend>
@@ -394,6 +415,7 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
                     valor={proposta[campo.id]}
                     onChange={alterarCampo(campo.id)}
                     erro={erroValidacao[campo.id]}
+                    somenteLeitura={!podeEditar}
                   />
                 ))}
               </fieldset>
@@ -401,19 +423,20 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           </fieldset>
 
           {podeEditar ? (
-            <div className="proposta__rodape">
-              <span className="proposta__estado" role="status">
-                {alterado
+            <BarraDeAcoes
+              estado={
+                alterado
                   ? 'Há alterações não salvas.'
                   : revisada
-                    ? 'Tudo salvo.'
+                    ? quandoFoiSalva(proposta.atualizado_em)
                     : temConteudo
                       ? 'Salve para registrar a sua revisão.'
-                      : 'Preencha os elementos e salve.'}
-              </span>
+                      : 'Preencha os elementos e salve.'
+              }
+            >
               <button
                 type="submit"
-                className="admin-btn"
+                className={podeSalvar ? 'admin-btn' : 'admin-btn admin-btn--outline'}
                 disabled={!podeSalvar || salvando}
               >
                 <Icone icon={appIcons.save} />
@@ -423,7 +446,8 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
                     ? 'Salvar proposta'
                     : 'Salvar como revisada'}
               </button>
-            </div>
+              {revisada && !alterado ? <ContinuarPara etapa="competencias" irPara={irPara} /> : null}
+            </BarraDeAcoes>
           ) : (
             <p className="proposta__legenda">
               <Icone icon={appIcons.view} /> Somente leitura: apenas o Supervisor edita a proposta.

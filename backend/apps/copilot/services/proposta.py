@@ -17,10 +17,29 @@ from apps.accounts.models import Usuario
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.copilot.models import PropostaEstruturada
-from apps.opportunities.models import Oportunidade
+from apps.copilot.services.copiloto import ELEMENTOS, elementos_vazios
+from apps.opportunities.models import Oportunidade, SituacaoOportunidade
+from apps.opportunities.services.fluxo import avancar
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
 
 CODIGO_INEXISTENTE = 'proposta_inexistente'
+
+
+def exigir_proposta_revisada(proposta: PropostaEstruturada) -> None:
+    """
+    PB41: texto do Copiloto sem leitura humana nao vale como definitivo.
+
+    Competencias, matching e pre-analise partem da proposta, entao esperam a
+    revisao. Proposta vazia nao tem o que revisar.
+    """
+    if proposta.revisada_por_humano or len(elementos_vazios(proposta)) == len(ELEMENTOS):
+        return
+
+    raise ConflitoDeEstado(
+        'Revise a proposta estruturada antes de seguir: o texto do Copiloto '
+        'ainda não passou por leitura humana.',
+        'proposta_nao_revisada',
+    )
 
 
 def proposta_de(oportunidade: Oportunidade) -> PropostaEstruturada:
@@ -34,7 +53,7 @@ def proposta_de(oportunidade: Oportunidade) -> PropostaEstruturada:
 
     if proposta is None:
         raise RecursoNaoEncontrado(
-            'Esta oportunidade ainda nao tem proposta estruturada.',
+            'Esta oportunidade ainda não tem proposta estruturada.',
             CODIGO_INEXISTENTE,
         )
 
@@ -50,10 +69,11 @@ class IniciarPropostaService:
     ) -> PropostaEstruturada:
         if getattr(oportunidade, 'proposta', None) is not None:
             raise ConflitoDeEstado(
-                'Esta oportunidade ja tem proposta estruturada.',
+                'Esta oportunidade já tem proposta estruturada.',
                 'proposta_duplicada',
             )
 
+        avancar(oportunidade, SituacaoOportunidade.ESTRUTURACAO, ator)
         proposta = PropostaEstruturada.objects.create(oportunidade=oportunidade)
 
         registrar_evento(
@@ -74,6 +94,7 @@ class AtualizarPropostaService:
 
     Toda gravacao marca `revisada_por_humano` e guarda o revisor: e a metade
     que o AGENTS.md 0.2 exige de qualquer conteudo que a IA venha a produzir.
+    Depois de *Revisar*, e aqui que a oportunidade volta para Em estruturacao.
     """
 
     @transaction.atomic
@@ -84,6 +105,7 @@ class AtualizarPropostaService:
         dados: dict[str, Any],
         ator: Usuario,
     ) -> PropostaEstruturada:
+        avancar(proposta.oportunidade, SituacaoOportunidade.ESTRUTURACAO, ator)
         antes = {campo: getattr(proposta, campo) for campo in dados}
 
         for campo, valor in dados.items():

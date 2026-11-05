@@ -49,6 +49,16 @@ beforeEach(() => {
   api.enviarAnexo = vi.fn().mockResolvedValue({ id_anexo: 1 })
 })
 
+describe('ProblemaFormPage — campos obrigatórios', () => {
+  it('marca título e resumo como obrigatórios e explica o asterisco', () => {
+    renderPagina()
+
+    expect(screen.getByLabelText(/^Título/)).toBeRequired()
+    expect(screen.getByLabelText(/resumo do problema/i)).toBeRequired()
+    expect(screen.getByText('Campos com * são obrigatórios.')).toBeInTheDocument()
+  })
+})
+
 describe('ProblemaFormPage — anexos do Demandante (PB21)', () => {
   it('envia os arquivos escolhidos depois de criar o problema', async () => {
     const usuario = userEvent.setup({ delay: null })

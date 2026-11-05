@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
+import { LIMITES_DE_GASTO, explicarMotivoSemIa } from '../../../../lib/glossario'
 import { Icone, appIcons } from '../../../../lib/icons'
 import { ROLES } from '../../../../lib/roles'
 import {
+  aceitarSugestaoCopiloto,
+  atualizarSinteseCopiloto,
   concluirSessaoCopiloto,
   estruturarComCopiloto,
   iniciarSessaoCopiloto,
@@ -26,6 +29,8 @@ const ROTULOS_DOS_ELEMENTOS = {
 }
 
 const TOTAL_DE_ELEMENTOS = Object.keys(ROTULOS_DOS_ELEMENTOS).length
+
+const ACOES_COM_IA = ['ler', 'responder', 'estruturar']
 
 const rotuloDoElemento = (elemento) => ROTULOS_DOS_ELEMENTOS[elemento] || elemento
 
@@ -65,8 +70,103 @@ function Progresso({ preenchidos }) {
   )
 }
 
-function Pendencias({ pendentes, lacunas }) {
-  if (pendentes.length === 0) return null
+function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoSalvar }) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState('')
+
+  if (!sessao) {
+    if (!podeConduzir) return null
+
+    return (
+      <div className="copiloto__bloco copiloto__resumo">
+        <h3 className="copiloto__subtitulo">Resumo da entrada</h3>
+        <p className="copiloto__nota">
+          Comece por aqui: o Copiloto lê a descrição da oportunidade e resume o
+          problema, o contexto e o que falta. Você corrige o que não estiver certo.
+        </p>
+        <button
+          type="button"
+          className="admin-btn admin-btn--outline"
+          onClick={aoLer}
+          disabled={ocupado}
+        >
+          <Icone icon={appIcons.view} />
+          Ler a entrada
+        </button>
+      </div>
+    )
+  }
+
+  const abrirEdicao = () => {
+    setTexto(sessao.sintese || '')
+    setEditando(true)
+  }
+
+  const salvar = async (event) => {
+    event.preventDefault()
+
+    if (await aoSalvar(texto.trim())) setEditando(false)
+  }
+
+  return (
+    <div className="copiloto__bloco copiloto__resumo">
+      <div className="copiloto__bloco-cabeca">
+        <h3 className="copiloto__subtitulo">Resumo da entrada</h3>
+        {podeConduzir && !editando ? (
+          <button
+            type="button"
+            className="admin-btn admin-btn--sm admin-btn--outline"
+            onClick={abrirEdicao}
+            disabled={ocupado}
+          >
+            <Icone icon={appIcons.edit} />
+            Corrigir o resumo
+          </button>
+        ) : null}
+      </div>
+
+      {editando ? (
+        <form className="copiloto__resumo-forma" onSubmit={salvar}>
+          <label className="admin-field">
+            <span className="admin-field__label">Resumo da entrada</span>
+            <textarea
+              className="admin-input admin-input--area"
+              rows={6}
+              value={texto}
+              onChange={(event) => setTexto(event.target.value)}
+            />
+            <span className="admin-field__hint">
+              O Copiloto usa este resumo para escrever a proposta.
+            </span>
+          </label>
+          <div className="copiloto__acoes">
+            <button type="submit" className="admin-btn admin-btn--sm" disabled={ocupado}>
+              <Icone icon={appIcons.save} />
+              Salvar o resumo
+            </button>
+            <button
+              type="button"
+              className="admin-btn admin-btn--sm admin-btn--outline"
+              onClick={() => setEditando(false)}
+              disabled={ocupado}
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      ) : sessao.sintese ? (
+        <p className="copiloto__resumo-texto">{sessao.sintese}</p>
+      ) : (
+        <p className="copiloto__nota">
+          Ainda não há resumo. {podeConduzir ? 'Se quiser, escreva o problema, o contexto e o que falta.' : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Lacunas({ pendentes, lacunas }) {
+  if (pendentes.length === 0 && lacunas.length === 0) return null
 
   return (
     <div className="copiloto__bloco">
@@ -80,9 +180,16 @@ function Pendencias({ pendentes, lacunas }) {
                 {lacuna.severidade_rotulo || 'Lacuna'}
               </span>
               <div>
+                <p className="copiloto__lacuna-cabeca">
+                  {rotuloDoElemento(lacuna.campo_afetado)}
+                  {lacuna.natureza_rotulo ? ` · ${lacuna.natureza_rotulo}` : ''}
+                </p>
                 <p className="copiloto__lacuna-descricao">{lacuna.descricao}</p>
                 {lacuna.recomendacao ? (
-                  <p className="copiloto__lacuna-recomendacao">{lacuna.recomendacao}</p>
+                  <p className="copiloto__lacuna-recomendacao">
+                    <span className="copiloto__lacuna-rotulo">O que fazer: </span>
+                    {lacuna.recomendacao}
+                  </p>
                 ) : null}
               </div>
             </li>
@@ -101,41 +208,104 @@ function Pendencias({ pendentes, lacunas }) {
   )
 }
 
-function Perguntas({ perguntas, baseDisponivel }) {
-  if (!baseDisponivel) {
-    return (
-      <p className="copiloto__nota" role="status">
-        As perguntas orientadoras não estão disponíveis no momento. Você ainda
-        pode pedir a estruturação: o Copiloto usa a descrição da oportunidade.
-      </p>
-    )
-  }
+function Perguntas({ perguntas, baseDisponivel, podeConduzir, ocupado, aoEscolher }) {
+  return (
+    <>
+      {!baseDisponivel ? (
+        <p className="copiloto__nota" role="status">
+          As perguntas orientadoras não estão disponíveis no momento. Você ainda
+          pode pedir a estruturação: o Copiloto usa a descrição da oportunidade.
+        </p>
+      ) : null}
 
-  if (perguntas.length === 0) {
-    return (
-      <p className="copiloto__nota">
-        Não há pergunta pendente para os elementos que faltam.
-      </p>
-    )
-  }
+      {baseDisponivel && perguntas.length === 0 ? (
+        <p className="copiloto__nota">
+          Não há pergunta pendente para os elementos que faltam.
+        </p>
+      ) : null}
+
+      {perguntas.length > 0 ? (
+        <div className="copiloto__grupos">
+          {agruparPorElemento(perguntas).map((grupo) => (
+            <section key={grupo.elemento} className="copiloto__grupo">
+              <h4 className="copiloto__grupo-titulo">{rotuloDoElemento(grupo.elemento)}</h4>
+              <ul className="copiloto__perguntas">
+                {grupo.perguntas.map((pergunta) => (
+                  <li key={`${pergunta.id}-${pergunta.elemento}`} className="copiloto__pergunta">
+                    <div>
+                      {pergunta.origem === 'copiloto' ? (
+                        <span className="copiloto__origem">Pergunta do Copiloto</span>
+                      ) : null}
+                      <p className="copiloto__pergunta-texto">{pergunta.pergunta}</p>
+                      {pergunta.motivo ? (
+                        <p className="copiloto__pergunta-motivo">{pergunta.motivo}</p>
+                      ) : null}
+                    </div>
+                    {podeConduzir ? (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--sm admin-btn--outline"
+                        onClick={() => aoEscolher(pergunta)}
+                        disabled={ocupado}
+                      >
+                        Responder
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
+function Sugestoes({ sugestoes, podeConduzir, ocupado, aoAceitar, aoRecusar }) {
+  if (sugestoes.length === 0) return null
 
   return (
-    <div className="copiloto__grupos">
-      {agruparPorElemento(perguntas).map((grupo) => (
-        <section key={grupo.elemento} className="copiloto__grupo">
-          <h4 className="copiloto__grupo-titulo">{rotuloDoElemento(grupo.elemento)}</h4>
-          <ul className="copiloto__perguntas">
-            {grupo.perguntas.map((pergunta) => (
-              <li key={`${pergunta.id}-${pergunta.elemento}`} className="copiloto__pergunta">
-                <p className="copiloto__pergunta-texto">{pergunta.pergunta}</p>
-                {pergunta.motivo ? (
-                  <p className="copiloto__pergunta-motivo">{pergunta.motivo}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+    <div className="copiloto__bloco">
+      <h3 className="copiloto__subtitulo">Sugestões para o que já está escrito</h3>
+      <p className="copiloto__nota">Nada muda na proposta até você aceitar.</p>
+
+      <ul className="copiloto__sugestoes">
+        {sugestoes.map((sugestao) => (
+          <li key={sugestao.elemento} className="copiloto__sugestao">
+            <h4 className="copiloto__grupo-titulo">
+              {sugestao.elemento_rotulo || rotuloDoElemento(sugestao.elemento)}
+            </h4>
+            {sugestao.motivo ? (
+              <p className="copiloto__pergunta-motivo">{sugestao.motivo}</p>
+            ) : null}
+            <p className="copiloto__sugestao-texto">{sugestao.texto_sugerido}</p>
+
+            {podeConduzir ? (
+              <div className="copiloto__acoes">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--sm"
+                  onClick={() => aoAceitar(sugestao)}
+                  disabled={ocupado}
+                >
+                  <Icone icon={appIcons.done} />
+                  Aceitar
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--sm admin-btn--outline"
+                  onClick={() => aoRecusar(sugestao)}
+                  disabled={ocupado}
+                >
+                  <Icone icon={appIcons.clear} />
+                  Recusar
+                </button>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -161,6 +331,18 @@ function Conversa({ mensagens }) {
 function Resultado({ resultado, irPara }) {
   if (!resultado) return null
 
+  if (resultado.indisponivel && LIMITES_DE_GASTO.includes(resultado.motivo)) {
+    return (
+      <div className="admin-callout admin-callout--alerta" role="alert">
+        <Icone icon={appIcons.warning} className="admin-callout__icon" />
+        <p className="admin-callout__text">
+          O Copiloto não foi chamado: {explicarMotivoSemIa(resultado.motivo)}. Escreva
+          direto na aba Proposta estruturada.
+        </p>
+      </div>
+    )
+  }
+
   if (resultado.indisponivel) {
     return (
       <div className="admin-callout admin-callout--alerta" role="alert">
@@ -174,13 +356,18 @@ function Resultado({ resultado, irPara }) {
   }
 
   if (resultado.preenchidos.length === 0) {
+    let texto = 'O Copiloto não encontrou informação suficiente para preencher novos elementos. Responda as perguntas abaixo e tente de novo.'
+
+    if (resultado.sugeriu) {
+      texto = 'O Copiloto não preencheu elementos novos. Veja abaixo o que ele sugere mudar no que já está escrito.'
+    } else if (resultado.completa) {
+      texto = 'A proposta foi reavaliada e o Copiloto não sugeriu mudanças. Confira as lacunas abaixo, se houver.'
+    }
+
     return (
       <div className="admin-callout" role="status">
         <Icone icon={appIcons.info} className="admin-callout__icon" />
-        <p className="admin-callout__text">
-          O Copiloto não encontrou informação suficiente para preencher novos
-          elementos. Responda as perguntas abaixo e tente de novo.
-        </p>
+        <p className="admin-callout__text">{texto}</p>
       </div>
     )
   }
@@ -205,8 +392,10 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState('')
   const [resposta, setResposta] = useState('')
+  const [escolhida, setEscolhida] = useState(null)
   const [emAcao, setEmAcao] = useState('')
   const [resultado, setResultado] = useState(null)
+  const [sugestoes, setSugestoes] = useState([])
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!silencioso) setCarregando(true)
@@ -228,7 +417,7 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
   }, [carregar])
 
   useEffect(() => {
-    aoOcupar?.(emAcao === 'estruturar')
+    aoOcupar?.(ACOES_COM_IA.includes(emAcao))
   }, [emAcao, aoOcupar])
 
   useEffect(() => () => aoOcupar?.(false), [aoOcupar])
@@ -236,17 +425,53 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
   const estruturar = async () => {
     setEmAcao('estruturar')
     setResultado(null)
+    setSugestoes([])
 
     try {
       const saida = await estruturarComCopiloto(oportunidadeId)
+      const novas = saida.sugestoes || []
+
       setResultado({
-        indisponivel: Boolean(saida.fallback_usado) && saida.preenchidos.length === 0,
+        indisponivel: Boolean(saida.fallback_usado) && (saida.preenchidos || []).length === 0,
+        motivo: saida.motivo_fallback || null,
         preenchidos: saida.preenchidos || [],
+        sugeriu: novas.length > 0,
+        completa: (estado?.elementos_vazios || []).length === 0,
       })
+      setSugestoes(novas)
       await carregar({ silencioso: true })
       aoEstruturar?.()
     } catch (falha) {
       showToast(falha?.message || 'A estruturação não foi concluída.', 'error')
+    } finally {
+      setEmAcao('')
+    }
+  }
+
+  const lerEntrada = async () => {
+    setEmAcao('ler')
+
+    try {
+      await iniciarSessaoCopiloto(oportunidadeId)
+      await carregar({ silencioso: true })
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível ler a entrada.', 'error')
+    } finally {
+      setEmAcao('')
+    }
+  }
+
+  const salvarResumo = async (sintese) => {
+    setEmAcao('resumo')
+
+    try {
+      await atualizarSinteseCopiloto(oportunidadeId, sintese)
+      await carregar({ silencioso: true })
+      showToast('Resumo salvo. Ele orienta a próxima estruturação.')
+      return true
+    } catch (falha) {
+      showToast(falha?.message || 'O resumo não foi salvo.', 'error')
+      return false
     } finally {
       setEmAcao('')
     }
@@ -264,15 +489,40 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
       if (!estado?.sessao) {
         await iniciarSessaoCopiloto(oportunidadeId)
       }
-      await responderCopiloto(oportunidadeId, texto)
+      await responderCopiloto(
+        oportunidadeId,
+        texto,
+        escolhida ? { elemento: escolhida.elemento, pergunta: escolhida.pergunta } : {},
+      )
       setResposta('')
-      await carregar({ silencioso: true })
-      showToast('Resposta registrada. Ela entra na próxima estruturação.')
+      setEscolhida(null)
     } catch (falha) {
       showToast(falha?.message || 'A resposta não foi registrada.', 'error')
+      setEmAcao('')
+      return
+    }
+
+    await estruturar()
+  }
+
+  const aceitar = async (sugestao) => {
+    setEmAcao('aceitar')
+
+    try {
+      await aceitarSugestaoCopiloto(oportunidadeId, sugestao.elemento, sugestao.texto_sugerido)
+      setSugestoes((atuais) => atuais.filter((item) => item.elemento !== sugestao.elemento))
+      showToast(`Sugestão aceita em ${rotuloDoElemento(sugestao.elemento)}.`)
+      await carregar({ silencioso: true })
+      aoEstruturar?.()
+    } catch (falha) {
+      showToast(falha?.message || 'A sugestão não foi gravada.', 'error')
     } finally {
       setEmAcao('')
     }
+  }
+
+  const recusar = (sugestao) => {
+    setSugestoes((atuais) => atuais.filter((item) => item.elemento !== sugestao.elemento))
   }
 
   const encerrar = async () => {
@@ -316,9 +566,15 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
 
   const sessao = estado?.sessao || null
   const pendentes = estado?.elementos_vazios || []
+  const perguntas = estado?.perguntas || []
   const preenchidos = TOTAL_DE_ELEMENTOS - pendentes.length
   const completa = pendentes.length === 0
   const ocupado = Boolean(emAcao)
+
+  let rotuloDeEstruturar = 'Estruturar o que falta'
+  if (emAcao === 'estruturar') rotuloDeEstruturar = 'Estruturando...'
+  else if (preenchidos === 0) rotuloDeEstruturar = 'Estruturar com o Copiloto'
+  else if (completa) rotuloDeEstruturar = 'Reavaliar a proposta'
 
   return (
     <section className="perfil-card copiloto">
@@ -326,9 +582,9 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
         <div>
           <h2 className="perfil-card__title">Copiloto de Estruturação</h2>
           <p className="perfil-card__description">
-            O Copiloto lê a descrição da oportunidade e as suas respostas e
-            escreve uma primeira versão dos elementos que ainda estão vazios. O
-            que você já escreveu não é alterado.
+            O Copiloto lê a descrição da oportunidade, o resumo e as suas
+            respostas e escreve uma primeira versão dos elementos vazios. No que
+            você já escreveu, ele só sugere: a mudança entra se você aceitar.
           </p>
           <Progresso preenchidos={preenchidos} />
         </div>
@@ -338,15 +594,15 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
             type="button"
             className="admin-btn"
             onClick={estruturar}
-            disabled={ocupado || completa}
-            title={completa ? 'Todos os elementos já têm conteúdo.' : undefined}
+            disabled={ocupado}
+            title={
+              completa
+                ? 'O Copiloto avalia os oito elementos e sugere mudanças, sem sobrescrever.'
+                : undefined
+            }
           >
             <Icone icon={appIcons.flow} />
-            {emAcao === 'estruturar'
-              ? 'Estruturando...'
-              : preenchidos === 0
-                ? 'Estruturar com o Copiloto'
-                : 'Estruturar o que falta'}
+            {rotuloDeEstruturar}
           </button>
         ) : (
           <span
@@ -368,11 +624,23 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
           </p>
         </div>
 
+        {emAcao === 'ler' ? (
+          <EsperaIA titulo="O Copiloto está lendo a entrada e escrevendo o resumo." />
+        ) : null}
+
         {emAcao === 'estruturar' ? (
           <EsperaIA titulo="O Copiloto está escrevendo os elementos que faltam." />
         ) : null}
 
         <Resultado resultado={resultado} irPara={irPara} />
+
+        <Sugestoes
+          sugestoes={sugestoes}
+          podeConduzir={podeConduzir}
+          ocupado={ocupado}
+          aoAceitar={aceitar}
+          aoRecusar={recusar}
+        />
 
         {completa && !resultado ? (
           <ProximoPasso
@@ -385,24 +653,51 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
 
         {podeConduzir && !completa ? (
           <ol className="copiloto__como">
-            <li>Responda as perguntas abaixo. Quanto mais contexto, melhor o resultado.</li>
-            <li>Clique em <strong>Estruturar</strong>. O Copiloto preenche o que falta.</li>
+            <li>Confira o resumo da entrada e corrija o que não estiver certo.</li>
+            <li>Escolha uma pergunta e responda. A resposta atualiza a proposta na hora.</li>
             <li>Revise e salve o texto na aba Proposta estruturada.</li>
           </ol>
         ) : null}
 
-        <Pendencias pendentes={pendentes} lacunas={estado?.lacunas || []} />
+        <ResumoDaEntrada
+          sessao={sessao}
+          podeConduzir={podeConduzir}
+          ocupado={ocupado}
+          aoLer={lerEntrada}
+          aoSalvar={salvarResumo}
+        />
 
-        {!completa ? (
+        <Lacunas pendentes={pendentes} lacunas={estado?.lacunas || []} />
+
+        {!completa || perguntas.length > 0 ? (
           <div className="copiloto__bloco">
             <h3 className="copiloto__subtitulo">Perguntas orientadoras</h3>
             <Perguntas
-              perguntas={estado?.perguntas || []}
+              perguntas={perguntas}
               baseDisponivel={Boolean(estado?.base_disponivel)}
+              podeConduzir={podeConduzir}
+              ocupado={ocupado}
+              aoEscolher={setEscolhida}
             />
 
             {podeConduzir ? (
               <form className="copiloto__forma" onSubmit={enviarResposta}>
+                {escolhida ? (
+                  <div className="copiloto__escolhida">
+                    <p className="copiloto__escolhida-texto">
+                      {`Respondendo: ${escolhida.pergunta}`}
+                    </p>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn--sm admin-btn--outline"
+                      onClick={() => setEscolhida(null)}
+                      disabled={ocupado}
+                    >
+                      Responder sem pergunta
+                    </button>
+                  </div>
+                ) : null}
+
                 <label className="admin-field">
                   <span className="admin-field__label">Sua resposta</span>
                   <textarea
@@ -410,10 +705,11 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
                     rows={4}
                     value={resposta}
                     onChange={(event) => setResposta(event.target.value)}
-                    placeholder="Responda uma ou mais perguntas. Ex.: a perda média é de 4% do lote."
+                    placeholder="Ex.: a perda média é de 4% do lote."
                   />
                   <span className="admin-field__hint">
-                    A resposta não altera a proposta; ela é usada na próxima estruturação.
+                    O Copiloto usa a resposta para preencher o elemento vazio. No que
+                    já está escrito, ele sugere a mudança e você decide.
                   </span>
                 </label>
 
@@ -423,7 +719,9 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
                   disabled={!resposta.trim() || ocupado}
                 >
                   <Icone icon={appIcons.save} />
-                  {emAcao === 'responder' ? 'Registrando...' : 'Registrar resposta'}
+                  {emAcao === 'responder' || emAcao === 'estruturar'
+                    ? 'Atualizando...'
+                    : 'Responder e atualizar a proposta'}
                 </button>
               </form>
             ) : null}

@@ -1,6 +1,8 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { getDefaultBranding } from '../theme/brandTokens'
 
 /**
  * Contraste dos textos auxiliares, medido na fonte dos tokens.
@@ -18,6 +20,31 @@ import { describe, expect, it } from 'vitest'
  * opacidade aplicada - porque e a combinacao dos tres que o olho recebe. Um
  * token com contraste otimo atras de `opacity: .75` chega ao usuario abaixo
  * do minimo, e foi exatamente o que aconteceu aqui.
+ *
+ * A cor de Alerta tambem vira texto: o selo "Aguardando revisao", o nivel
+ * "Fragil" e o "Recuou" da pre-analise. Esses textos usavam o Laranja claro,
+ * que e um fundo, e chegavam perto de 1:1 sobre o cartao. Por isso o Laranja
+ * claro so pode pintar fundo, e o teste varre as folhas atras de outro uso.
+ *
+ * O selo do perfil Administrador tinha texto branco sobre o laranja da marca:
+ * 2,99:1 no tema claro. O fundo passou ao laranja de texto
+ * (`--accent-primary-text`), que no claro e o laranja escurecido e no escuro e
+ * o proprio laranja, sob texto preto.
+ *
+ * O aviso de alerta morava no estilo das telas de Oportunidade, que so carrega
+ * com elas; o Administrador, que nao tem Oportunidades no menu, via os avisos
+ * da Saude e de Meus dados sem a cor. Agora mora no estilo comum do console. A
+ * linha de quem pediu exclusao ganha um fundo de Alerta, e o texto do pedido,
+ * tambem em Alerta, precisa manter 4,5:1 sobre esse fundo.
+ *
+ * Na tela de Permissoes, "Sim" e um selo cheio de Sucesso, com o texto da cor
+ * de destaque por cima, e os valores parciais sao uma tinta de azul-marinho.
+ * A tinta de Sucesso com texto verde nao serve: chega a 3,7:1 no tema claro.
+ * O aviso da tabela de provedores, na Saude, e texto de Alerta sobre uma tinta
+ * de Alerta. Os selos de estado da Saude seguem a mesma conta: atencao e texto
+ * de Alerta sobre tinta de Alerta, e critico e um selo cheio de Erro com o
+ * texto da cor de destaque, porque texto vermelho sobre tinta vermelha fica
+ * abaixo de 4,5:1 no tema claro.
  */
 
 const AA_TEXTO_NORMAL = 4.5
@@ -123,5 +150,172 @@ describe('contraste do placeholder — WCAG 2.2 AA', () => {
         ).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
       })
     }
+  }
+})
+
+const FUNDOS = ['bgPrimary', 'bgSecondary', 'bgCard']
+
+describe('contraste da cor de Alerta — WCAG 2.2 AA', () => {
+  for (const tema of ['light', 'dark']) {
+    const paleta = getDefaultBranding(tema)
+
+    for (const fundo of FUNDOS) {
+      it(`como texto sobre ${fundo} no tema ${tema} entrega 4,5:1`, () => {
+        const razao = contraste(paleta.accentWarning, paleta[fundo])
+
+        expect(
+          razao,
+          `${paleta.accentWarning} sobre ${paleta[fundo]} = ${razao.toFixed(2)}:1`
+        ).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      })
+    }
+  }
+})
+
+const globais = fonte('./base/_globals.scss')
+
+function laranjaDeTexto(laranja) {
+  const receita = globais.match(
+    /--accent-primary-text:\s*color-mix\(in srgb, var\(--accent-primary\) (\d+)%, (#[0-9a-f]{6})\)/i
+  )
+
+  if (!receita) throw new Error('O --accent-primary-text do tema claro mudou de receita.')
+
+  return sobre(laranja, receita[2], Number(receita[1]) / 100)
+}
+
+describe('selo do perfil Administrador — WCAG 2.2 AA', () => {
+  it('pinta o fundo com o laranja de texto, e não com o laranja da marca', () => {
+    const inicio = console_.indexOf('\n.role-badge {')
+    const bloco = console_.slice(inicio, console_.indexOf('\n}', inicio))
+
+    expect(bloco).toMatch(/&--administrador\s*\{[^}]*background:\s*var\(--accent-primary-text\)/)
+  })
+
+  it('o texto do selo entrega 4,5:1 nos dois temas', () => {
+    const claro = laranjaDeTexto(getDefaultBranding('light').accentPrimary)
+    const escuro = getDefaultBranding('dark').accentPrimary
+
+    expect(contraste(valorDeVariavel(cores, 'color-text-inverse'), claro))
+      .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    expect(contraste(valorDeVariavel(cores, 'color-text-inverse-dark'), escuro))
+      .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+  })
+})
+
+describe('selos da tela de Permissões — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+  const parcial = telaAdmin.match(
+    /\.permissoes__valor--administrativo\s*\{[^}]*color:\s*var\(--accent-secondary\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-secondary\) (\d+)%/
+  )
+
+  it('"Sim" é Sucesso cheio, e os valores parciais são tinta de azul-marinho', () => {
+    expect(telaAdmin).toMatch(
+      /\.permissoes__valor--sim\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-green\)/
+    )
+    expect(parcial).not.toBeNull()
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos selos entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundoParcial = sobre(paleta.accentSecondary, paleta.bgCard, Number(parcial[1]) / 100)
+
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentGreen))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(paleta.accentSecondary, fundoParcial)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+describe('aviso da tabela de provedores na Saúde — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+  const aviso = telaAdmin.match(
+    /\.saude__tabela-aviso\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%[^}]*color:\s*var\(--accent-warning\)/
+  )
+
+  it('usa a cor de Alerta, e não cores fixas de tema claro', () => {
+    expect(aviso).not.toBeNull()
+  })
+
+  for (const tema of ['light', 'dark']) {
+    it(`o texto do aviso entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundo = sobre(paleta.accentWarning, paleta.bgCard, Number(aviso[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundo)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+describe('selos de estado na Saúde — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+  const inicio = telaAdmin.indexOf('\n.saude__selo {')
+  const selo = telaAdmin.slice(inicio, telaAdmin.indexOf('\n}', inicio))
+  const atencao = selo.match(
+    /&--atencao\s*\{[^}]*color:\s*var\(--accent-warning\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/
+  )
+
+  it('atenção é tinta de Alerta, e crítico é Erro cheio com o texto da cor de destaque', () => {
+    expect(atencao).not.toBeNull()
+    expect(selo).toMatch(/&--critico\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-error\)/)
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos selos de atenção e de crítico entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundoAtencao = sobre(paleta.accentWarning, paleta.bgCard, Number(atencao[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundoAtencao)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentError))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+const folhas = readdirSync(RAIZ, { recursive: true })
+  .filter((arquivo) => arquivo.endsWith('.scss'))
+  .map((arquivo) => ({ arquivo, scss: readFileSync(join(RAIZ, arquivo), 'utf8') }))
+
+describe('o Laranja claro é fundo, não alerta', () => {
+  it('nenhuma folha usa o Laranja claro em texto, ícone ou borda', () => {
+    const usos = folhas.flatMap(({ arquivo, scss }) => scss
+      .split('\n')
+      .filter((linha) => linha.includes('var(--accent-warm)') && !/^\s*background:/.test(linha))
+      .map((linha) => `${arquivo}: ${linha.trim()}`))
+
+    expect(usos).toEqual([])
+  })
+
+  it('o aviso de alerta usa a cor de Alerta e mora no estilo comum, que toda tela carrega', () => {
+    const inicio = console_.indexOf('\n.admin-callout--alerta {')
+    const bloco = console_.slice(inicio, console_.indexOf('\n}', inicio))
+    const donos = folhas
+      .filter(({ scss }) => scss.includes('.admin-callout--alerta {'))
+      .map(({ arquivo }) => arquivo)
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).toMatch(/border-left-color:\s*var\(--accent-warning\)/)
+    expect(donos).toEqual([join('styles', 'components', '_console.scss')])
+  })
+})
+
+describe('pedido de exclusão em destaque — WCAG 2.2 AA', () => {
+  const linha = console_.match(/tbody tr\.is-pedido\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/)
+
+  it('a linha de quem pediu exclusão e o texto do pedido usam a cor de Alerta', () => {
+    expect(linha).not.toBeNull()
+    expect(console_).toMatch(/\.user-cell__pedido\s*\{[^}]*color:\s*var\(--accent-warning\)/)
+  })
+
+  for (const tema of ['light', 'dark']) {
+    it(`o texto do pedido entrega 4,5:1 sobre a linha destacada no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundo = sobre(paleta.accentWarning, paleta.bgCard, Number(linha[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundo)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
   }
 })

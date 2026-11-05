@@ -13,9 +13,11 @@ import { ROLES } from '../../../lib/roles'
 import { listOportunidades } from '../../../services/pdConnectApi'
 import {
   ORIGENS,
+  PRIORIDADES,
   SITUACOES,
   daApi,
   origemLabel,
+  prioridadeLabel,
   resumoPorSituacao,
   situacaoLabel,
 } from './oportunidadesData'
@@ -25,6 +27,7 @@ const COLUNAS = [
   { id: 'titulo', label: 'Oportunidade', ordenavel: true },
   { id: 'origem', label: 'Origem', ordenavel: true },
   { id: 'situacao', label: 'Situação', ordenavel: true },
+  { id: 'prioridade', label: 'Prioridade', ordenavel: true },
   { id: 'equipe', label: 'Equipe potencial', ordenavel: false },
   { id: 'atualizadaEm', label: 'Atualizada', ordenavel: true },
 ]
@@ -36,8 +39,18 @@ function diaLocal(instante) {
   return `${data.getFullYear()}-${mes}-${dia}`
 }
 
+const ordemDaPrioridade = (id) =>
+  PRIORIDADES.find((item) => item.id === id)?.ordem ?? PRIORIDADES.length
+
 function comparar(a, b, campo) {
   if (campo === 'atualizadaEm') return a.atualizadaEm - b.atualizadaEm
+
+  if (campo === 'prioridade') {
+    return (
+      ordemDaPrioridade(a.prioridade) - ordemDaPrioridade(b.prioridade) ||
+      b.atualizadaEm - a.atualizadaEm
+    )
+  }
 
   if (campo === 'situacao') {
     const etapa = (id) => SITUACOES.find((item) => item.id === id)?.etapa || 0
@@ -65,10 +78,11 @@ export default function OportunidadesPage() {
     () => parametros.get('situacao') || 'todas'
   )
   const [origemFiltro, setOrigemFiltro] = useState('todas')
+  const [prioridadeFiltro, setPrioridadeFiltro] = useState('todas')
   const [cadastradaDe, setCadastradaDe] = useState('')
   const [cadastradaAte, setCadastradaAte] = useState('')
   const [soMinhaAtuacao, setSoMinhaAtuacao] = useState(false)
-  const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
+  const [ordem, setOrdem] = useState({ campo: 'prioridade', direcao: 'asc' })
 
   const acompanhaFila = ehSupervisor || ehPesquisador
 
@@ -83,7 +97,7 @@ export default function OportunidadesPage() {
     setErroCarga('')
 
     try {
-      const resposta = await listOportunidades()
+      const resposta = await listOportunidades({ ordenar: 'prioridade' })
       setOportunidades((resposta.results || resposta).map(daApi))
     } catch (erro) {
       setOportunidades([])
@@ -107,6 +121,7 @@ export default function OportunidadesPage() {
     return oportunidades.filter((item) => {
       const situacaoOk = situacaoFiltro === 'todas' || item.situacao === situacaoFiltro
       const origemOk = origemFiltro === 'todas' || item.origem === origemFiltro
+      const prioridadeOk = prioridadeFiltro === 'todas' || item.prioridade === prioridadeFiltro
       const buscaOk =
         !termo ||
         item.titulo.toLowerCase().includes(termo) ||
@@ -118,7 +133,7 @@ export default function OportunidadesPage() {
 
       const atuacaoOk = !soMinhaAtuacao || item.aguardaMinhaAtuacao
 
-      return situacaoOk && origemOk && buscaOk && dataOk && atuacaoOk
+      return situacaoOk && origemOk && prioridadeOk && buscaOk && dataOk && atuacaoOk
     })
   }, [
     busca,
@@ -126,6 +141,7 @@ export default function OportunidadesPage() {
     cadastradaDe,
     oportunidades,
     origemFiltro,
+    prioridadeFiltro,
     situacaoFiltro,
     soMinhaAtuacao,
   ])
@@ -144,6 +160,7 @@ export default function OportunidadesPage() {
     Boolean(busca) ||
     situacaoFiltro !== 'todas' ||
     origemFiltro !== 'todas' ||
+    prioridadeFiltro !== 'todas' ||
     Boolean(cadastradaDe) ||
     Boolean(cadastradaAte) ||
     soMinhaAtuacao
@@ -164,6 +181,7 @@ export default function OportunidadesPage() {
     setBusca('')
     trocarSituacao('todas')
     setOrigemFiltro('todas')
+    setPrioridadeFiltro('todas')
     setCadastradaDe('')
     setCadastradaAte('')
     setSoMinhaAtuacao(false)
@@ -308,6 +326,20 @@ export default function OportunidadesPage() {
           </label>
 
           <label className="admin-field">
+            <span className="admin-field__label">Prioridade</span>
+            <select
+              className="admin-input admin-input--select"
+              value={prioridadeFiltro}
+              onChange={(event) => setPrioridadeFiltro(event.target.value)}
+            >
+              <option value="todas">Todas as prioridades</option>
+              {PRIORIDADES.map((prioridade) => (
+                <option key={prioridade.id} value={prioridade.id}>{prioridade.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="admin-field">
             <span className="admin-field__label">Cadastrada a partir de</span>
             <input
               type="date"
@@ -389,6 +421,14 @@ export default function OportunidadesPage() {
                   <span className={`fluxo-badge fluxo-badge--${item.situacao}`}>
                     {situacaoLabel(item.situacao)}
                   </span>
+                </td>
+
+                <td data-label="Prioridade">
+                  {item.prioridade ? (
+                    <span className={`prioridade-badge prioridade-badge--${item.prioridade}`}>
+                      {prioridadeLabel(item.prioridade)}
+                    </span>
+                  ) : null}
                 </td>
 
                 <td data-label="Equipe potencial">

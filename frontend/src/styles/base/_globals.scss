@@ -32,6 +32,7 @@
   --accent-warm: #{$color-warm};
   --accent-green: #{$color-green};
   --accent-error: #{$color-error};
+  --accent-warning: #{$color-warning};
 
   --accent-primary-dim: #{$color-primary-dim};
   --accent-secondary-dim: #{$color-secondary-dim};
@@ -56,6 +57,7 @@
   --text-inverse: #{$color-text-inverse};
   --text-inverse-muted: #{$color-text-inverse-muted};
   --text-on-accent: #{$color-text-inverse};
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --border-color: #{$color-border};
   --border-accent: #{$color-border-accent};
@@ -105,6 +107,7 @@
   --accent-warm: #{$color-warm-dark};
   --accent-green: #{$color-green-dark};
   --accent-error: #{$color-error-dark};
+  --accent-warning: #{$color-warning-dark};
 
   --accent-primary-dim: #{$color-primary-dim-dark};
   --accent-secondary-dim: #{$color-secondary-dim-dark};

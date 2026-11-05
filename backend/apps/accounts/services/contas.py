@@ -12,56 +12,24 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from apps.accounts.models import (
+    DemandanteExterno,
     FinalidadeToken,
     Papel,
     SituacaoConta,
     TokenAcesso,
     Usuario,
 )
+from apps.accounts.services.criadores import criador_de_conta
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
+from apps.accounts.services.titular import anonimizada
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
-from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
-from core.exceptions import ConflitoDeEstado, ErroDeDominio
+from apps.network.models import MembroRede
+from apps.organizations.services.empresas import empresa_demandante
+from core.exceptions import AcaoNaoPermitida, ConflitoDeEstado, ErroDeDominio
 
 if TYPE_CHECKING:
     from apps.organizations.models import Organizacao
-
-PAPEIS_PROVISIONAVEIS = (Papel.SUPERVISOR, Papel.ADMINISTRADOR, Papel.DEMANDANTE)
-
-
-def _criar_membro_rede_para_supervisor(
-    *,
-    usuario: Usuario,
-    organizacao: Organizacao | None,
-    ator: Usuario,
-) -> MembroRede | None:
-    """Cria MembroRede correspondente quando um SUPERVISOR e provisionado."""
-    if usuario.papel != Papel.SUPERVISOR:
-        return None
-
-    if MembroRede.objects.com_email(usuario.email).exists():
-        return None
-
-    membro = MembroRede.objects.create(
-        usuario=usuario,
-        papel_rede=PapelNaRede.SUPERVISOR,
-        organizacao=organizacao,
-        experiencia='',
-        situacao=SituacaoMembro.ATIVO,
-        cadastrado_por=ator,
-    )
-
-    registrar_evento(
-        categoria=CategoriaEvento.REDE,
-        tipo='membro_cadastrado',
-        entidade='membro_rede',
-        entidade_id=membro.id_membro,
-        ator=getattr(ator, 'email', str(ator)),
-        detalhe={'papel_rede': membro.papel_rede, 'email': membro.email, 'origem': 'provisionamento_admin'},
-    )
-    return membro
-
 
 class ProvisionarContaService:
     """
@@ -69,6 +37,10 @@ class ProvisionarContaService:
 
     A conta nasce **sem senha utilizavel**: nao ha senha inicial para vazar num
     e-mail, num chat ou num post-it. A pessoa define a dela pelo token.
+
+    O Demandante Externo nasce ligado a empresa do CNPJ, criada ou reaproveitada
+    na mesma transacao, e o nome da conta e o nome da empresa. Sem esse vinculo
+    ele entrava e nao conseguia cadastrar problema.
     """
 
     def __init__(self, enviador: EnviadorDeEmail | None = None) -> None:
@@ -83,21 +55,19 @@ class ProvisionarContaService:
         papel: str,
         organizacao: Organizacao | None = None,
         ator: Usuario,
+        cnpj: str | None = None,
+        nome_empresa: str = '',
     ) -> Usuario:
-        if papel not in PAPEIS_PROVISIONAVEIS:
-            raise ErroDeDominio(
-                'Conta de Pesquisador nasce do cadastro na rede interna, pelo '
-                'Supervisor. Use a rede interna, nao esta rota.',
-                codigo='papel_nao_provisionavel',
-            )
+        criador = criador_de_conta(papel)
+        nome, organizacao = criador.preparar(
+            nome=nome, organizacao=organizacao, cnpj=cnpj, nome_empresa=nome_empresa,
+        )
 
         usuario = Usuario.objects.create_user(
             email=email, nome=nome, papel=papel, organizacao=organizacao,
         )
 
-        _criar_membro_rede_para_supervisor(
-            usuario=usuario, organizacao=organizacao, ator=ator,
-        )
+        criador.completar(usuario=usuario, organizacao=organizacao, ator=ator)
 
         token = TokenAcesso.emitir(usuario, FinalidadeToken.CONVITE)
         self._email.convite_acesso(usuario, token)
@@ -108,7 +78,10 @@ class ProvisionarContaService:
             entidade='usuario',
             entidade_id=usuario.id_usuario,
             ator=getattr(ator, 'email', str(ator)),
-            detalhe={'papel': usuario.papel, 'email': usuario.email},
+            detalhe={
+                'papel': usuario.papel,
+                'organizacao': usuario.organizacao_id,
+            },
         )
         return usuario
 
@@ -134,8 +107,22 @@ def garantir_email_livre(
 
     if contas.exists() or membros.exists():
         raise ConflitoDeEstado(
-            'Este e-mail ja pertence a outra pessoa na plataforma.',
+            'Este e-mail já pertence a outra pessoa na plataforma.',
             codigo='email_em_uso',
+        )
+
+
+def recusar_conta_anonimizada(usuario: Usuario) -> None:
+    """
+    Conta anonimizada a pedido da pessoa nao volta a ser usada (LGPD).
+
+    Reativada ou editada, ela passaria a outra pessoa com o historico de quem
+    pediu para sair: oportunidades, anexos e indicacoes em equipe.
+    """
+    if anonimizada(usuario):
+        raise ConflitoDeEstado(
+            'Esta conta foi anonimizada a pedido da pessoa e não volta a ser usada.',
+            codigo='conta_anonimizada',
         )
 
 
@@ -150,7 +137,19 @@ class AtualizarContaService:
 
     @transaction.atomic
     def execute(self, *, usuario: Usuario, dados: dict, ator: Usuario) -> Usuario:
+        recusar_conta_anonimizada(usuario)
         membro = MembroRede.objects.filter(usuario=usuario).first()
+        dados = dict(dados)
+        cnpj = dados.pop('cnpj', None)
+        nome_empresa = dados.pop('nome_empresa', '')
+
+        if cnpj:
+            empresa = empresa_demandante(cnpj=cnpj, nome=nome_empresa)
+            dados['organizacao'] = empresa
+            dados['nome'] = empresa.nome
+
+        if dados.get('papel', usuario.papel) == Papel.DEMANDANTE:
+            DemandanteExterno.objects.get_or_create(usuario=usuario)
 
         if 'email' in dados and dados['email'] != usuario.email:
             garantir_email_livre(dados['email'], usuario=usuario, membro=membro)
@@ -177,6 +176,41 @@ class AtualizarContaService:
         return usuario
 
 
+class AtualizarTelefoneService:
+    """
+    O telefone de contato que o proprio Demandante Externo mantem.
+
+    So ele e o Administrador o veem. A trilha registra a troca, nunca o numero.
+    """
+
+    @transaction.atomic
+    def execute(self, *, usuario: Usuario, telefone: str, ator: Usuario) -> Usuario:
+        if usuario.papel != Papel.DEMANDANTE:
+            raise AcaoNaoPermitida(
+                'Só o Demandante Externo tem telefone de contato no perfil.',
+                codigo='telefone_so_do_demandante',
+            )
+
+        perfil, _ = DemandanteExterno.objects.get_or_create(usuario=usuario)
+        usuario.perfil_demandante = perfil
+
+        if perfil.telefone == telefone:
+            return usuario
+
+        perfil.telefone = telefone
+        perfil.save(update_fields=['telefone'])
+
+        registrar_evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='telefone_atualizado',
+            entidade='usuario',
+            entidade_id=usuario.id_usuario,
+            ator=getattr(ator, 'email', str(ator)),
+            detalhe={'preenchido': bool(telefone)},
+        )
+        return usuario
+
+
 class AlterarSituacaoContaService:
     """
     Ativa, inativa ou suspende.
@@ -187,11 +221,11 @@ class AlterarSituacaoContaService:
 
     def execute(self, *, usuario: Usuario, situacao: str, ator: Usuario) -> Usuario:
         if situacao not in SituacaoConta.values:
-            raise ErroDeDominio('Situacao invalida.', codigo='situacao_invalida')
+            raise ErroDeDominio('Situação inválida.', codigo='situacao_invalida')
 
         if usuario.pk == getattr(ator, 'pk', None) and situacao != SituacaoConta.ATIVO:
             raise ErroDeDominio(
-                'Voce nao pode inativar ou suspender a propria conta.',
+                'Você não pode inativar nem suspender a própria conta.',
                 codigo='autobloqueio',
             )
 
@@ -199,6 +233,8 @@ class AlterarSituacaoContaService:
 
         if anterior == situacao:
             return usuario
+
+        recusar_conta_anonimizada(usuario)
 
         usuario.situacao = situacao
         usuario.save(update_fields=['situacao', 'atualizado_em'])
@@ -221,10 +257,12 @@ class ReenviarConviteService:
         self._email: EnviadorDeEmail = enviador or EnviadorDjango()
 
     def execute(self, *, usuario: Usuario, ator: Usuario) -> TokenAcesso:
+        recusar_conta_anonimizada(usuario)
+
         if usuario.has_usable_password():
             raise ConflitoDeEstado(
-                'Esta conta ja definiu senha. Para trocar a senha, quem usa a '
-                'conta pede recuperacao pela tela de login.',
+                'Esta conta já definiu senha. Para trocar, a pessoa pede a '
+                'recuperação de senha na tela de entrada.',
                 codigo='senha_ja_definida',
             )
 

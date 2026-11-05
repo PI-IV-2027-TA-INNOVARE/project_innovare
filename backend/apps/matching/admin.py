@@ -12,6 +12,8 @@ from apps.matching.models import (
     ExecucaoMatching,
     LacunaCompetenciaEquipe,
     MembroEquipe,
+    VetorCompetenciaNecessaria,
+    VetorMembro,
 )
 from core.admin import AdminSomenteLeitura
 
@@ -59,3 +61,17 @@ class MembroEquipeAdmin(AdminSomenteLeitura):
 class LacunaCompetenciaEquipeAdmin(AdminSomenteLeitura):
     list_display = ['equipe', 'competencia_necessaria', 'criado_em']
     search_fields = ['descricao', 'equipe__oportunidade__codigo']
+
+
+@admin.register(VetorMembro)
+class VetorMembroAdmin(AdminSomenteLeitura):
+    list_display = ['membro', 'modelo', 'dimensao', 'gerado_em']
+    search_fields = ['modelo']
+    exclude = ['vetor']
+
+
+@admin.register(VetorCompetenciaNecessaria)
+class VetorCompetenciaNecessariaAdmin(AdminSomenteLeitura):
+    list_display = ['competencia_necessaria', 'modelo', 'dimensao', 'gerado_em']
+    search_fields = ['modelo']
+    exclude = ['vetor']

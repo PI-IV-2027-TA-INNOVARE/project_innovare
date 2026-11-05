@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   obterProposta: null,
   obterEstadoCopiloto: null,
   estruturarComCopiloto: null,
+  definirPrioridade: null,
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
@@ -28,6 +29,7 @@ vi.mock('../../../services/pdConnectApi', () => ({
   iniciarSessaoCopiloto: vi.fn(),
   responderCopiloto: vi.fn(),
   concluirSessaoCopiloto: vi.fn(),
+  definirPrioridade: (...args) => api.definirPrioridade(...args),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -43,6 +45,8 @@ const OPORTUNIDADE = {
   demandante_nome: 'Agroindústria Vale Verde',
   responsavel_nome: 'Rafael Antunes',
   situacao: 'aguardando_decisao',
+  prioridade: 'media',
+  prioridade_rotulo: 'Média',
   total_anexos: 0,
   ultima_decisao: null,
   criada_em: '2026-08-20T10:00:00.000Z',
@@ -76,6 +80,26 @@ beforeEach(() => {
   api.estruturarComCopiloto = vi
     .fn()
     .mockResolvedValue({ preenchidos: ['metodologia'], fallback_usado: false })
+  api.definirPrioridade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, prioridade: 'alta' })
+})
+
+describe('OportunidadePage — prioridade na fila', () => {
+  /**
+   * PB61: a fila do Supervisor indica status e prioridade. Quem define é ele,
+   * na própria oportunidade; a escolha vai para a API e fica na trilha.
+   */
+  it('o Supervisor muda a prioridade pela API', async () => {
+    const user = userEvent.setup()
+    renderPagina()
+
+    const seletor = await screen.findByRole('combobox', { name: /prioridade/i })
+    expect(seletor).toHaveValue('media')
+
+    await user.selectOptions(seletor, 'alta')
+
+    expect(api.definirPrioridade).toHaveBeenCalledWith('OP-2026-014', 'alta')
+    expect(await screen.findByText(/prioridade alta na fila/i)).toBeInTheDocument()
+  })
 })
 
 describe('OportunidadePage — custo de abertura', () => {
@@ -145,5 +169,48 @@ describe('OportunidadePage — rodada do Copiloto', () => {
 
     expect(await screen.findByText(/aguarde a ia terminar/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^decisão/i })).toBeDisabled()
+  })
+})
+
+describe('OportunidadePage — andamento das etapas', () => {
+  /**
+   * A barra só marcava a aba aberta. Agora diz, pela situação da
+   * oportunidade, o que já foi feito e onde o fluxo está, com texto e não só
+   * com cor.
+   */
+  it('marca as etapas concluídas e a que está em andamento', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'matching' })
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /Competências.*concluída/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Contexto.*concluída/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Equipe potencial.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Decisão$/ })).toBeInTheDocument()
+  })
+
+  it('em estruturação, Copiloto e Proposta estão em andamento juntos', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /Copiloto.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Proposta estruturada.*em andamento/ })).toBeInTheDocument()
+  })
+
+  it('oportunidade arquivada não mostra andamento', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'arquivada' })
+
+    renderPagina()
+
+    await screen.findByRole('button', { name: /Contexto/ })
+    expect(screen.queryByText('em andamento')).not.toBeInTheDocument()
+    expect(screen.queryByText('concluída')).not.toBeInTheDocument()
+  })
+
+  it('diz em que etapa a pessoa está', async () => {
+    renderPagina()
+
+    expect(await screen.findByText('Etapa 1 de 7')).toBeInTheDocument()
   })
 })
