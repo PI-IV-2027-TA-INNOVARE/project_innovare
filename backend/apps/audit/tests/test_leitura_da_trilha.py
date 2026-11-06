@@ -221,6 +221,18 @@ class BuscaPeloNomeDoEventoTests(LeituraBaseTests):
         )
 
 
+class AlvoDosContatosDeSuporteTests(LeituraBaseTests):
+    def test_diz_contatos_de_suporte_em_vez_do_identificador(self):
+        self.evento(
+            categoria=CategoriaEvento.CONFIG,
+            tipo='contatos_suporte_alterados',
+            entidade='configuracao',
+            entidade_id='contatos_suporte',
+        )
+
+        self.assertEqual(self.linha()['alvo']['rotulo'], 'Contatos de suporte')
+
+
 class EntradaRecusadaNoConsoleTests(LeituraBaseTests):
     def entrar(self, email):
         APIClient().post(

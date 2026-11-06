@@ -236,6 +236,7 @@ ENTIDADES: dict[str, Entidade] = {
 ALVOS_FIXOS = {
     ('ia', 'custo_mensal'): 'Orçamento mensal de IA',
     ('configuracao', 'tema'): 'Aparência da plataforma',
+    ('configuracao', 'contatos_suporte'): 'Contatos de suporte',
 }
 
 
