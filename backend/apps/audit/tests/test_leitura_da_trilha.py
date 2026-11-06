@@ -115,6 +115,16 @@ class RotuloDoEventoTests(LeituraBaseTests):
     def test_decisao_tem_rotulo_por_desfecho(self):
         self.assertEqual(rotulo_do_tipo('decisao_arquivar', 'oportunidade'), 'Decisão: Arquivar')
 
+    def test_contatos_de_suporte_tem_rotulo(self):
+        self.assertEqual(
+            rotulo_do_tipo('contatos_suporte_alterados', 'configuracao'),
+            'Contatos de suporte alterados',
+        )
+        self.assertEqual(
+            rotulo_do_tipo('contatos_suporte_restaurados', 'configuracao'),
+            'Contatos de suporte restaurados',
+        )
+
     def test_tipo_sem_rotulo_aparece_cru_em_vez_de_sumir(self):
         self.assertEqual(rotulo_do_tipo('algo_novo', 'oportunidade'), 'algo_novo')
 
@@ -125,6 +135,136 @@ class RotuloDoEventoTests(LeituraBaseTests):
 
         self.assertEqual(linha['categoria_rotulo'], 'Pré-análise')
         self.assertEqual(linha['status_rotulo'], 'Concluído')
+
+
+class BuscaPeloNomeDoEventoTests(LeituraBaseTests):
+    """
+    A busca acha o evento pelo nome que a tela mostra.
+
+    Antes so o identificador gravado funcionava: "Entrada recusada" voltava
+    vazio e `login_recusado` achava, e o Administrador nunca ve esse segundo.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.evento(
+            categoria=CategoriaEvento.CONFIG,
+            tipo='configuracao_alterada',
+            entidade='configuracao',
+            entidade_id='tema',
+        )
+        self.evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='login_recusado',
+            entidade='usuario',
+            entidade_id=str(self.supervisor.id_usuario),
+            status=StatusEvento.NEGADO,
+        )
+        self.evento(
+            categoria=CategoriaEvento.MATCHING,
+            tipo='execucao',
+            entidade='equipe_potencial',
+            entidade_id='7',
+        )
+        self.evento(
+            categoria=CategoriaEvento.PREANALISE,
+            tipo='execucao',
+            entidade='pre_analise_maturidade',
+            entidade_id='8',
+        )
+
+    def tipos(self, busca):
+        return [
+            (linha['tipo'], linha['entidade']) for linha in self.linhas(busca=busca)
+        ]
+
+    def test_acha_pelo_nome_exato(self):
+        self.assertEqual(
+            self.tipos('Entrada recusada'), [('login_recusado', 'usuario')]
+        )
+
+    def test_nao_diferencia_maiuscula_nem_acento(self):
+        esperado = [('configuracao_alterada', 'configuracao')]
+
+        self.assertEqual(self.tipos('Configuração alterada'), esperado)
+        self.assertEqual(self.tipos('configuracao ALTERADA'), esperado)
+
+    def test_acha_por_parte_do_nome(self):
+        self.assertEqual(self.tipos('recusada'), [('login_recusado', 'usuario')])
+
+    def test_o_mesmo_tipo_em_entidades_diferentes_nao_se_confunde(self):
+        self.assertEqual(
+            self.tipos('Matching executado'), [('execucao', 'equipe_potencial')]
+        )
+        self.assertEqual(
+            self.tipos('Pré-análise executada'),
+            [('execucao', 'pre_analise_maturidade')],
+        )
+
+    def test_o_identificador_gravado_continua_funcionando(self):
+        self.assertEqual(self.tipos('login_recusado'), [('login_recusado', 'usuario')])
+
+    def test_termo_que_nao_existe_nao_acha_nada(self):
+        self.assertEqual(self.tipos('nada parecido com isso'), [])
+
+    def test_entrada_e_saida_seguem_atras_do_filtro_de_conta(self):
+        self.evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='login',
+            entidade='usuario',
+            entidade_id=str(self.supervisor.id_usuario),
+        )
+
+        self.assertEqual(self.tipos('Entrou na plataforma'), [])
+        self.assertEqual(
+            len(self.linhas(busca='Entrou na plataforma', categoria='conta')), 1
+        )
+
+
+class AlvoDosContatosDeSuporteTests(LeituraBaseTests):
+    def test_diz_contatos_de_suporte_em_vez_do_identificador(self):
+        self.evento(
+            categoria=CategoriaEvento.CONFIG,
+            tipo='contatos_suporte_alterados',
+            entidade='configuracao',
+            entidade_id='contatos_suporte',
+        )
+
+        self.assertEqual(self.linha()['alvo']['rotulo'], 'Contatos de suporte')
+
+
+class EntradaRecusadaNoConsoleTests(LeituraBaseTests):
+    def entrar(self, email):
+        APIClient().post(
+            reverse('auth-token'),
+            {'email': email, 'password': 'senha-errada'},
+            format='json',
+        )
+
+    def test_aparece_sem_escolher_filtro_e_com_o_motivo(self):
+        self.entrar(self.supervisor.email)
+
+        linha = self.linha()
+
+        self.assertEqual(linha['tipo_rotulo'], 'Entrada recusada')
+        self.assertEqual(linha['status_rotulo'], 'Negado')
+        self.assertEqual(linha['motivo'], 'Senha incorreta.')
+        self.assertEqual(linha['ator_nome'], 'Rafael Antunes')
+        self.assertEqual(linha['alvo']['rotulo'], 'A própria conta')
+
+    def test_email_sem_conta_nao_parece_conta_removida(self):
+        self.entrar('ninguem@exemplo.com.br')
+
+        linha = self.linha()
+
+        self.assertEqual(linha['alvo']['rotulo'], 'E-mail sem conta')
+        self.assertFalse(linha['alvo']['removido'])
+        self.assertEqual(linha['ator'], 'ninguem@exemplo.com.br')
+
+    def test_a_busca_acha_pelo_nome_de_quem_tentou_entrar(self):
+        self.entrar(self.supervisor.email)
+
+        self.assertEqual(len(self.linhas(busca='Rafael Antunes')), 1)
 
 
 class CatalogoCompletoTests(TestCase):

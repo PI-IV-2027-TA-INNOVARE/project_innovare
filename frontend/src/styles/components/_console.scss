@@ -948,6 +948,21 @@
     color: var(--accent-error);
     background: var(--bg-danger-soft);
   }
+
+  &--ok {
+    color: var(--accent-secondary);
+    background: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
+  }
+
+  &--negado {
+    color: var(--accent-warning);
+    background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+  }
+
+  &--erro {
+    color: var(--text-on-accent);
+    background: var(--accent-error);
+  }
 }
 
 .origem-badge {

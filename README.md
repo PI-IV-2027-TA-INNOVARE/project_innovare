@@ -13,6 +13,20 @@ MVP acadêmico — Projeto Integrador IV, Innovare. Prazo: dezembro de 2026.
 
 ---
 
+## Subir com um comando
+
+No Windows, com o ambiente já preparado (ver "Subir tudo"), dê dois cliques em
+`iniciar.bat`. Ele ativa o venv e sobe o backend e o front, sem precisar de WSL
+nem de Git Bash. O `Ctrl+C` derruba os dois.
+
+No PowerShell, as opções do `dev.py` também valem:
+
+```powershell
+.\iniciar.bat --so-backend
+```
+
+---
+
 ## Subir com Docker
 
 Só precisa do Docker (no Windows e no Mac, o Docker Desktop aberto). Python,
@@ -149,6 +163,7 @@ python manage.py medir_pertinencia amostra.json --sem-afinidade  # como antes da
 
 ```
 project_innovare/
+├── iniciar.bat             # Windows: ativa o venv e sobe tudo
 ├── dev.py                  # sobe backend + frontend juntos
 ├── backend/                # API Django (ver backend/README.md)
 ├── frontend/               # SPA React + Vite

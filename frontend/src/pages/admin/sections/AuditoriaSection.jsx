@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { SkeletonRows, TableEmpty } from '../../../components/console/ConsoleTable'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Paginacao, SkeletonRows, TableEmpty } from '../../../components/console/ConsoleTable'
 import { appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { listarTrilha, obterFiltrosTrilha } from '../../../services/pdConnectApi'
@@ -14,6 +14,8 @@ const COLUNAS = [
 ]
 
 const FILTRO_VAZIO = { categoria: '', status: '', busca: '', desde: '', ate: '' }
+
+const POR_PAGINA = 50
 
 const ATOR_SISTEMA = '__sistema__'
 
@@ -42,11 +44,15 @@ function somenteOsPreenchidos(filtros) {
 export default function AuditoriaSection() {
   const [rascunho, setRascunho] = useState(FILTRO_VAZIO)
   const [aplicados, setAplicados] = useState(FILTRO_VAZIO)
+  const [pagina, setPagina] = useState(1)
 
   const [catalogo, setCatalogo] = useState(CATALOGO_VAZIO)
   const [eventos, setEventos] = useState([])
+  const [total, setTotal] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+
+  const ultimaConsulta = useRef(0)
 
   useEffect(() => {
     obterFiltrosTrilha()
@@ -54,25 +60,38 @@ export default function AuditoriaSection() {
       .catch(() => setCatalogo(CATALOGO_VAZIO))
   }, [])
 
-  const consultar = useCallback(async (filtros) => {
+  const consultar = useCallback(async (filtros, numeroDaPagina) => {
+    ultimaConsulta.current += 1
+    const estaConsulta = ultimaConsulta.current
+
     setCarregando(true)
 
     try {
-      const pagina = await listarTrilha(somenteOsPreenchidos(filtros))
+      const resposta = await listarTrilha({
+        ...somenteOsPreenchidos(filtros),
+        page: numeroDaPagina,
+        page_size: POR_PAGINA,
+      })
 
-      setEventos(pagina.results || [])
+      if (estaConsulta !== ultimaConsulta.current) return
+
+      setEventos(resposta.results || [])
+      setTotal(resposta.count || 0)
       setErro('')
     } catch {
+      if (estaConsulta !== ultimaConsulta.current) return
+
       setEventos([])
+      setTotal(0)
       setErro('Não foi possível carregar a trilha. Tente novamente.')
     } finally {
-      setCarregando(false)
+      if (estaConsulta === ultimaConsulta.current) setCarregando(false)
     }
   }, [])
 
   useEffect(() => {
-    consultar(aplicados)
-  }, [aplicados, consultar])
+    consultar(aplicados, pagina)
+  }, [aplicados, pagina, consultar])
 
   const alterar = (campo) => (event) => {
     const { value } = event.target
@@ -82,6 +101,7 @@ export default function AuditoriaSection() {
 
     if (campo === 'categoria' || campo === 'status') {
       setAplicados((atual) => ({ ...atual, [campo]: value }))
+      setPagina(1)
     }
   }
 
@@ -94,11 +114,13 @@ export default function AuditoriaSection() {
     }
 
     setAplicados(rascunho)
+    setPagina(1)
   }
 
   const limpar = () => {
     setRascunho(FILTRO_VAZIO)
     setAplicados(FILTRO_VAZIO)
+    setPagina(1)
     setErro('')
   }
 
@@ -327,6 +349,16 @@ export default function AuditoriaSection() {
           </tbody>
         </table>
       </div>
+
+      {total > 0 ? (
+        <Paginacao
+          pagina={pagina}
+          total={total}
+          porPagina={POR_PAGINA}
+          rotulo={total === 1 ? 'evento' : 'eventos'}
+          onMudar={setPagina}
+        />
+      ) : null}
     </section>
   )
 }
