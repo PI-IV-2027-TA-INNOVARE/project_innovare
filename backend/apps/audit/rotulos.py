@@ -10,6 +10,10 @@ tocar um registro sequer.
 """
 from __future__ import annotations
 
+import unicodedata
+
+from django.db.models import Q
+
 from apps.decisions.models import TipoDecisao
 
 ROTULOS_DO_TIPO = {
@@ -62,6 +66,8 @@ ROTULOS_DO_TIPO = {
     'teto_de_custo_excedido': 'Teto mensal de IA atingido',
     'teto_por_oportunidade_excedido': 'Limite de IA da oportunidade atingido',
     'configuracao_alterada': 'Configuração alterada',
+    'contatos_suporte_alterados': 'Contatos de suporte alterados',
+    'contatos_suporte_restaurados': 'Contatos de suporte restaurados',
     'retencao_aplicada': 'Retenção de dados aplicada',
     **{
         f'decisao_{valor}': f'Decisão: {rotulo}'
@@ -76,7 +82,9 @@ ROTULOS_POR_ENTIDADE = {
 """O mesmo `tipo` em entidades diferentes, quando ele sozinho nao diz o que foi."""
 
 TIPOS_DINAMICOS = [
-    (f'decisao_{valor}', 'oportunidade') for valor in TipoDecisao.values
+    *((f'decisao_{valor}', 'oportunidade') for valor in TipoDecisao.values),
+    ('contatos_suporte_alterados', 'configuracao'),
+    ('contatos_suporte_restaurados', 'configuracao'),
 ]
 """Tipos montados em tempo de execucao, que a leitura do fonte nao alcanca."""
 
@@ -90,3 +98,34 @@ sobre o fluxo. Aparecem so quando o filtro e "Conta e acesso".
 def rotulo_do_tipo(tipo: str, entidade: str = '') -> str:
     """O rotulo do evento, ou o proprio `tipo` quando ainda nao ha rotulo."""
     return ROTULOS_POR_ENTIDADE.get((tipo, entidade)) or ROTULOS_DO_TIPO.get(tipo, tipo)
+
+
+def _sem_acento(texto: str) -> str:
+    decomposto = unicodedata.normalize('NFKD', texto)
+
+    return ''.join(c for c in decomposto if not unicodedata.combining(c)).casefold()
+
+
+def eventos_com_o_rotulo(termo: str) -> Q:
+    """
+    Os eventos cujo nome, como a tela o mostra, contem o termo.
+
+    O rotulo nao esta no banco, entao a comparacao acontece aqui e vira filtro
+    pelo `tipo` gravado. Acento e maiuscula nao contam: o Administrador digita
+    "configuracao" e espera achar "Configuração alterada".
+    """
+    procurado = _sem_acento(termo)
+
+    filtro = Q(
+        tipo__in=[
+            tipo
+            for tipo, rotulo in ROTULOS_DO_TIPO.items()
+            if procurado in _sem_acento(rotulo)
+        ]
+    )
+
+    for (tipo, entidade), rotulo in ROTULOS_POR_ENTIDADE.items():
+        if procurado in _sem_acento(rotulo):
+            filtro |= Q(tipo=tipo, entidade=entidade)
+
+    return filtro

@@ -1083,11 +1083,16 @@
   background: var(--bg-card);
 }
 
+.permissoes__rolagem:focus-visible {
+  outline: 2px solid var(--accent-primary-text);
+  outline-offset: 2px;
+}
+
 .permissoes__tabela {
   width: 100%;
   min-width: 640px;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
 }
 
 .permissoes__legenda {
@@ -1164,13 +1169,7 @@
   div {
     display: grid;
     align-content: start;
-    gap: 2px;
-  }
-
-  dt {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-primary);
+    gap: 6px;
   }
 
   dd {

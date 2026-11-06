@@ -13,6 +13,35 @@ MVP acadêmico — Projeto Integrador IV, Innovare. Prazo: dezembro de 2026.
 
 ---
 
+## Subir com um comando
+
+**Windows, com o ambiente já preparado:** dê dois cliques em `iniciar.bat`. Ele
+ativa o venv e sobe o backend e o front, sem precisar de WSL nem de Git Bash. O
+`Ctrl+C` derruba os dois. As opções do `dev.py` também valem:
+`iniciar.bat --so-backend`.
+
+**Máquina nova:** o `iniciar.sh` prepara tudo e sobe. Precisa de Python 3.11+ (o
+projeto roda em 3.14), Node 20+ (o projeto roda em 24) e de um PostgreSQL no ar.
+No Windows, rode no Git Bash. No PowerShell, `bash` chama o WSL, não o Git Bash.
+
+```bash
+bash iniciar.sh                 # prepara o que faltar e sobe backend e front
+bash iniciar.sh --so-preparar   # só prepara, não sobe nada
+bash iniciar.sh --so-backend    # as demais opções vão direto para o dev.py
+```
+
+Ele cria o `backend/venv`, instala as dependências, gera o `backend/.env` e o
+`frontend/.env` que faltarem, cria o banco local se ele não existir, aplica as
+migrations e cria as contas de desenvolvimento num banco sem contas. Na primeira
+vez demora, porque baixa o torch.
+
+- Pode rodar de novo sem medo: não sobrescreve `.env` e só reinstala dependência
+  quando o `requirements.txt` ou o `package-lock.json` mudam.
+- Com `DB_HOST` remoto no `backend/.env`, não migra nem semeia nada.
+- Sem PostgreSQL instalado, o script mostra o comando para subir um com Docker.
+
+---
+
 ## Subir com Docker
 
 Só precisa do Docker (no Windows e no Mac, o Docker Desktop aberto). Python,
@@ -149,6 +178,8 @@ python manage.py medir_pertinencia amostra.json --sem-afinidade  # como antes da
 
 ```
 project_innovare/
+├── iniciar.bat             # Windows: ativa o venv e sobe tudo
+├── iniciar.sh              # prepara o ambiente e sobe tudo
 ├── dev.py                  # sobe backend + frontend juntos
 ├── backend/                # API Django (ver backend/README.md)
 ├── frontend/               # SPA React + Vite

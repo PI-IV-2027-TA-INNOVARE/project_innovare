@@ -40,11 +40,16 @@ import { getDefaultBranding } from '../theme/brandTokens'
  * Na tela de Permissoes, "Sim" e um selo cheio de Sucesso, com o texto da cor
  * de destaque por cima, e os valores parciais sao uma tinta de azul-marinho.
  * A tinta de Sucesso com texto verde nao serve: chega a 3,7:1 no tema claro.
+ * Na legenda os mesmos valores parciais ficam fora do cartao, entao a conta
+ * vale tambem sobre o fundo da pagina.
  * O aviso da tabela de provedores, na Saude, e texto de Alerta sobre uma tinta
  * de Alerta. Os selos de estado da Saude seguem a mesma conta: atencao e texto
  * de Alerta sobre tinta de Alerta, e critico e um selo cheio de Erro com o
  * texto da cor de destaque, porque texto vermelho sobre tinta vermelha fica
- * abaixo de 4,5:1 no tema claro.
+ * abaixo de 4,5:1 no tema claro. Os selos de situacao da Auditoria usam a mesma
+ * conta, para Negado e Erro se destacarem de Concluido, que e a maioria das
+ * linhas e fica discreto. Antes as tres classes nao existiam e os selos saiam
+ * iguais, sem cor nenhuma.
  */
 
 const AA_TEXTO_NORMAL = 4.5
@@ -225,6 +230,15 @@ describe('selos da tela de Permissões — WCAG 2.2 AA', () => {
         .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
       expect(contraste(paleta.accentSecondary, fundoParcial)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
     })
+
+    for (const fundo of FUNDOS) {
+      it(`na legenda, o texto do valor parcial entrega 4,5:1 sobre ${fundo} no tema ${tema}`, () => {
+        const paleta = getDefaultBranding(tema)
+        const tinta = sobre(paleta.accentSecondary, paleta[fundo], Number(parcial[1]) / 100)
+
+        expect(contraste(paleta.accentSecondary, tinta)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      })
+    }
   }
 })
 
@@ -267,6 +281,36 @@ describe('selos de estado na Saúde — WCAG 2.2 AA', () => {
       const fundoAtencao = sobre(paleta.accentWarning, paleta.bgCard, Number(atencao[1]) / 100)
 
       expect(contraste(paleta.accentWarning, fundoAtencao)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentError))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+describe('selos de situação na Auditoria — WCAG 2.2 AA', () => {
+  const inicio = console_.indexOf('\n.status-badge {')
+  const selo = console_.slice(inicio, console_.indexOf('\n}', inicio))
+  const concluido = selo.match(
+    /&--ok\s*\{[^}]*color:\s*var\(--accent-secondary\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-secondary\) (\d+)%/
+  )
+  const negado = selo.match(
+    /&--negado\s*\{[^}]*color:\s*var\(--accent-warning\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/
+  )
+
+  it('concluído é discreto, negado é tinta de Alerta e erro é Erro cheio', () => {
+    expect(concluido).not.toBeNull()
+    expect(negado).not.toBeNull()
+    expect(selo).toMatch(/&--erro\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-error\)/)
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos três selos entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundoConcluido = sobre(paleta.accentSecondary, paleta.bgCard, Number(concluido[1]) / 100)
+      const fundoNegado = sobre(paleta.accentWarning, paleta.bgCard, Number(negado[1]) / 100)
+
+      expect(contraste(paleta.accentSecondary, fundoConcluido)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(paleta.accentWarning, fundoNegado)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
       expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentError))
         .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
     })

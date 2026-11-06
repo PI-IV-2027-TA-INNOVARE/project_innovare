@@ -6,17 +6,21 @@ Um caso de uso por classe, com `execute()`. O servico nao conhece `request`,
 """
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import FinalidadeToken, TokenAcesso, Usuario
+from apps.accounts.models import FinalidadeToken, SituacaoConta, TokenAcesso, Usuario
 from apps.accounts.services.email import EnviadorDeEmail, EnviadorDjango
-from apps.audit.models import CategoriaEvento, StatusEvento
+from apps.audit.models import CategoriaEvento, EventoAuditoria, StatusEvento
 from apps.audit.services import registrar_evento
 from core.exceptions import ErroDeDominio
+
+ATOR_NAO_IDENTIFICADO = 'não identificado'
 
 
 def encerrar_sessoes(usuario: Usuario) -> None:
@@ -177,6 +181,61 @@ class RegistrarAcessoService:
             detalhe={'papel': usuario.papel},
         )
         return usuario
+
+
+def _email_digitado(texto: str) -> str:
+    """
+    O que veio no campo de e-mail, so se for um e-mail que caiba na trilha.
+
+    Ha quem digite a senha no campo errado, e a trilha nao guarda credencial.
+    """
+    try:
+        validate_email(texto)
+    except ValidationError:
+        return ATOR_NAO_IDENTIFICADO
+
+    limite = EventoAuditoria._meta.get_field('ator').max_length
+
+    return texto if len(texto) <= limite else ATOR_NAO_IDENTIFICADO
+
+
+class RegistrarEntradaRecusadaService:
+    """
+    Deixa na trilha a tentativa de entrada que nao passou.
+
+    A resposta ao formulario nao muda: o motivo fica so para o Administrador, e
+    o formulario publico continua sem dizer quais e-mails estao cadastrados.
+    """
+
+    def execute(self, credencial: object) -> None:
+        email = str(credencial or '').strip().lower()
+        usuario = Usuario.objects.filter(email=email).first()
+
+        if usuario is None:
+            registrar_evento(
+                categoria=CategoriaEvento.CONTA,
+                tipo='login_recusado',
+                entidade='usuario',
+                entidade_id='desconhecido',
+                ator=_email_digitado(email),
+                status=StatusEvento.NEGADO,
+                motivo='E-mail sem conta correspondente.',
+            )
+            return
+
+        registrar_evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='login_recusado',
+            entidade='usuario',
+            entidade_id=usuario.id_usuario,
+            ator=usuario.email,
+            status=StatusEvento.NEGADO,
+            motivo=(
+                'Senha incorreta.'
+                if usuario.situacao == SituacaoConta.ATIVO
+                else f'Situação da conta: {usuario.get_situacao_display()}.'
+            ),
+        )
 
 
 class EncerrarSessaoService:

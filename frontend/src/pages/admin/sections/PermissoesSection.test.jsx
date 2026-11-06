@@ -87,6 +87,28 @@ describe('PermissoesSection', () => {
     expect(screen.getByText('Deslize a tabela para o lado para ver os quatro perfis.')).toBeInTheDocument()
   })
 
+  it('cada termo da legenda usa o mesmo selo que aparece na tabela', () => {
+    const { container } = render(<PermissoesSection />)
+    const tabela = screen.getByRole('table')
+
+    const selos = [...container.querySelectorAll('.permissoes__notas dt .permissoes__valor')]
+
+    expect(selos.map((selo) => selo.textContent)).toEqual(['Acompanha', 'Próprias', 'Administrativo'])
+
+    for (const selo of selos) {
+      expect(selo.className).toBe(within(tabela).getByText(selo.textContent).className)
+    }
+  })
+
+  it('quem usa teclado alcança a área que rola a tabela', () => {
+    render(<PermissoesSection />)
+
+    const area = screen.getByRole('region', { name: 'Tabela de permissões' })
+
+    expect(area).toHaveAttribute('tabindex', '0')
+    expect(within(area).getByRole('table')).toBeInTheDocument()
+  })
+
   it('deixa claro que a tela é somente leitura', () => {
     render(<PermissoesSection />)
 

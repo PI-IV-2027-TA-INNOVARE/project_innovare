@@ -12,7 +12,7 @@ from datetime import date
 from django.db.models import Q, QuerySet
 
 from apps.audit.models import CategoriaEvento, EventoAuditoria
-from apps.audit.rotulos import ROTINA_OCULTA
+from apps.audit.rotulos import ROTINA_OCULTA, eventos_com_o_rotulo
 
 
 def trilha(
@@ -30,8 +30,8 @@ def trilha(
     existe para ver a plataforma inteira. O recorte por oportunidade vive na
     aba Historico, que tem rota propria e filtra por entidade.
 
-    `busca` cobre o ator (e-mail ou nome), o tipo, o id gravado e a
-    oportunidade (codigo ou titulo) - o que a tela mostra de cada linha.
+    `busca` cobre o ator (e-mail ou nome), o evento (pelo nome que a tela mostra
+    ou pelo tipo gravado), o id gravado e a oportunidade (codigo ou titulo).
 
     Login e logout bem-sucedidos so aparecem com a categoria "Conta e acesso"
     escolhida: sao a maior parte da trilha e nada dizem sobre o fluxo. Entrada
@@ -68,6 +68,7 @@ def trilha(
             | Q(ator__in=Usuario.objects.filter(nome__icontains=termo).values('email'))
             | Q(entidade_id__icontains=termo)
             | Q(tipo__icontains=termo)
+            | eventos_com_o_rotulo(termo)
             | Q(oportunidade__codigo__icontains=termo)
             | Q(oportunidade__titulo__icontains=termo)
         )

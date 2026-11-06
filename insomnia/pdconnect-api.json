@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b7a1f0c2-5d64-4f3a-9c58-0f1a2b3c4d5e",
     "name": "P&D Connect API",
-    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular) e conferida contra ele em 25/10/2026: todas as rotas da API estao aqui.\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: docker compose up, ou python manage.py runserver (127.0.0.1:8000).\n2. Num banco local, semeie as contas: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. O access volta no corpo; no Postman o script o guarda em access_token, e no Insomnia, sem o script, cole o access na variavel. O refresh vai num cookie HttpOnly, que os dois clientes guardam e mandam sozinhos em \"Renova o access\" e em \"Logout\".\n4. Ajuste usuario_id, membro_id, codigo, anexo_id, competencia_id, membro_equipe_id, recomendacao_id e notificacao_id para registros do seu banco - os valores do arquivo sao exemplos.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos as rotas publicas (login, renovacao, tema, contatos de suporte e aviso de privacidade).\n\nPermissoes por ator: o Administrador nao entra no fluxo das oportunidades; o Demandante ve so as oportunidades da empresa e, nos anexos, so o que a empresa enviou; o Pesquisador da equipe le os anexos, mas so o Supervisor e o Demandante enviam.",
+    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular). Em 05/11/2026 foi conferida contra o schema e reproduzida contra a API: todas as rotas estao aqui.\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: docker compose up, ou python manage.py runserver (127.0.0.1:8000).\n2. Num banco local, semeie as contas: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. O access volta no corpo; no Postman o script o guarda em access_token, e no Insomnia, sem o script, cole o access na variavel. O refresh vai num cookie HttpOnly, que os dois clientes guardam e mandam sozinhos em \"Renova o access\" e em \"Logout\".\n4. Ajuste usuario_id, membro_id, codigo, anexo_id, competencia_id, membro_equipe_id, recomendacao_id e notificacao_id para registros do seu banco - os valores do arquivo sao exemplos.\n5. Os corpos ja sao exemplos validos, prontos para rodar. Eles gravam de verdade: troque o texto antes, se quiser outro conteudo, e num PATCH mande so o que muda, porque campo enviado vazio pode apagar o que estava salvo.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos as rotas publicas (login, renovacao, esqueci minha senha, redefinicao, leitura do tema e dos contatos de suporte, e aviso de privacidade). /schema/ e /docs/ abrem sem login so em desenvolvimento; em producao pedem o token do Administrador.\n\nPermissoes por ator: o Administrador nao entra no fluxo das oportunidades; o Demandante ve so as oportunidades da empresa e, nos anexos, so o que a empresa enviou; o Pesquisador da equipe le os anexos, mas so o Supervisor e o Demandante enviam.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -40,10 +40,10 @@
                 ""
               ]
             },
-            "description": "`POST /api/auth/change-password/` - troca de senha com a sessao ativa.\n\noperationId: auth_change_password_create",
+            "description": "A senha muda de verdade: depois de rodar, atualize a variavel senha ou rode semear_dev de novo.\n\n`POST /api/auth/change-password/` - troca de senha com a sessao ativa.\n\noperationId: auth_change_password_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"senha_atual\": \"\",\n  \"nova_senha\": \"\",\n  \"confirmar_senha\": \"\"\n}",
+              "raw": "{\n  \"senha_atual\": \"{{senha}}\",\n  \"nova_senha\": \"NovaSenha#2026ac2\",\n  \"confirmar_senha\": \"NovaSenha#2026ac2\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -161,10 +161,10 @@
                 ""
               ]
             },
-            "description": "`POST /api/auth/reset-password/` - vale para recuperacao e primeiro acesso.\n\noperationId: auth_reset_password_create",
+            "description": "O token vem no link do e-mail, que em desenvolvimento sai no console do backend. Sem um token de verdade, a resposta e 400 token_invalido.\n\n`POST /api/auth/reset-password/` - vale para recuperacao e primeiro acesso.\n\noperationId: auth_reset_password_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"\",\n  \"nova_senha\": \"\",\n  \"confirmar_senha\": \"\"\n}",
+              "raw": "{\n  \"token\": \"cole-aqui-o-token-do-link-do-email\",\n  \"nova_senha\": \"NovaSenha#2026ac2\",\n  \"confirmar_senha\": \"NovaSenha#2026ac2\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -335,7 +335,7 @@
                 {
                   "key": "situacao",
                   "value": "",
-                  "description": "ativo | inativo",
+                  "description": "ativo | inativo | suspenso",
                   "disabled": true
                 },
                 {
@@ -381,10 +381,10 @@
                 ""
               ]
             },
-            "description": "`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_create",
+            "description": "Demandante: e-mail e cnpj, e nome_empresa quando a empresa ainda nao esta cadastrada; o nome da conta e o da empresa. Supervisor e Administrador: nome e e-mail, sem cnpj e sem nome_empresa. Pesquisador e recusado: entra pela rede, pelo Supervisor.\n\n`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel\": \"demandante\",\n  \"organizacao\": 0\n}",
+              "raw": "{\n  \"email\": \"pessoa@empresa.com.br\",\n  \"papel\": \"demandante\",\n  \"cnpj\": \"11222333000181\",\n  \"nome_empresa\": \"Agroindustria Vale Verde\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -433,10 +433,10 @@
                 ""
               ]
             },
-            "description": "`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_partial_update",
+            "description": "Mande so o que muda. Campos: nome, email, papel, organizacao; cnpj e nome_empresa para o Demandante. A situacao tem rota propria.\n\n`/api/usuarios/` - administracao de contas.\n\nSo o Administrador opera (`CONTEXT.md` secao 3). Ele provisiona quem opera\na plataforma; quem faz ciencia entra pela rede interna, pelo Supervisor.\n\noperationId: usuarios_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"\",\n  \"email\": \"pessoa@ac2.com.br\",\n  \"papel\": \"demandante\",\n  \"organizacao\": 0\n}",
+              "raw": "{\n  \"nome\": \"Nome corrigido\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -466,7 +466,7 @@
           }
         },
         {
-          "name": "Ativa ou inativa a conta",
+          "name": "Ativa, inativa ou suspende a conta",
           "request": {
             "method": "POST",
             "header": [
@@ -487,7 +487,7 @@
                 ""
               ]
             },
-            "description": "Ativar, inativar ou suspender. Vale na requisicao seguinte.\n\noperationId: usuarios_situacao_create",
+            "description": "situacao: ativo | inativo | suspenso.\n\nAtivar, inativar ou suspender. Vale na requisicao seguinte.\n\noperationId: usuarios_situacao_create",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"situacao\": \"ativo\"\n}",
@@ -505,7 +505,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/usuarios/empresa/?cnpj=00000000000191",
+              "raw": "{{baseUrl}}/usuarios/empresa/?cnpj=11222333000181",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -517,12 +517,12 @@
               "query": [
                 {
                   "key": "cnpj",
-                  "value": "00000000000191",
+                  "value": "11222333000181",
                   "description": "so os 14 digitos"
                 }
               ]
             },
-            "description": "A empresa demandante do CNPJ, para preencher o nome no cadastro.\n\noperationId: usuarios_empresa_retrieve"
+            "description": "O CNPJ do exemplo e o da empresa criada por semear_dev.\n\nA empresa demandante do CNPJ, para preencher o nome no cadastro.\n\noperationId: usuarios_empresa_retrieve"
           }
         },
         {
@@ -574,19 +574,25 @@
                 {
                   "key": "situacao",
                   "value": "",
-                  "description": "com_acesso | sem_acesso | inativo",
+                  "description": "ativo | sem_acesso | inativo",
                   "disabled": true
                 },
                 {
                   "key": "disponibilidade",
                   "value": "",
-                  "description": "disponivel | parcial | indisponivel",
+                  "description": "integral | parcial | pontual | indisponivel",
                   "disabled": true
                 },
                 {
                   "key": "busca",
                   "value": "",
                   "description": "alcanca nome e competencia",
+                  "disabled": true
+                },
+                {
+                  "key": "ordenar",
+                  "value": "",
+                  "description": "nome | papel | titulacao | situacao | disponibilidade; com - na frente, em ordem decrescente",
                   "disabled": true
                 },
                 {
@@ -604,6 +610,25 @@
               ]
             },
             "description": "`/api/rede/` - a rede interna da AC2 (RF02).\n\nConsultar vale para Supervisor e Pesquisador; cadastrar e editar e so do\nSupervisor (RN-A04 / D06). Nao ha DELETE: quem sai da rede muda de\n`situacao`, e o historico de quem participou do que precisa do registro.\n\noperationId: rede_list"
+          }
+        },
+        {
+          "name": "Resumo da rede (numeros do topo)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/resumo/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "resumo",
+                ""
+              ]
+            },
+            "description": "Os numeros do topo da tela, sobre a rede inteira e nao sobre a pagina.\n\noperationId: rede_resumo_retrieve"
           }
         },
         {
@@ -711,6 +736,46 @@
           }
         },
         {
+          "name": "Inativa o membro",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/{{membro_id}}/inativar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "{{membro_id}}",
+                "inativar",
+                ""
+              ]
+            },
+            "description": "Sai das proximas rodadas de matching e perde o login (P3).\n\noperationId: rede_inativar_create"
+          }
+        },
+        {
+          "name": "Reativa o membro",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rede/{{membro_id}}/reativar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rede",
+                "{{membro_id}}",
+                "reativar",
+                ""
+              ]
+            },
+            "description": "Volta ao matching e, se tinha conta, ao login (P3).\n\noperationId: rede_reativar_create"
+          }
+        },
+        {
           "name": "Meu perfil na rede",
           "request": {
             "method": "GET",
@@ -804,7 +869,7 @@
                 {
                   "key": "situacao",
                   "value": "",
-                  "description": "entrada | estruturacao | ... | arquivada",
+                  "description": "entrada | estruturacao | competencias | matching | pre_analise | aguardando_decisao | continuar | revisar | arquivada",
                   "disabled": true
                 },
                 {
@@ -829,6 +894,18 @@
                   "key": "cadastrada_ate",
                   "value": "",
                   "description": "AAAA-MM-DD, inclusivo; data malformada ou anterior a inicial devolve 400",
+                  "disabled": true
+                },
+                {
+                  "key": "prioridade",
+                  "value": "",
+                  "description": "alta | media | baixa; nao vale para o Demandante",
+                  "disabled": true
+                },
+                {
+                  "key": "ordenar",
+                  "value": "",
+                  "description": "prioridade; nao vale para o Demandante",
                   "disabled": true
                 },
                 {
@@ -868,10 +945,10 @@
                 ""
               ]
             },
-            "description": "`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_create",
+            "description": "responsavel e opcional: o id_membro de um Supervisor da rede.\n\n`/api/oportunidades/` - o registro central do sistema (RF01).\n\nA URL usa o codigo (`OP-2026-014`), nao a PK: e o identificador que o\ncliente le, diz e digita.\n\noperationId: oportunidades_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"titulo\": \"\",\n  \"resumo\": \"\",\n  \"contexto\": \"\",\n  \"responsavel\": 0\n}",
+              "raw": "{\n  \"titulo\": \"Bioinsumo para cana-de-acucar\",\n  \"resumo\": \"Controle biologico de pragas na cana.\",\n  \"contexto\": \"A usina quer reduzir o uso de defensivos quimicos e busca um bioinsumo viavel para a regiao.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -920,10 +997,10 @@
                 ""
               ]
             },
-            "description": "Edicao do contexto pelo Supervisor (PB20).\n\n`get_object()` uma vez so. Chamado duas vezes, eram dois `SELECT`\nidenticos na mesma requisicao e - o que pesa mais que o custo - duas\ninstancias do mesmo registro: a que o serializer validou e a que o\nservice gravou.\n\noperationId: oportunidades_partial_update",
+            "description": "Mande so o que muda. Campos: titulo, resumo, contexto, responsavel.\n\nEdicao do contexto pelo Supervisor (PB20).\n\n`get_object()` uma vez so. Chamado duas vezes, eram dois `SELECT`\nidenticos na mesma requisicao e - o que pesa mais que o custo - duas\ninstancias do mesmo registro: a que o serializer validou e a que o\nservice gravou.\n\noperationId: oportunidades_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"titulo\": \"\",\n  \"resumo\": \"\",\n  \"contexto\": \"\",\n  \"responsavel\": 0\n}",
+              "raw": "{\n  \"resumo\": \"Controle biologico da broca-da-cana.\",\n  \"contexto\": \"A usina quer reduzir o uso de defensivos quimicos e busca um bioinsumo viavel para a regiao.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1022,7 +1099,7 @@
             "description": "Resposta do Demandante ao pedido de revisao (PB27).\n\noperationId: oportunidades_complementar_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"texto\": \"\"\n}",
+              "raw": "{\n  \"texto\": \"Segue a analise de solo da safra passada, pedida na revisao.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1053,10 +1130,10 @@
                 ""
               ]
             },
-            "description": "Continuar, Revisar ou Arquivar - com justificativa (RN-A07).\n\noperationId: oportunidades_decisao_create",
+            "description": "tipo: continuar | revisar | arquivar. Continuar e Revisar so valem em Aguardando decisao; antes disso, a resposta e 409.\n\nContinuar, Revisar ou Arquivar - com justificativa (RN-A07).\n\noperationId: oportunidades_decisao_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tipo\": \"continuar\",\n  \"justificativa\": \"\"\n}",
+              "raw": "{\n  \"tipo\": \"continuar\",\n  \"justificativa\": \"Proposta madura e equipe completa para avancar.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1141,10 +1218,10 @@
                 ""
               ]
             },
-            "description": "A Proposta Estruturada da oportunidade (RF04).\n\nOs tres metodos moram numa action so de proposito: o router cria uma\nrota por action, e duas actions no mesmo `url_path` deixam a primeira\nregistrada respondendo 405 as demais. Quem pode o que esta em\n`get_permissions`, que aqui ramifica pelo metodo.\n\noperationId: oportunidades_proposta_partial_update",
+            "description": "Mande so o que muda: campo enviado vazio apaga o que estava salvo. Campos: problema_pesquisa, hipotese, objetivo_geral, objetivos_especificos (lista), metodologia, resultados_esperados, caracterizacao_inovacao, infraestrutura_recursos.\n\nA Proposta Estruturada da oportunidade (RF04).\n\nOs tres metodos moram numa action so de proposito: o router cria uma\nrota por action, e duas actions no mesmo `url_path` deixam a primeira\nregistrada respondendo 405 as demais. Quem pode o que esta em\n`get_permissions`, que aqui ramifica pelo metodo.\n\noperationId: oportunidades_proposta_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"problema_pesquisa\": \"\",\n  \"hipotese\": \"\",\n  \"objetivo_geral\": \"\",\n  \"objetivos_especificos\": [],\n  \"metodologia\": \"\",\n  \"resultados_esperados\": \"\",\n  \"caracterizacao_inovacao\": \"\",\n  \"infraestrutura_recursos\": \"\"\n}",
+              "raw": "{\n  \"metodologia\": \"Ensaios em triplicata em casa de vegetacao.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1200,7 +1277,7 @@
                 "description": "Nota do Supervisor durante a avaliacao (PB65).\n\nSo escrita: a leitura e a aba Historico, porque a nota mora na trilha.\nDuas rotas para a mesma verdade divergem no primeiro mes.\n\noperationId: oportunidades_observacoes_create",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"texto\": \"\"\n}",
+                  "raw": "{\n  \"texto\": \"Conversar com o Demandante sobre o prazo da safra.\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1234,7 +1311,41 @@
                 "description": "Pedido de informacao complementar ao Demandante (PB26).\n\nSo escrita, como a observacao: o pedido mora na trilha, e a leitura e a\naba Historico. Duas rotas para a mesma verdade divergem no primeiro mes.\n\noperationId: oportunidades_solicitar_complemento_create",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"mensagem\": \"\"\n}",
+                  "raw": "{\n  \"mensagem\": \"Envie os dados de producao da ultima safra.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Define a prioridade",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/oportunidades/{{codigo}}/prioridade/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "oportunidades",
+                    "{{codigo}}",
+                    "prioridade",
+                    ""
+                  ]
+                },
+                "description": "prioridade: alta | media | baixa.\n\nAlta, Media ou Baixa na fila do Supervisor (PB61).\n\noperationId: oportunidades_prioridade_create",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"prioridade\": \"alta\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1356,7 +1467,7 @@
                 "description": "A resposta humana as perguntas orientadoras (PB39).\n\noperationId: oportunidades_copiloto_responder_create",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"texto\": \"\"\n}",
+                  "raw": "{\n  \"texto\": \"O problema e a perda de produtividade causada pela broca-da-cana.\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1369,12 +1480,7 @@
               "name": "Inicia a proposta estruturada",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
+                "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/oportunidades/{{codigo}}/proposta/",
                   "host": [
@@ -1387,16 +1493,7 @@
                     ""
                   ]
                 },
-                "description": "A Proposta Estruturada da oportunidade (RF04).\n\nOs tres metodos moram numa action so de proposito: o router cria uma\nrota por action, e duas actions no mesmo `url_path` deixam a primeira\nregistrada respondendo 405 as demais. Quem pode o que esta em\n`get_permissions`, que aqui ramifica pelo metodo.\n\noperationId: oportunidades_proposta_create",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"problema_pesquisa\": \"\",\n  \"hipotese\": \"\",\n  \"objetivo_geral\": \"\",\n  \"objetivos_especificos\": \"\",\n  \"metodologia\": \"\",\n  \"resultados_esperados\": \"\",\n  \"caracterizacao_inovacao\": \"\",\n  \"infraestrutura_recursos\": \"\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
+                "description": "So inicia a proposta: nao recebe corpo. O conteudo entra depois, pelo PATCH.\n\nA Proposta Estruturada da oportunidade (RF04).\n\nOs tres metodos moram numa action so de proposito: o router cria uma\nrota por action, e duas actions no mesmo `url_path` deixam a primeira\nregistrada respondendo 405 as demais. Quem pode o que esta em\n`get_permissions`, que aqui ramifica pelo metodo.\n\noperationId: oportunidades_proposta_create"
               }
             }
           ]
@@ -1449,7 +1546,7 @@
                 "description": "As Competencias Necessarias da proposta (RF05).\n\noperationId: oportunidades_competencias_create",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"descricao\": \"\",\n  \"nivel_importancia\": \"essencial\"\n}",
+                  "raw": "{\n  \"descricao\": \"Microbiologia de alimentos\",\n  \"nivel_importancia\": \"essencial\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1505,7 +1602,7 @@
                 "description": "A revisao humana de uma competencia derivada (PB42).\n\noperationId: oportunidades_competencias_partial_update",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"descricao\": \"\",\n  \"nivel_importancia\": \"essencial\"\n}",
+                  "raw": "{\n  \"descricao\": \"Microbiologia de solos\",\n  \"nivel_importancia\": \"essencial\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1866,7 +1963,7 @@
             "description": "A correcao humana do resumo da entrada, que orienta a estruturacao.\n\noperationId: oportunidades_copiloto_sintese_partial_update",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sintese\": \"\"\n}",
+              "raw": "{\n  \"sintese\": \"A usina busca um bioinsumo para controlar a broca-da-cana.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1902,7 +1999,7 @@
             "description": "Grava no elemento o texto que a IA sugeriu e o Supervisor aceitou.\n\noperationId: oportunidades_copiloto_sugestoes_aceitar_create",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"elemento\": \"metodologia\",\n  \"texto\": \"\"\n}",
+              "raw": "{\n  \"elemento\": \"metodologia\",\n  \"texto\": \"Ensaios em triplicata em casa de vegetacao.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1942,7 +2039,12 @@
           "name": "Altera o tema (Administrador)",
           "request": {
             "method": "PATCH",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/configuracoes/tema/",
               "host": [
@@ -1954,7 +2056,16 @@
                 ""
               ]
             },
-            "description": "`/api/configuracoes/tema/` - a paleta da organizacao.\n\nO GET e publico de proposito: a tela de login precisa pintar a marca antes\nde existir JWT. O PATCH e do Administrador e recebe o **diff**, nunca o\ndocumento inteiro - duas abas abertas nao se sobrescrevem.\n\noperationId: configuracoes_tema_partial_update"
+            "description": "Mande so o que muda: light e dark, cada um com o token e a cor em hexadecimal; null desfaz a cor. O exemplo grava o laranja padrao.\n\n`/api/configuracoes/tema/` - a paleta da organizacao.\n\nO GET e publico de proposito: a tela de login precisa pintar a marca antes\nde existir JWT. O PATCH e do Administrador e recebe o **diff**, nunca o\ndocumento inteiro - duas abas abertas nao se sobrescrevem.\n\noperationId: configuracoes_tema_partial_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"light\": {\n    \"accentPrimary\": \"#E07B1A\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
@@ -2153,6 +2264,26 @@
               "path": [
                 "notificacoes",
                 ""
+              ],
+              "query": [
+                {
+                  "key": "apenas_nao_lidas",
+                  "value": "",
+                  "description": "true | false",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
+                  "disabled": true
+                }
               ]
             },
             "description": "`GET /api/notificacoes/` - o que avisaram a quem esta autenticado.\n\noperationId: notificacoes_list"
@@ -2251,7 +2382,7 @@
                 {
                   "key": "busca",
                   "value": "",
-                  "description": "pessoa (e-mail ou nome), tipo do evento, id gravado, codigo ou titulo da oportunidade",
+                  "description": "pessoa (e-mail ou nome), nome ou tipo do evento, id gravado, codigo ou titulo da oportunidade",
                   "disabled": true
                 },
                 {
@@ -2270,6 +2401,12 @@
                   "key": "page",
                   "value": "",
                   "description": "pagina",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "itens por pagina",
                   "disabled": true
                 }
               ]
@@ -2415,9 +2552,6 @@
           "request": {
             "method": "GET",
             "header": [],
-            "auth": {
-              "type": "noauth"
-            },
             "url": {
               "raw": "{{baseUrl}}/schema/",
               "host": [
@@ -2428,7 +2562,7 @@
                 ""
               ]
             },
-            "description": "Especificacao OpenAPI 3 servida pelo drf-spectacular."
+            "description": "Em desenvolvimento abre sem login; em producao, so com o token do Administrador.\n\nEspecificacao OpenAPI 3 servida pelo drf-spectacular."
           }
         },
         {
@@ -2436,9 +2570,6 @@
           "request": {
             "method": "GET",
             "header": [],
-            "auth": {
-              "type": "noauth"
-            },
             "url": {
               "raw": "{{baseUrl}}/docs/",
               "host": [
@@ -2449,7 +2580,7 @@
                 ""
               ]
             },
-            "description": "Documentacao navegavel da API."
+            "description": "Em desenvolvimento abre sem login; em producao, so com o token do Administrador.\n\nDocumentacao navegavel da API."
           }
         }
       ]

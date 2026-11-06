@@ -267,6 +267,9 @@ def _alvo(evento, registros, ator_usuario_id) -> Alvo:
     if evento.entidade == 'usuario' and evento.entidade_id == ator_usuario_id:
         return Alvo('A própria conta')
 
+    if evento.entidade == 'usuario' and evento.entidade_id == 'desconhecido':
+        return Alvo('E-mail sem conta')
+
     registro = registros.get(evento.entidade, {}).get(str(evento.entidade_id))
 
     if registro is None:

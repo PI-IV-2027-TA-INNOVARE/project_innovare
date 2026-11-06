@@ -47,7 +47,12 @@ export default function PermissoesSection() {
         Deslize a tabela para o lado para ver os quatro perfis.
       </p>
 
-      <div className="permissoes__rolagem">
+      <div
+        className="permissoes__rolagem"
+        role="region"
+        aria-label="Tabela de permissões"
+        tabIndex={0}
+      >
         <table className="permissoes__tabela">
           <caption className="permissoes__legenda">
             Quem pode fazer o quê na plataforma
@@ -79,15 +84,15 @@ export default function PermissoesSection() {
 
       <dl className="permissoes__notas">
         <div>
-          <dt>Acompanha</dt>
+          <dt><ValorDaMatriz valor="Acompanha" /></dt>
           <dd>Vê o andamento, sem executar a ação.</dd>
         </div>
         <div>
-          <dt>Próprias</dt>
+          <dt><ValorDaMatriz valor="Próprias" /></dt>
           <dd>As oportunidades da própria empresa, mesmo as cadastradas por outro Demandante dela.</dd>
         </div>
         <div>
-          <dt>Administrativo</dt>
+          <dt><ValorDaMatriz valor="Administrativo" /></dt>
           <dd>Consulta para auditoria, sem conduzir o fluxo científico.</dd>
         </div>
       </dl>

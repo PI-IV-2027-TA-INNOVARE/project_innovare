@@ -243,6 +243,108 @@ describe('Console — Auditoria', () => {
     )
   })
 
+  it('pede a primeira página e diz o total de eventos', async () => {
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
+    render(<AuditoriaSection />)
+
+    expect(await screen.findByText('119 eventos')).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 3')).toBeInTheDocument()
+    expect(api.listarTrilha).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 50 })
+    )
+  })
+
+  it('o total respeita o singular', async () => {
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 1, results: [EVENTOS[0]] })
+    render(<AuditoriaSection />)
+
+    expect(await screen.findByText('1 evento')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /próxima página/i })).not.toBeInTheDocument()
+  })
+
+  it('leva às páginas seguintes, para nenhum evento antigo ficar fora de alcance', async () => {
+    const user = userEvent.setup({ delay: null })
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
+    render(<AuditoriaSection />)
+    await screen.findByText('Entrada recusada')
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    )
+    expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument()
+  })
+
+  it('mudar um filtro volta para a primeira página', async () => {
+    const user = userEvent.setup({ delay: null })
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
+    render(<AuditoriaSection />)
+    await screen.findByText('Entrada recusada')
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await screen.findByText('Página 2 de 3')
+
+    await user.selectOptions(screen.getByLabelText(/categoria/i), 'conta')
+
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(
+        expect.objectContaining({ categoria: 'conta', page: 1 })
+      )
+    )
+  })
+
+  it('aplicar e limpar também voltam para a primeira página', async () => {
+    const user = userEvent.setup({ delay: null })
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
+    render(<AuditoriaSection />)
+    await screen.findByText('Entrada recusada')
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await screen.findByText('Página 2 de 3')
+    await user.type(screen.getByLabelText(/buscar/i), 'Rafael')
+    await user.click(screen.getByRole('button', { name: /aplicar/i }))
+
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busca: 'Rafael', page: 1 })
+      )
+    )
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await screen.findByText('Página 2 de 3')
+    await user.click(screen.getByRole('button', { name: /^limpar$/i }))
+
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, page_size: 50 })
+      )
+    )
+    expect(api.listarTrilha.mock.lastCall[0]).not.toHaveProperty('busca')
+  })
+
+  it('resposta atrasada de uma página anterior não substitui a mais recente', async () => {
+    const user = userEvent.setup({ delay: null })
+    let responderPrimeira
+    api.listarTrilha = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 119, results: EVENTOS })
+      .mockImplementationOnce(() => new Promise((resolve) => { responderPrimeira = resolve }))
+      .mockResolvedValueOnce({ count: 119, results: [EVENTOS[1]] })
+    render(<AuditoriaSection />)
+    await screen.findByText('Entrada recusada')
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await screen.findByText('Oportunidade cadastrada')
+
+    responderPrimeira({ count: 119, results: [EVENTOS[0]] })
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+
+    expect(screen.queryByText('Entrada recusada')).not.toBeInTheDocument()
+    expect(screen.getByText('Oportunidade cadastrada')).toBeInTheDocument()
+  })
+
   it('não oferece nenhuma ação de escrita sobre a trilha', async () => {
     render(<AuditoriaSection />)
     await screen.findByText('Entrada recusada')

@@ -96,6 +96,15 @@ class LoginTests(TestCase):
 
         self.assertEqual(resposta.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_entrar_com_sucesso_nao_grava_entrada_recusada(self):
+        self.client.post(
+            reverse('auth-token'),
+            {'email': self.usuario.email, 'password': SENHA},
+            format='json',
+        )
+
+        self.assertFalse(EventoAuditoria.objects.filter(tipo='login_recusado').exists())
+
     def test_suspensao_invalida_token_ja_emitido(self):
         """
         A tela de admin oferece "suspender" como acao imediata. Sem verificacao

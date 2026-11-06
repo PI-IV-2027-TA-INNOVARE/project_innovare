@@ -8,7 +8,7 @@ from django.db.models.functions import Cast
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status, views, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -43,6 +43,7 @@ from apps.accounts.services.acesso import (
     EncerrarSessaoService,
     RedefinirSenhaService,
     RegistrarAcessoService,
+    RegistrarEntradaRecusadaService,
     SolicitarRecuperacaoSenhaService,
 )
 from apps.accounts.services.titular import (
@@ -92,6 +93,9 @@ class LoginView(TokenObtainPairView):
             serializer.is_valid(raise_exception=True)
         except TokenError as exc:
             raise InvalidToken(exc.args[0]) from exc
+        except AuthenticationFailed:
+            RegistrarEntradaRecusadaService().execute(request.data.get('email'))
+            raise
 
         RegistrarAcessoService().execute(serializer.user)
 
