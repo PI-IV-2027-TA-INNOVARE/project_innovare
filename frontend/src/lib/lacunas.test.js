@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLacuna, rotuloDoCriterio } from './lacunas'
+import { agruparPorLacuna, rotuloDoCriterio, separarDescricao } from './lacunas'
 
 describe('lacunas', () => {
   it('põe cada recomendação sob a lacuna que ela resolve', () => {
@@ -27,10 +27,16 @@ describe('lacunas', () => {
     expect(soltas).toHaveLength(1)
   })
 
-  it('cita o critério pelo código e pelo nome, ou diz que não há evidência', () => {
+  it('cita o critério pelo nome com o código em segundo plano, ou diz que não há evidência', () => {
     expect(rotuloDoCriterio({ criterio_codigo: 'A3', criterio_rotulo: 'Metodologia adequada' }))
-      .toBe('A3 · Metodologia adequada')
+      .toBe('Metodologia adequada (A3)')
     expect(rotuloDoCriterio({ criterio_codigo: 'A3', criterio_rotulo: null })).toBe('A3')
     expect(rotuloDoCriterio({ criterio_codigo: null })).toBe('Sem evidência na proposta')
+  })
+
+  it('separa o nome do critério da pergunta que ele faz', () => {
+    expect(separarDescricao('Metodologia adequada — A metodologia é adequada aos objetivos?'))
+      .toEqual({ titulo: 'Metodologia adequada', pergunta: 'A metodologia é adequada aos objetivos?' })
+    expect(separarDescricao('Metodologia adequada')).toEqual({ titulo: 'Metodologia adequada', pergunta: '' })
   })
 })

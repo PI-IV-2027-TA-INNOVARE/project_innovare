@@ -13,8 +13,9 @@ import { describe, expect, it } from 'vitest'
  *
  * Os estados seguem as cores de estado da paleta: atencao em Alerta e critico
  * em Erro. Antes os dois usavam o laranja da marca no selo e na barra, e o
- * critico so ficava vermelho no cartao da verificacao. No celular, a coluna do
- * provedor fica presa quando a tabela rola, e uma dica avisa que ha mais colunas.
+ * critico so ficava vermelho no cartao da verificacao. Os provedores eram uma
+ * tabela de sete colunas que rolava para o lado no celular; com mais de um
+ * provedor, cada provedor e modelo virou um cartao que cabe em qualquer largura.
  */
 
 const admin = readFileSync(
@@ -61,10 +62,9 @@ describe('seção Saúde', () => {
     expect(estados).not.toMatch(/accent-primary|border-accent/)
   })
 
-  it('a coluna do provedor fica presa quando a tabela rola, e a dica só aparece na tela estreita', () => {
-    expect(bloco('.saude__tabela th:first-child')).toMatch(/position:\s*sticky/)
-    expect(bloco('.saude__tabela th:first-child')).toMatch(/background:\s*var\(--bg-card\)/)
-    expect(bloco('.saude__dica')).toMatch(/display:\s*none/)
-    expect(admin).toMatch(/@media \(max-width: 760px\)\s*\{[^@]*\.saude__dica\s*\{[^}]*display:\s*block/)
+  it('os provedores são cartões que se ajeitam na largura, sem tabela nem dica de rolagem', () => {
+    expect(admin).not.toMatch(/\.saude__tabela|\.saude__dica/)
+    expect(bloco('.saude__provedor-numeros')).toMatch(/grid-template-columns:\s*repeat\(auto-fit, minmax\(/)
+    expect(bloco('.saude__provedor-modelo')).toMatch(/overflow-wrap:\s*anywhere/)
   })
 })

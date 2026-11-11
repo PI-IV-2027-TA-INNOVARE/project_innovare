@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import VerDetalhes from '../../../components/console/VerDetalhes'
-import { OPERACOES_DE_IA } from '../../../lib/glossario'
+import { DESCRICOES_DAS_OPERACOES, OPERACOES_DE_IA } from '../../../lib/glossario'
 import { Icone, appIcons } from '../../../lib/icons'
 import { obterSaudeDaPlataforma } from '../../../services/pdConnectApi'
 
@@ -39,6 +39,30 @@ const SITUACOES_DA_EXECUCAO = {
   erro: 'com erro',
   pendente: 'aguardando',
   executando: 'em andamento',
+}
+
+const PAPEIS_DOS_PROVEDORES = {
+  principal: 'Principal',
+  reserva: 'Reserva',
+  fora_de_uso: 'Fora de uso',
+}
+
+const EXPLICACAO_DOS_PAPEIS = {
+  principal: 'o principal responde a todos os pedidos',
+  reserva: 'a reserva só responde quando o principal falha',
+  fora_de_uso: 'fora de uso é quem respondeu neste mês, mas deixou de ser usado',
+}
+
+const AJUDA_DOS_NUMEROS_DA_IA = {
+  erros:
+    'O provedor estava fora do ar, recusou o pedido, demorou demais mesmo tentando de novo, ou respondeu algo que a plataforma não conseguiu ler.',
+  fallbacks: 'A tela continuou sem a sugestão da IA.',
+  tokensEnviados:
+    'Texto que a plataforma mandou para a IA. Token é um pedaço de palavra, e é por ele que o provedor cobra.',
+  tokensRecebidos: 'Texto que a IA devolveu, também medido em tokens.',
+  contexto: 'Quanto texto vai, em média, em cada uso.',
+  versao:
+    'Muda quando a equipe de desenvolvimento do P&D Connect ajusta o que a plataforma pede à IA.',
 }
 
 const MILHAR = new Intl.NumberFormat('pt-BR')
@@ -82,6 +106,21 @@ function reais(valor) {
   if (valor === null || valor === undefined) return '—'
 
   return `R$ ${Number(valor).toFixed(2).replace('.', ',')}`
+}
+
+function emUso(provedor) {
+  return provedor.papel === 'principal' || provedor.papel === 'reserva'
+}
+
+function temPreco(provedor) {
+  return (
+    (provedor.preco_entrada_brl_por_milhao || 0) > 0 ||
+    (provedor.preco_saida_brl_por_milhao || 0) > 0
+  )
+}
+
+function nomeDoProvedor(provedor) {
+  return provedor.modelo ? `${provedor.rotulo} · ${provedor.modelo}` : provedor.rotulo
 }
 
 /**
@@ -155,6 +194,18 @@ function Verificacao({ id, pergunta, resposta, tom = 'neutro', children }) {
   )
 }
 
+function estaLenta(desempenho) {
+  return (desempenho?.p90_ms || 0) > (desempenho?.limite_ms || Infinity)
+}
+
+function acimaDoLimite(desempenho) {
+  const acima = desempenho.acima_do_limite || 0
+
+  return `${contagem(acima)} das últimas ${plural(desempenho.amostras, 'ação', 'ações')} ${
+    acima === 1 ? 'passou' : 'passaram'
+  } de ${segundos(desempenho.limite_ms)}.`
+}
+
 function Velocidade({ desempenho, erro }) {
   const pergunta = 'A plataforma está respondendo rápido?'
   const id = 'saude-velocidade'
@@ -179,40 +230,38 @@ function Velocidade({ desempenho, erro }) {
   }
 
   const acima = desempenho.acima_do_limite || 0
-  const lenta = acima > 0
+  const lenta = estaLenta(desempenho)
 
   return (
     <Verificacao
       id={id}
       pergunta={pergunta}
-      resposta={lenta ? 'Lenta em alguns momentos' : 'Sim, está rápida'}
+      resposta={lenta ? 'Não, está lenta' : 'Sim, está rápida'}
       tom={lenta ? 'atencao' : 'ok'}
     >
       <Medidor
-        rotulo="Tempo de resposta"
+        rotulo="9 em cada 10 ações responderam em até"
         valor={proporcao(desempenho.p90_ms, desempenho.limite_ms)}
         maximo={100}
         tom={lenta ? 'atencao' : 'ok'}
+        legenda={`O aceitável é até ${segundos(desempenho.limite_ms)}.`}
       >
-        {segundos(desempenho.p90_ms)} de {segundos(desempenho.limite_ms)}
+        {segundos(desempenho.p90_ms)}
       </Medidor>
 
-      <p className="saude__nota">
-        9 em cada 10 ações responderam em até {segundos(desempenho.p90_ms)} — o
-        aceitável é até {segundos(desempenho.limite_ms)}.
-      </p>
-
-      {lenta ? (
+      {acima > 0 ? (
         <p className="saude__nota">
-          {plural(acima, 'ação demorou', 'ações demoraram')} mais de{' '}
-          {segundos(desempenho.limite_ms)}. Se a lentidão continuar, avise o
-          suporte técnico.
+          {acimaDoLimite(desempenho)}
+          {lenta
+            ? ' Se a lentidão continuar, avise o suporte técnico.'
+            : ' É pontual: 9 em cada 10 ações seguem dentro do aceitável.'}
         </p>
       ) : null}
 
       <p className="saude__fonte">
-        Medido em {plural(desempenho.amostras, 'ação', 'ações')} desde o último
-        reinício do servidor.
+        Medido nas últimas {plural(desempenho.amostras, 'ação', 'ações')}, sem
+        contar a espera pela IA. A medida recomeça quando a plataforma é
+        reiniciada.
       </p>
     </Verificacao>
   )
@@ -247,6 +296,14 @@ function Dados({ banco, erro }) {
   )
 }
 
+function consequenciaDaFalha(provedores) {
+  if (provedores?.some((provedor) => provedor.papel === 'reserva')) {
+    return '. Nesses casos a reserva tenta responder; se também falhar, a tela segue sem a sugestão da IA.'
+  }
+
+  return ', e a tela seguiu sem a sugestão da IA.'
+}
+
 function InteligenciaArtificial({ ia, erro }) {
   const pergunta = 'A IA está disponível?'
   const id = 'saude-ia'
@@ -278,15 +335,16 @@ function InteligenciaArtificial({ ia, erro }) {
     )
   }
 
-  const falhas = Math.max(ia.erros || 0, ia.fallbacks || 0)
+  const falhas = ia.falhas || 0
 
   if (falhas > 0) {
     return (
       <Verificacao id={id} pergunta={pergunta} resposta="Com falhas" tom="atencao">
         <p className="saude__nota">
-          {contagem(falhas)} dos {contagem(ia.chamadas)} usos deste mês
-          falharam, e a tela seguiu sem a sugestão da IA. Se isso se repetir,
-          avise o suporte técnico.
+          {contagem(falhas)} dos {contagem(ia.chamadas)} usos deste mês{' '}
+          {falhas === 1 ? 'falhou' : 'falharam'}
+          {consequenciaDaFalha(ia.provedores)} Se isso se repetir, avise
+          o suporte técnico.
         </p>
       </Verificacao>
     )
@@ -298,6 +356,56 @@ function InteligenciaArtificial({ ia, erro }) {
         {plural(ia.chamadas, 'uso', 'usos')} neste mês,{' '}
         {ia.chamadas === 1 ? 'concluído' : 'todos concluídos'}.
       </p>
+    </Verificacao>
+  )
+}
+
+function ComparacaoComARede({ comparacao, erro }) {
+  const pergunta = 'A comparação com a rede está funcionando?'
+  const id = 'saude-comparacao'
+
+  if (erro || !comparacao) {
+    return (
+      <Verificacao id={id} pergunta={pergunta} resposta="Não foi possível verificar">
+        <p className="saude__erro">{erro || 'Informação indisponível.'}</p>
+      </Verificacao>
+    )
+  }
+
+  const peso = `${Math.round((comparacao.peso_na_nota || 0) * 100)}% da nota`
+  const rodadas = comparacao.rodadas_no_mes || 0
+  const semAfinidade = comparacao.rodadas_sem_afinidade || 0
+
+  let resposta = 'Sim, funcionando'
+  let tom = 'ok'
+  let situacao = `${plural(rodadas, 'rodada', 'rodadas')} de matching neste mês, ${
+    rodadas === 1 ? 'com' : 'todas com'
+  } a afinidade com o tema.`
+
+  if (!comparacao.ligada) {
+    resposta = 'Desligada'
+    tom = 'atencao'
+    situacao = `O matching sugere pesquisadores sem a afinidade com o tema, que vale ${peso}. Peça à equipe de desenvolvimento do P&D Connect para ligar.`
+  } else if (semAfinidade > 0) {
+    resposta = 'Com falhas'
+    tom = 'atencao'
+    situacao = `${contagem(semAfinidade)} das ${plural(rodadas, 'rodada', 'rodadas')} de matching deste mês ${
+      semAfinidade === 1 ? 'saiu' : 'saíram'
+    } sem a afinidade com o tema, que vale ${peso}. Se isso se repetir, avise o suporte técnico.`
+  } else if (!rodadas) {
+    resposta = 'Sim, ligada'
+    situacao = 'Nenhuma rodada de matching neste mês.'
+  }
+
+  return (
+    <Verificacao id={id} pergunta={pergunta} resposta={resposta} tom={tom}>
+      <p className="saude__nota">{situacao}</p>
+      <p className="saude__nota">{DESCRICOES_DAS_OPERACOES.embedding}</p>
+      {comparacao.ultimo_calculo ? (
+        <p className="saude__fonte">
+          Último cálculo: {dataEHora(comparacao.ultimo_calculo)}.
+        </p>
+      ) : null}
     </Verificacao>
   )
 }
@@ -324,7 +432,8 @@ function TarefasEmSegundoPlano({ jobs }) {
  *
  * As tarefas em segundo plano so entram quando existem ou quando o ambiente as
  * espera: nenhum requisito da baseline as pede, e um cartao que nunca muda e
- * sobre o qual ninguem age e ruido. O motivo fica nos detalhes tecnicos.
+ * sobre o qual ninguem age e ruido. Pela mesma razao, os detalhes tecnicos so
+ * falam delas quando eram esperadas e nao estao rodando.
  */
 function Verificacoes({ dados }) {
   const { jobs } = dados
@@ -343,6 +452,7 @@ function Verificacoes({ dados }) {
         <Velocidade desempenho={dados.desempenho} erro={dados.desempenho_erro} />
         <Dados banco={dados.banco} erro={dados.banco_erro} />
         <InteligenciaArtificial ia={dados.ia} erro={dados.ia_erro} />
+        <ComparacaoComARede comparacao={dados.comparacao} erro={dados.comparacao_erro} />
         {jobs?.configurado || jobs?.esperada ? (
           <TarefasEmSegundoPlano jobs={jobs} />
         ) : null}
@@ -375,13 +485,8 @@ function problemas({ desempenho, jobs, banco }) {
     )
   }
 
-  const acima = desempenho?.acima_do_limite || 0
-
-  if (acima > 0) {
-    achados.push(
-      `${plural(acima, 'ação demorou', 'ações demoraram')} mais de ` +
-        `${segundos(desempenho.limite_ms)} desde o último reinício do servidor.`
-    )
+  if (estaLenta(desempenho)) {
+    achados.push(`A plataforma está lenta: ${acimaDoLimite(desempenho)}`)
   }
 
   return achados
@@ -404,11 +509,139 @@ function Achados({ dados }) {
   )
 }
 
-function Metrica({ rotulo, children }) {
+function Metrica({ rotulo, ajuda, children }) {
   return (
     <div className="saude__metrica">
       <dt>{rotulo}</dt>
       <dd>{children}</dd>
+      {ajuda ? <dd className="saude__metrica-ajuda">{ajuda}</dd> : null}
+    </div>
+  )
+}
+
+function papelDoProvedor(provedor) {
+  if (provedor.papel === 'sem_uso') {
+    return provedor.configurado ? 'Disponível' : 'Não configurado'
+  }
+
+  return PAPEIS_DOS_PROVEDORES[provedor.papel] || provedor.papel
+}
+
+function explicacaoDosPapeis(provedores) {
+  const frases = Object.keys(EXPLICACAO_DOS_PAPEIS)
+    .filter((papel) => provedores.some((provedor) => provedor.papel === papel))
+    .map((papel) => EXPLICACAO_DOS_PAPEIS[papel])
+    .join('; ')
+
+  return frases ? `${frases.charAt(0).toUpperCase()}${frases.slice(1)}.` : ''
+}
+
+function custoDoProvedor(provedor) {
+  return provedor.custo_apurado ? reais(provedor.custo_estimado_brl) : 'não calculado'
+}
+
+function Numero({ rotulo, children }) {
+  return (
+    <div className="saude__provedor-numero">
+      <dt>{rotulo}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+function Provedor({ provedor }) {
+  return (
+    <li className="saude__provedor">
+      <div className="saude__provedor-cabeca">
+        <p className="saude__provedor-nome">
+          <span>{provedor.rotulo}</span>
+          <span className="saude__provedor-modelo">
+            {provedor.modelo || 'modelo não informado'}
+          </span>
+        </p>
+
+        <span className={`saude__papel saude__papel--${provedor.papel}`}>
+          {papelDoProvedor(provedor)}
+        </span>
+
+        {emUso(provedor) && !provedor.configurado ? (
+          <span className="saude__provedor-aviso">não configurado</span>
+        ) : null}
+      </div>
+
+      {provedor.chamadas ? (
+        <dl className="saude__provedor-numeros">
+          <Numero rotulo="Usos">{contagem(provedor.chamadas)}</Numero>
+          <Numero rotulo="Falhas">{contagem(provedor.falhas || 0)}</Numero>
+          <Numero rotulo="Custo">{custoDoProvedor(provedor)}</Numero>
+          <Numero rotulo="Tempo médio">{segundos(provedor.latencia_media_ms)}</Numero>
+        </dl>
+      ) : (
+        <p className="saude__nota saude__provedor-vazio">Sem uso neste mês.</p>
+      )}
+    </li>
+  )
+}
+
+/**
+ * Um cartao por provedor e modelo, na ordem que a API manda: principal,
+ * reserva, fora de uso.
+ *
+ * Os registrados sem papel nem uso nao ajudam a ler o mes e ficam a um
+ * clique. O preco de cada um fica nos detalhes para o suporte tecnico.
+ */
+function Provedores({ provedores }) {
+  if (!provedores?.length) return null
+
+  const visiveis = provedores.filter((provedor) => provedor.papel !== 'sem_uso')
+  const semUso = provedores.filter((provedor) => provedor.papel === 'sem_uso')
+
+  return (
+    <div className="saude__provedores">
+      <h4 className="saude__subtitulo">Provedores de IA neste mês</h4>
+      <p className="saude__nota">
+        Cada provedor e modelo aparece com o próprio consumo: quem respondeu,
+        quem falhou e quanto custou. {explicacaoDosPapeis(visiveis)}
+      </p>
+
+      <ul className="saude__provedores-lista" aria-label="Consumo do mês por provedor de IA">
+        {visiveis.map((provedor) => (
+          <Provedor key={`${provedor.nome}:${provedor.modelo}`} provedor={provedor} />
+        ))}
+      </ul>
+
+      {semUso.length ? (
+        <VerDetalhes
+          className="saude__provedores-sem-uso"
+          rotulo={`${plural(semUso.length, 'outro provedor', 'outros provedores')} sem uso neste mês`}
+          rotuloAberto="Ocultar provedores sem uso"
+        >
+          <ul className="saude__provedores-lista" aria-label="Provedores sem uso neste mês">
+            {semUso.map((provedor) => (
+              <Provedor key={`${provedor.nome}:${provedor.modelo}`} provedor={provedor} />
+            ))}
+          </ul>
+        </VerDetalhes>
+      ) : null}
+    </div>
+  )
+}
+
+function AvisoDePreco({ provedores }) {
+  const ativos = (provedores || []).filter(emUso)
+  const semPreco = ativos.filter((provedor) => !temPreco(provedor))
+
+  if (!semPreco.length) return null
+
+  const texto =
+    semPreco.length === ativos.length
+      ? 'A tabela de preço da IA está vazia. Sem ela o custo de cada uso não é calculado, e os limites de gasto, do mês e por oportunidade, não bloqueiam nada. Peça a quem mantém o servidor para preencher o preço do provedor.'
+      : `Falta o preço de ${semPreco.map(nomeDoProvedor).join(' e ')}. Os usos dele não têm custo calculado e não contam para os limites de gasto, do mês e por oportunidade. Peça a quem mantém o servidor para preencher o preço.`
+
+  return (
+    <div className="admin-callout admin-callout--alerta">
+      <Icone icon={appIcons.warning} className="admin-callout__icon" />
+      <p className="admin-callout__text">{texto}</p>
     </div>
   )
 }
@@ -417,69 +650,8 @@ function Metrica({ rotulo, children }) {
  * O consumo do mes — o protagonista da tela (plano 5.3).
  *
  * `gastoPorOperacao` atende "custo estimado por fluxo": o total do mes nao
- * responde onde cortar gasto, e o corte por operacao sim. `temTabelaDePreco`
- * controla a regua: sem o preco que produziu o numero, o gasto nao se
- * interpreta.
+ * responde onde cortar gasto, e o corte por operacao sim.
  */
-function Provedores({ provedores }) {
-  if (!provedores?.length) return null
-
-  return (
-    <div className="saude__provedores">
-      <h4 className="saude__subtitulo">Provedores de IA neste mês</h4>
-      <p className="saude__nota">
-        Cada provedor registrado aparece com o próprio consumo. Assim dá para
-        ver quem respondeu, quem falhou e quanto cada um custou.
-      </p>
-
-      <p className="saude__dica">
-        Deslize a tabela para o lado para ver todas as colunas.
-      </p>
-
-      <div className="saude__tabela-rolagem">
-        <table className="saude__tabela">
-          <caption className="saude__fonte">
-            Consumo do mês por provedor de IA
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Provedor</th>
-              <th scope="col">Papel</th>
-              <th scope="col">Modelo</th>
-              <th scope="col">Usos</th>
-              <th scope="col">Falhas</th>
-              <th scope="col">Custo</th>
-              <th scope="col">Tempo médio</th>
-            </tr>
-          </thead>
-          <tbody>
-            {provedores.map((provedor) => (
-              <tr key={provedor.nome}>
-                <th scope="row">
-                  {provedor.rotulo}
-                  {provedor.configurado ? null : (
-                    <span className="saude__tabela-aviso">sem chave</span>
-                  )}
-                </th>
-                <td>{provedor.papel}</td>
-                <td>{provedor.modelo || '—'}</td>
-                <td>{contagem(provedor.chamadas)}</td>
-                <td>{contagem((provedor.erros || 0) + (provedor.fallbacks || 0))}</td>
-                <td>
-                  {provedor.custo_apurado
-                    ? reais(provedor.custo_estimado_brl)
-                    : 'sem apuração'}
-                </td>
-                <td>{milissegundos(provedor.latencia_media_ms)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
 function Consumo({ ia, erro }) {
   if (erro || !ia) {
     return (
@@ -498,16 +670,6 @@ function Consumo({ ia, erro }) {
   const gastoPorOperacao = Object.entries(ia.custo_por_tipo || {}).sort(
     (a, b) => b[1] - a[1]
   )
-
-  const temTabelaDePreco =
-    (ia.preco_entrada_brl_por_milhao || 0) > 0 ||
-    (ia.preco_saida_brl_por_milhao || 0) > 0
-
-  const ultimoUso = ia.ultima_execucao
-    ? `${ROTULOS_DAS_OPERACOES[ia.ultima_execucao.tipo] || ia.ultima_execucao.tipo} · ${
-        SITUACOES_DA_EXECUCAO[ia.ultima_execucao.status] || ia.ultima_execucao.status
-      }`
-    : 'nenhum'
 
   return (
     <section className="saude__consumo" aria-labelledby="saude-consumo">
@@ -578,30 +740,11 @@ function Consumo({ ia, erro }) {
           )}
         </p>
 
-        {temTabelaDePreco ? (
-          <p className="saude__barra-legenda">
-            Calculado com o preço do provedor:{' '}
-            {reais(ia.preco_entrada_brl_por_milhao)} por milhão de tokens
-            enviados e {reais(ia.preco_saida_brl_por_milhao)} por milhão de
-            tokens recebidos.
-          </p>
-        ) : null}
-
         {estado.explicacao ? (
           <p className="saude__nota">{estado.explicacao}</p>
         ) : null}
 
-        {!temTabelaDePreco ? (
-          <div className="admin-callout admin-callout--alerta">
-            <Icone icon={appIcons.warning} className="admin-callout__icon" />
-            <p className="admin-callout__text">
-              A tabela de preço da IA está vazia. Sem ela o custo de cada uso não é
-              calculado, e os limites de gasto, do mês e por oportunidade, não
-              bloqueiam nada. Peça a quem mantém o servidor para preencher o preço
-              do provedor.
-            </p>
-          </div>
-        ) : null}
+        <AvisoDePreco provedores={ia.provedores} />
       </div>
 
       <Provedores provedores={ia.provedores} />
@@ -610,8 +753,15 @@ function Consumo({ ia, erro }) {
         <ul className="saude__gasto" aria-label="Gasto por operação no mês">
           {gastoPorOperacao.map(([tipo, valor]) => (
             <li className="saude__gasto-item" key={tipo}>
-              <span className="saude__gasto-rotulo">
-                {ROTULOS_DAS_OPERACOES[tipo] || tipo}
+              <span className="saude__gasto-texto">
+                <span className="saude__gasto-rotulo">
+                  {ROTULOS_DAS_OPERACOES[tipo] || tipo}
+                </span>
+                {DESCRICOES_DAS_OPERACOES[tipo] ? (
+                  <span className="saude__gasto-descricao">
+                    {DESCRICOES_DAS_OPERACOES[tipo]}
+                  </span>
+                ) : null}
               </span>
               <span className="saude__gasto-valor">{reais(valor)}</span>
             </li>
@@ -619,15 +769,11 @@ function Consumo({ ia, erro }) {
         </ul>
       ) : null}
 
-      <dl className="saude__complemento">
-        <Metrica rotulo="Modelo de IA">
-          {ia.provedor_configurado ? ia.modelo : 'sem chave configurada'}
-        </Metrica>
-        {mostrarValor ? (
+      {mostrarValor ? (
+        <dl className="saude__complemento">
           <Metrica rotulo="Usos no mês">{contagem(ia.chamadas)}</Metrica>
-        ) : null}
-        <Metrica rotulo="Último uso">{ultimoUso}</Metrica>
-      </dl>
+        </dl>
+      ) : null}
     </section>
   )
 }
@@ -660,11 +806,13 @@ function RevisaoHumana({ revisao }) {
   return (
     <section className="saude__revisao" aria-labelledby="saude-revisao">
       <h3 className="saude__titulo" id="saude-revisao">
-        As sugestões da IA estão passando por pessoas?
+        As sugestões da plataforma estão passando por pessoas?
       </h3>
       <p className="saude__descricao">
-        A IA só sugere — quem decide é a equipe. Cada barra mostra quanto do que
-        a IA gerou já foi conferido por alguém.
+        A plataforma só sugere — quem decide é a equipe. Cada barra mostra quanto
+        do que ela sugeriu já foi conferido por alguém, com ou sem a IA, desde o
+        começo do uso da plataforma, e não só neste mês. Por isso as barras
+        podem ter números mesmo num mês em que a IA não foi usada.
       </p>
 
       {linhas.length ? (
@@ -683,8 +831,8 @@ function RevisaoHumana({ revisao }) {
         </div>
       ) : (
         <p className="saude__nota">
-          A IA ainda não gerou nada para revisar. Quando gerar, a proporção
-          aparece aqui.
+          A plataforma ainda não sugeriu nada para revisar. Quando sugerir, a
+          proporção aparece aqui.
         </p>
       )}
     </section>
@@ -714,30 +862,78 @@ function DetalhesDeTempo({ desempenho, erro }) {
   )
 }
 
+function dataEHora(iso) {
+  if (!iso) return ''
+
+  return new Date(iso)
+    .toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    .replace(', ', ' às ')
+}
+
+function ultimoUso(execucao) {
+  if (!execucao) return 'nenhum'
+
+  return [
+    ROTULOS_DAS_OPERACOES[execucao.tipo] || execucao.tipo,
+    SITUACOES_DA_EXECUCAO[execucao.status] || execucao.status,
+    dataEHora(execucao.criado_em),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function DetalhesDaIA({ ia, erro }) {
   if (erro) return <p className="saude__erro">{erro}</p>
 
   if (!ia?.chamadas) {
     return (
-      <p className="saude__nota">
-        Sem uso de IA neste mês: não há erro nem token para mostrar.
-      </p>
+      <>
+        <p className="saude__nota">
+          A IA não foi usada neste mês, então não há falhas nem consumo para
+          mostrar.
+        </p>
+        {ia?.ultima_execucao ? (
+          <p className="saude__fonte">
+            Último uso: {ultimoUso(ia.ultima_execucao)}.{' '}
+            {DESCRICOES_DAS_OPERACOES[ia.ultima_execucao.tipo]}
+          </p>
+        ) : null}
+      </>
     )
   }
 
   return (
     <>
-      <dl className="saude__metricas">
-        <Metrica rotulo="Usos com erro">{contagem(ia.erros)}</Metrica>
-        <Metrica rotulo="Usos que seguiram sem IA">{contagem(ia.fallbacks)}</Metrica>
-        <Metrica rotulo="Tokens enviados">{contagem(ia.tokens_entrada)}</Metrica>
-        <Metrica rotulo="Tokens recebidos">{contagem(ia.tokens_saida)}</Metrica>
-        <Metrica rotulo="Tamanho médio de cada pedido">
+      <dl className="saude__metricas saude__metricas--explicadas">
+        <Metrica rotulo="Usos com erro" ajuda={AJUDA_DOS_NUMEROS_DA_IA.erros}>
+          {contagem(ia.erros)}
+        </Metrica>
+        <Metrica rotulo="Usos que seguiram sem IA" ajuda={AJUDA_DOS_NUMEROS_DA_IA.fallbacks}>
+          {contagem(ia.fallbacks)}
+        </Metrica>
+        <Metrica rotulo="Tokens enviados" ajuda={AJUDA_DOS_NUMEROS_DA_IA.tokensEnviados}>
+          {contagem(ia.tokens_entrada)}
+        </Metrica>
+        <Metrica rotulo="Tokens recebidos" ajuda={AJUDA_DOS_NUMEROS_DA_IA.tokensRecebidos}>
+          {contagem(ia.tokens_saida)}
+        </Metrica>
+        <Metrica rotulo="Tamanho médio de cada pedido" ajuda={AJUDA_DOS_NUMEROS_DA_IA.contexto}>
           {ia.contexto_medio_tokens === null || ia.contexto_medio_tokens === undefined
             ? '—'
             : `${contagem(ia.contexto_medio_tokens)} tokens`}
         </Metrica>
-        <Metrica rotulo="Versão do prompt">
+        <Metrica
+          rotulo="Último uso"
+          ajuda={DESCRICOES_DAS_OPERACOES[ia.ultima_execucao?.tipo]}
+        >
+          {ultimoUso(ia.ultima_execucao)}
+        </Metrica>
+        <Metrica rotulo="Versão das instruções da IA" ajuda={AJUDA_DOS_NUMEROS_DA_IA.versao}>
           {ia.ultima_execucao?.versao_prompt || '—'}
         </Metrica>
       </dl>
@@ -756,6 +952,63 @@ function DetalhesDaIA({ ia, erro }) {
  * le as verificacoes acima, e o suporte tecnico abre isto quando precisa do
  * milissegundo, do token e da versao do prompt.
  */
+function precoDoProvedor(provedor) {
+  if (!temPreco(provedor)) return 'sem preço configurado'
+
+  return `${reais(provedor.preco_entrada_brl_por_milhao)} enviados · ${reais(
+    provedor.preco_saida_brl_por_milhao
+  )} recebidos`
+}
+
+function PrecosDosProvedores({ provedores }) {
+  const comPapelOuUso = (provedores || []).filter(
+    (provedor) => provedor.papel !== 'sem_uso'
+  )
+
+  if (!comPapelOuUso.length) return null
+
+  return (
+    <section className="saude__bloco-tecnico" aria-labelledby="saude-precos">
+      <h4 className="saude__subtitulo" id="saude-precos">
+        Preço de cada provedor
+      </h4>
+      <dl className="saude__metricas">
+        {comPapelOuUso.map((provedor) => (
+          <Metrica
+            key={`${provedor.nome}:${provedor.modelo}`}
+            rotulo={nomeDoProvedor(provedor)}
+          >
+            {precoDoProvedor(provedor)}
+          </Metrica>
+        ))}
+      </dl>
+      <p className="saude__fonte">
+        Preço por milhão de tokens, usado para calcular o custo de cada uso.
+      </p>
+    </section>
+  )
+}
+
+function DetalhesDaComparacao({ comparacao }) {
+  if (!comparacao?.modelo) return null
+
+  return (
+    <section className="saude__bloco-tecnico" aria-labelledby="saude-comparacao-detalhes">
+      <h4 className="saude__subtitulo" id="saude-comparacao-detalhes">
+        Comparação com a rede
+      </h4>
+      <dl className="saude__metricas saude__metricas--explicadas">
+        <Metrica
+          rotulo="Modelo"
+          ajuda="Roda na própria plataforma: o texto dos perfis e das competências não sai para nenhum provedor."
+        >
+          {comparacao.modelo}
+        </Metrica>
+      </dl>
+    </section>
+  )
+}
+
 function DetalhesTecnicos({ dados }) {
   return (
     <section className="saude__detalhes">
@@ -785,7 +1038,11 @@ function DetalhesTecnicos({ dados }) {
             <DetalhesDaIA ia={dados.ia} erro={dados.ia_erro} />
           </div>
 
-          {dados.jobs && !dados.jobs.configurado ? (
+          <PrecosDosProvedores provedores={dados.ia?.provedores} />
+
+          <DetalhesDaComparacao comparacao={dados.comparacao} />
+
+          {dados.jobs?.esperada && !dados.jobs.configurado ? (
             <div className="saude__bloco-tecnico">
               <h4 className="saude__subtitulo">Tarefas em segundo plano</h4>
               <p className="saude__nota">{dados.jobs.motivo}</p>

@@ -34,6 +34,13 @@ def contatos_vigentes() -> list[dict]:
     return gravados or [dict(contato) for contato in CONTATOS_PADRAO]
 
 
+def contatos_com_origem() -> list[dict]:
+    """Os contatos vigentes e se sao o padrao da AC2: so ha o que restaurar se algo foi gravado."""
+    padrao = not ContatoSuporte.objects.filter(ativo=True).exists()
+
+    return [{**contato, 'padrao': padrao} for contato in contatos_vigentes()]
+
+
 def encarregado_de_dados() -> dict | None:
     """
     O encarregado de dados (LGPD, art. 41), se a AC2 ja o indicou.
@@ -78,7 +85,7 @@ class SubstituirContatosService:
             'contatos_suporte_alterados', ator, [contato['email'] for contato in contatos]
         )
 
-        return contatos_vigentes()
+        return contatos_com_origem()
 
 
 class RestaurarContatosService:
@@ -91,4 +98,4 @@ class RestaurarContatosService:
             [contato['email'] for contato in CONTATOS_PADRAO],
         )
 
-        return contatos_vigentes()
+        return contatos_com_origem()

@@ -12,7 +12,9 @@ O que estes testes protegem, em ordem de importancia:
 
 Provedor sempre duble (AGENTS.md 0.1).
 """
+import copy
 import tempfile
+from datetime import date
 
 from django.db import connection
 from django.test import TestCase, override_settings
@@ -47,6 +49,7 @@ from core.tests.dubles import (
     ProvedorFake,
     ProvedorIndisponivel,
     ProvedorQueObservaATransacao,
+    BASE_PIPE_MINIMA,
     escrever_base_pipe,
 )
 
@@ -160,9 +163,24 @@ class CriteriosTests(PreAnaliseBaseTests):
         self.importar_criterios()
         resultado = self.importar_criterios()
 
-        self.assertEqual(resultado['atualizados'], 2)
+        self.assertEqual(resultado['atualizados'], 0)
         self.assertEqual(CriterioPreAnalise.objects.count(), 2)
         self.assertEqual(VersaoCriterio.objects.count(), 1)
+
+    def test_so_conta_como_revisado_o_criterio_cujo_texto_mudou(self):
+        """Antes, reimportar sem mudanca dizia "2 revisados" - e nada mudara."""
+        self.importar_criterios()
+        dados = copy.deepcopy(BASE_PIPE_MINIMA)
+        dados['criteria_8_5'][0]['label'] = 'Metodologia revisada'
+        self.base = escrever_base_pipe(self.diretorio.name, dados)
+
+        resultado = self.importar_criterios()
+
+        self.assertEqual(resultado['atualizados'], 1)
+        self.assertEqual(
+            CriterioPreAnalise.objects.get(codigo='A3').descricao,
+            'Metodologia revisada — A metodologia e adequada aos objetivos?',
+        )
 
     def test_base_ausente_e_conflito_explicado(self):
         with override_settings(
@@ -203,6 +221,169 @@ class CriteriosTests(PreAnaliseBaseTests):
                 'Viabilidade',
             ],
         )
+
+
+class SituacaoDaBaseTests(PreAnaliseBaseTests):
+    """
+    O arquivo da base PIPE comparado com a versao em uso.
+
+    E o que a tela de Parametros mostra antes de o Administrador ativar uma
+    versao: ativar muda a regua de todas as pre-analises seguintes, entao ele
+    precisa ver o que entra, o que muda e o que sai antes de confirmar.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.como(self.administrador)
+
+    def usar_base(self, dados):
+        self.base = escrever_base_pipe(self.diretorio.name, dados)
+
+    def situacao(self):
+        with override_settings(BASE_CONHECIMENTO_PIPE=self.base):
+            base_conhecimento.cache_clear()
+            return self.client.get(reverse('ia-criterios-arquivo'))
+
+    def base_com(self, **mudancas):
+        dados = copy.deepcopy(BASE_PIPE_MINIMA)
+        dados.update(mudancas)
+
+        return dados
+
+    def test_sem_versao_em_uso_tudo_e_novo_e_ha_o_que_ativar(self):
+        resposta = self.situacao()
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertTrue(resposta.data['disponivel'])
+        self.assertTrue(resposta.data['pendente'])
+        self.assertIsNone(resposta.data['versao_em_uso'])
+        self.assertEqual(resposta.data['versao_do_arquivo'], 'V9')
+        self.assertEqual(
+            resposta.data['novos'],
+            [
+                {'codigo': 'A3', 'titulo': 'Metodologia adequada'},
+                {'codigo': 'F1', 'titulo': 'Infraestrutura compativel'},
+            ],
+        )
+        self.assertEqual(resposta.data['sem_dimensao'], ['ZZ9'])
+
+    def test_depois_de_ativar_o_mesmo_arquivo_nao_ha_nada_pendente(self):
+        self.importar_criterios()
+
+        resposta = self.situacao()
+
+        self.assertFalse(resposta.data['pendente'])
+        self.assertEqual(resposta.data['versao_em_uso'], 'V9')
+        self.assertEqual(resposta.data['novos'], [])
+        self.assertEqual(resposta.data['alterados'], [])
+        self.assertEqual(resposta.data['removidos'], [])
+
+    def test_versao_nova_mostra_o_que_entra_o_que_muda_e_o_que_sai(self):
+        self.importar_criterios()
+        criterios = copy.deepcopy(BASE_PIPE_MINIMA['criteria_8_5'])
+        criterios[0]['label'] = 'Metodologia revisada'
+        criterios[1] = {
+            'id': 'B1',
+            'component': 'Equipe',
+            'label': 'Lideranca tecnica',
+            'evaluation_question': 'Ha quem lidere?',
+        }
+        self.usar_base(
+            self.base_com(
+                versioning=[{'version': 'V10', 'status': 'ATIVA'}],
+                criteria_8_5=criterios,
+            )
+        )
+
+        resposta = self.situacao()
+
+        self.assertTrue(resposta.data['pendente'])
+        self.assertEqual(resposta.data['versao_do_arquivo'], 'V10')
+        self.assertEqual(resposta.data['versao_em_uso'], 'V9')
+        self.assertEqual(
+            resposta.data['novos'], [{'codigo': 'B1', 'titulo': 'Lideranca tecnica'}]
+        )
+        self.assertEqual(
+            resposta.data['alterados'], [{'codigo': 'A3', 'titulo': 'Metodologia revisada'}]
+        )
+        self.assertEqual(
+            resposta.data['removidos'],
+            [{'codigo': 'F1', 'titulo': 'Infraestrutura compativel'}],
+        )
+
+    def test_na_mesma_versao_nada_sai_porque_a_importacao_nao_apaga(self):
+        """Reativar a mesma versao revisa texto; criterio que sumiu do arquivo fica."""
+        self.importar_criterios()
+        criterios = copy.deepcopy(BASE_PIPE_MINIMA['criteria_8_5'])
+        criterios[0]['label'] = 'Metodologia revisada'
+        del criterios[1]
+        self.usar_base(self.base_com(criteria_8_5=criterios))
+
+        resposta = self.situacao()
+
+        self.assertTrue(resposta.data['pendente'])
+        self.assertEqual(
+            resposta.data['alterados'], [{'codigo': 'A3', 'titulo': 'Metodologia revisada'}]
+        )
+        self.assertEqual(resposta.data['removidos'], [])
+
+    def test_diz_de_qual_chamada_a_base_veio(self):
+        dados = self.base_com()
+        dados['metadata']['call'] = '1ª Rodada 2026 — Chamada FAPESP 33/2026'
+        self.usar_base(dados)
+
+        resposta = self.situacao()
+
+        self.assertEqual(resposta.data['chamada'], '1ª Rodada 2026 — Chamada FAPESP 33/2026')
+
+    def test_revisao_prevista_pela_propria_base_e_avisada_com_a_data(self):
+        """A base registra a V3 "15/09/2026 ou apos": o Administrador precisa saber."""
+        versioning = copy.deepcopy(BASE_PIPE_MINIMA['versioning']) + [
+            {
+                'version': 'V10 planejada',
+                'date': '15/09/2020 ou após',
+                'change': 'Reavaliar novas Normas PIPE.',
+                'status': 'PENDENTE',
+            }
+        ]
+        self.usar_base(self.base_com(versioning=versioning))
+
+        revisao = self.situacao().data['revisao_prevista']
+
+        self.assertEqual(revisao['data'], date(2020, 9, 15).isoformat())
+        self.assertEqual(revisao['descricao'], 'Reavaliar novas Normas PIPE.')
+        self.assertTrue(revisao['vencida'])
+
+    def test_revisao_futura_ainda_nao_esta_vencida(self):
+        versioning = copy.deepcopy(BASE_PIPE_MINIMA['versioning']) + [
+            {
+                'version': 'V10 planejada',
+                'date': '15/09/2099',
+                'change': 'Nova rodada.',
+                'status': 'PENDENTE',
+            }
+        ]
+        self.usar_base(self.base_com(versioning=versioning))
+
+        self.assertFalse(self.situacao().data['revisao_prevista']['vencida'])
+
+    def test_sem_revisao_planejada_nao_ha_aviso(self):
+        self.assertIsNone(self.situacao().data['revisao_prevista'])
+
+    def test_arquivo_ausente_e_dito_sem_erro(self):
+        """A tela explica a ausencia; o 409 fica para quem tenta ativar."""
+        self.base = f'{self.diretorio.name}/inexistente.json'
+
+        resposta = self.situacao()
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertFalse(resposta.data['disponivel'])
+        self.assertFalse(resposta.data['pendente'])
+
+    def test_so_o_administrador_consulta(self):
+        self.como(self.supervisor)
+
+        self.assertEqual(self.situacao().status_code, status.HTTP_403_FORBIDDEN)
 
 
 class ExecucaoDaPreAnaliseTests(PreAnaliseBaseTests):

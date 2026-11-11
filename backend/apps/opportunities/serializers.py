@@ -23,6 +23,7 @@ from apps.opportunities.models import (
     PrioridadeOportunidade,
 )
 from apps.opportunities.services.oportunidade import QUEM_AGIU_PELA_AC2, anexos_visiveis
+from apps.opportunities.services.resumo_da_equipe import EstadoDaEquipe, resumo_da_equipe
 
 
 class DecisaoResumoSerializer(serializers.Serializer):
@@ -35,6 +36,14 @@ class DecisaoResumoSerializer(serializers.Serializer):
     justificativa = serializers.CharField(source='observacoes', read_only=True)
     autor_nome = serializers.CharField(source='responsavel.nome', read_only=True)
     registrada_em = serializers.DateTimeField(read_only=True)
+
+
+class ResumoDaEquipeSerializer(serializers.Serializer):
+    """O estado do matching e o tamanho da ultima equipe, como a fila precisa."""
+
+    estado = serializers.ChoiceField(choices=EstadoDaEquipe.choices, read_only=True)
+    membros = serializers.IntegerField(read_only=True)
+    lacunas = serializers.IntegerField(read_only=True)
 
 
 class AnexoSerializer(serializers.ModelSerializer):
@@ -70,6 +79,7 @@ class OportunidadeSerializer(serializers.ModelSerializer):
     total_anexos = serializers.SerializerMethodField()
     ultima_decisao = serializers.SerializerMethodField()
     aguarda_minha_atuacao = serializers.BooleanField(read_only=True, default=False)
+    resumo_da_equipe = serializers.SerializerMethodField()
 
     class Meta:
         model = Oportunidade
@@ -78,7 +88,7 @@ class OportunidadeSerializer(serializers.ModelSerializer):
             'demandante', 'demandante_nome', 'responsavel', 'responsavel_nome',
             'situacao', 'situacao_rotulo', 'prioridade', 'prioridade_rotulo',
             'total_anexos', 'ultima_decisao', 'aguarda_minha_atuacao',
-            'criada_em', 'atualizada_em',
+            'resumo_da_equipe', 'criada_em', 'atualizada_em',
         ]
         read_only_fields = [
             'codigo', 'origem', 'demandante', 'situacao', 'prioridade',
@@ -139,11 +149,20 @@ class OportunidadeSerializer(serializers.ModelSerializer):
 
         return dados
 
+    @extend_schema_field(ResumoDaEquipeSerializer(allow_null=True))
+    def get_resumo_da_equipe(self, oportunidade):
+        usuario = getattr(self.context.get('request'), 'user', None)
+
+        if getattr(usuario, 'papel', None) == Papel.DEMANDANTE:
+            return None
+
+        return ResumoDaEquipeSerializer(resumo_da_equipe(oportunidade)).data
+
     def to_representation(self, oportunidade):
         """
         O Demandante acompanha a AC2 como um todo (PB71): quem conduz a
         oportunidade por dentro nao sai para ele, como no historico. A
-        prioridade e trabalho interno da fila e nem chega ao payload dele.
+        prioridade e a equipe sao trabalho interno e nem chegam ao payload dele.
         """
         dados = super().to_representation(oportunidade)
         usuario = getattr(self.context.get('request'), 'user', None)
@@ -153,6 +172,7 @@ class OportunidadeSerializer(serializers.ModelSerializer):
             dados['responsavel_nome'] = None
             dados.pop('prioridade', None)
             dados.pop('prioridade_rotulo', None)
+            dados.pop('resumo_da_equipe', None)
 
         return dados
 

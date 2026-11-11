@@ -411,6 +411,10 @@ export function listarCriteriosPreAnalise() {
   return apiRequest('/ia/criterios/')
 }
 
+export function lerSituacaoDaBasePipe() {
+  return apiRequest('/ia/criterios/arquivo/')
+}
+
 export function importarCriteriosPreAnalise() {
   return apiRequest('/ia/criterios/', { method: 'POST' })
 }

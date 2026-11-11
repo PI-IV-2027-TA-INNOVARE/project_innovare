@@ -43,6 +43,7 @@ from apps.opportunities.models import (
     SituacaoOportunidade,
 )
 from apps.opportunities.services.fluxo import mover
+from apps.opportunities.services.resumo_da_equipe import anotacoes_do_resumo
 from apps.opportunities.services.tipo_do_anexo import tipo_conferido
 from core.exceptions import (
     AcaoNaoPermitida,
@@ -213,6 +214,9 @@ def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
     pagina 2 repete ou pula o que a 1 mostrou. O `codigo` desempata porque e
     unico - dois registros salvos no mesmo instante ficariam a merce do plano
     de execucao.
+
+    O resumo da equipe nao entra na fila do Demandante: a Equipe e trabalho
+    interno, a mesma razao de `PodeVerProposta`.
     """
     visiveis = (
         _enviado_pela_empresa(usuario, 'anexos__enviado_por')
@@ -220,10 +224,15 @@ def fila_de(usuario: Usuario) -> QuerySet[Oportunidade]:
         else None
     )
 
-    return escopo_de(usuario).annotate(
+    fila = escopo_de(usuario).annotate(
         total_anexos=Count('anexos', filter=visiveis, distinct=True),
         aguarda_minha_atuacao=_aguarda_atuacao_de(usuario),
-    ).prefetch_related(
+    )
+
+    if not _do_demandante(usuario):
+        fila = fila.annotate(**anotacoes_do_resumo())
+
+    return fila.prefetch_related(
         Prefetch('decisoes', queryset=Decisao.objects.select_related('responsavel'))
     ).order_by('-atualizada_em', '-codigo')
 

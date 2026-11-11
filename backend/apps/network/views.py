@@ -19,7 +19,11 @@ from apps.network.serializers import (
     ResumoDaRedeSerializer,
     TitulacaoSerializer,
 )
-from apps.network.services.consulta import ordenar_rede, resumo_da_rede
+from apps.network.services.consulta import (
+    ordenar_rede,
+    resumo_da_rede,
+    sem_competencia_declarada,
+)
 from apps.network.services.rede import (
     AtualizarMembroService,
     AtualizarPerfilProprioService,
@@ -95,6 +99,9 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         filtro = FiltroDaRedeSerializer(data=self.request.query_params)
         filtro.is_valid(raise_exception=True)
+
+        if filtro.validated_data['sem_competencia']:
+            queryset = sem_competencia_declarada(queryset)
 
         if 'ordenar' in filtro.validated_data:
             queryset = ordenar_rede(queryset, filtro.validated_data['ordenar'])

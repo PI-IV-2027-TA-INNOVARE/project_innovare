@@ -9,6 +9,7 @@ import {
   OPORTUNIDADES_EXEMPLO,
   daApi,
   emAndamento,
+  resumoPorSituacao,
 } from './oportunidadesData'
 
 const auth = { user: null, isAuthenticated: true }
@@ -70,8 +71,26 @@ function comoApi(oportunidade) {
     criada_em: new Date(oportunidade.criadaEm).toISOString(),
     atualizada_em: new Date(oportunidade.atualizadaEm).toISOString(),
     aguarda_minha_atuacao: Boolean(oportunidade.aguardaMinhaAtuacao),
+    resumo_da_equipe: {
+      estado: oportunidade.equipe.length > 0 ? 'com_equipe' : 'nao_executado',
+      membros: oportunidade.equipe.length,
+      lacunas: oportunidade.lacunas.length,
+    },
   }
 }
+
+function comResumoDaEquipe(codigo, titulo, resumo) {
+  return { ...comoApi(OPORTUNIDADES_EXEMPLO[0]), codigo, titulo, resumo_da_equipe: resumo }
+}
+
+const FILA_COM_EQUIPES = [
+  comResumoDaEquipe('OP-2026-101', 'Sem competências', { estado: 'aguardando_competencias', membros: 0, lacunas: 0 }),
+  comResumoDaEquipe('OP-2026-102', 'Sem rodada', { estado: 'nao_executado', membros: 0, lacunas: 0 }),
+  comResumoDaEquipe('OP-2026-103', 'Rodada vazia', { estado: 'sem_resultado', membros: 0, lacunas: 2 }),
+  comResumoDaEquipe('OP-2026-104', 'Com equipe', { estado: 'com_equipe', membros: 2, lacunas: 1 }),
+  comResumoDaEquipe('OP-2026-105', 'Uma pessoa', { estado: 'com_equipe', membros: 1, lacunas: 2 }),
+  comResumoDaEquipe('OP-2026-106', 'Equipe completa', { estado: 'com_equipe', membros: 3, lacunas: 0 }),
+]
 
 const TRILHA = [
   {
@@ -207,7 +226,7 @@ describe('OportunidadesPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Oportunidades', level: 1 })).toBeInTheDocument()
 
-    const decisao = screen.getByText('Aguardando sua decisão').closest('.stat-card')
+    const decisao = screen.getByText('Aguardando decisão', { selector: '.stat-card__label' }).closest('.stat-card')
     expect(within(decisao).getByText('1')).toBeInTheDocument()
 
     expect(screen.getByText('Cultura starter para queijo artesanal')).toBeInTheDocument()
@@ -236,7 +255,7 @@ describe('OportunidadesPage', () => {
     expect(screen.getByText('Controle de Listeria em linha de laticínios')).toBeInTheDocument()
     expect(screen.queryByText('Cultura starter para queijo artesanal')).not.toBeInTheDocument()
 
-    expect(screen.queryByText('Aguardando sua decisão')).not.toBeInTheDocument()
+    expect(screen.queryByText('Aguardando decisão', { selector: '.stat-card__label' })).not.toBeInTheDocument()
   })
 
   it('não entrega a lista de outro papel a quem não é Supervisor nem Pesquisador', async () => {
@@ -312,6 +331,111 @@ describe('OportunidadesPage', () => {
     expect(titulos()).toEqual([segunda.titulo])
   })
 
+  it('abre recortada no que está em andamento quando vem do indicador do painel', async () => {
+    renderApp('/oportunidades?situacao=em_andamento')
+    await esperarLista()
+
+    const titulos = [...document.querySelectorAll('.oportunidade-link__titulo')]
+      .map((item) => item.textContent)
+    const emCurso = OPORTUNIDADES_EXEMPLO.filter(emAndamento).map((item) => item.titulo)
+
+    expect(titulos).toHaveLength(emCurso.length)
+    expect(titulos).toEqual(expect.arrayContaining(emCurso))
+    expect(screen.getByLabelText('Situação')).toHaveValue('em_andamento')
+  })
+
+  /**
+   * A lista não trazia nada da equipe, e toda linha dizia "Ainda sem
+   * matching" - até as que estavam em Pré-análise ou já decididas.
+   */
+  it('a coluna Equipe potencial mostra o estado real do matching', async () => {
+    api.listOportunidades.mockResolvedValue({ results: FILA_COM_EQUIPES })
+    renderApp()
+
+    const equipeDe = async (titulo) =>
+      (await screen.findByText(titulo)).closest('tr').querySelector('[data-label="Equipe potencial"]')
+
+    expect(await equipeDe('Sem competências')).toHaveTextContent('Aguardando competências')
+    expect(await equipeDe('Sem rodada')).toHaveTextContent('Matching não executado')
+    expect(await equipeDe('Rodada vazia')).toHaveTextContent('Nenhum perfil encontrado')
+    expect(await equipeDe('Com equipe')).toHaveTextContent('2 pessoas')
+    expect(await equipeDe('Uma pessoa')).toHaveTextContent('1 pessoa')
+    expect(screen.queryByText('Ainda sem matching')).not.toBeInTheDocument()
+  })
+
+  /**
+   * "3 lacunas" solto na célula não dizia nada a quem não conhece o termo. A
+   * contagem fica no card do topo, que explica o que conta, e o nome de cada
+   * lacuna fica na aba Equipe.
+   */
+  it('a coluna Equipe potencial não mostra a contagem de lacunas', async () => {
+    api.listOportunidades.mockResolvedValue({ results: FILA_COM_EQUIPES })
+    renderApp()
+    await screen.findByText('Com equipe')
+
+    const colunas = document.querySelectorAll('[data-label="Equipe potencial"]')
+
+    colunas.forEach((coluna) => expect(coluna).not.toHaveTextContent(/lacuna/i))
+  })
+
+  it('o card de lacuna conta as equipes que o servidor diz que têm lacuna', async () => {
+    api.listOportunidades.mockResolvedValue({ results: FILA_COM_EQUIPES })
+    renderApp()
+    await screen.findByText('Com equipe')
+
+    const lacuna = screen.getByText('Com lacuna de competência', { selector: '.stat-card__label' })
+      .closest('.stat-card')
+
+    expect(within(lacuna).getByText('3')).toBeInTheDocument()
+  })
+
+  it('os indicadores explicam o que contam, com as mesmas frases do Painel', async () => {
+    renderApp()
+    await esperarLista()
+
+    const card = (rotulo) =>
+      screen.getByText(rotulo, { selector: '.stat-card__label' }).closest('.stat-card')
+
+    expect(card('Oportunidades')).toHaveTextContent('Todas as cadastradas, inclusive as decididas')
+    expect(card('Em andamento')).toHaveTextContent('Ainda sem decisão registrada')
+    expect(card('Aguardando decisão')).toHaveTextContent('Prontas para você decidir')
+    expect(card('Com lacuna de competência'))
+      .toHaveTextContent('A equipe sugerida não cobre todas as competências')
+  })
+
+  /**
+   * A regra só aparecia ao parar o mouse sobre o botão, o que não existe no
+   * celular nem para quem navega pelo teclado.
+   */
+  it('a regra do recorte de atuação fica à vista e descreve o botão', async () => {
+    renderApp()
+    await esperarLista()
+
+    const botao = screen.getByRole('button', { name: /aguardando minha atuação/i })
+    const regra = /sem responsável ou conduzidas por você, em Entrada, aguardando decisão ou com resposta do Demandante a um pedido de revisão/i
+
+    expect(screen.getByText(regra)).toBeVisible()
+    expect(botao).toHaveAccessibleDescription(regra)
+  })
+
+  it('a coluna Atualizada mostra a data completa ao passar o mouse', async () => {
+    const instante = '2026-10-31T13:05:00.000Z'
+    api.listOportunidades.mockResolvedValue({
+      results: [{ ...comoApi(OPORTUNIDADES_EXEMPLO[0]), atualizada_em: instante }],
+    })
+    renderApp()
+    await esperarLista()
+
+    const data = screen.getByText('Bioinsumo para cana-de-açúcar')
+      .closest('tr')
+      .querySelector('[data-label="Atualizada"] time')
+    const local = new Date(instante)
+    const hora = local.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+    expect(data).toHaveAttribute('datetime', instante)
+    expect(data).toHaveAttribute('title', `Atualizada em ${local.toLocaleDateString('pt-BR')} às ${hora}`)
+  })
+
   /**
    * A fila chega em páginas de 100. Pedir a ordem ao servidor garante que a
    * oportunidade de prioridade alta parada há meses entra na primeira página.
@@ -321,7 +445,92 @@ describe('OportunidadesPage', () => {
     renderApp()
     await esperarLista()
 
-    expect(api.listOportunidades).toHaveBeenCalledWith({ ordenar: 'prioridade' })
+    expect(api.listOportunidades).toHaveBeenCalledWith({ ordenar: 'prioridade', page: '1' })
+  })
+
+  it('carrega todas as páginas da API, e não só as primeiras 100', async () => {
+    /**
+     * A tela lia só a primeira página de 100: da 101ª oportunidade em diante,
+     * nada aparecia, nem na busca, nos filtros ou nos números do topo.
+     */
+    const [primeira, ...resto] = OPORTUNIDADES_EXEMPLO.map(comoApi)
+    const total = OPORTUNIDADES_EXEMPLO.length
+
+    api.listOportunidades
+      .mockResolvedValueOnce({ count: total, next: '/?page=2', results: [primeira] })
+      .mockResolvedValueOnce({ count: total, next: null, results: resto })
+
+    renderApp()
+
+    expect(await screen.findByText(`Mostrando 1–${total} de ${total}`)).toBeInTheDocument()
+    expect(api.listOportunidades).toHaveBeenNthCalledWith(2, { ordenar: 'prioridade', page: '2' })
+  })
+
+  it('mostra a data do cadastro, que é a que o filtro de datas usa', async () => {
+    /**
+     * O filtro "Cadastrada a partir de / até" usa a data do cadastro, e a
+     * tabela só mostrava "Atualizada", a última mudança. Sem a coluna, quem
+     * filtrava não conferia na lista o que o filtro tinha feito.
+     */
+    const user = userEvent.setup()
+    renderApp()
+    await esperarLista()
+
+    const item = OPORTUNIDADES_EXEMPLO[0]
+    const linha = screen.getByText(item.titulo).closest('tr')
+
+    expect(screen.getByRole('columnheader', { name: /cadastrada/i })).toBeInTheDocument()
+    expect(linha).toHaveTextContent(new Date(item.criadaEm).toLocaleDateString('pt-BR'))
+
+    await user.click(screen.getByRole('button', { name: 'Ordenar por Cadastrada' }))
+
+    const maisAntiga = [...OPORTUNIDADES_EXEMPLO].sort((a, b) => a.criadaEm - b.criadaEm)[0]
+
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent(maisAntiga.titulo)
+  })
+
+  it('mostra a fila em páginas de 25, com "Todos" no fim', async () => {
+    const user = userEvent.setup()
+    const volume = Array.from({ length: 30 }, (_, indice) => ({
+      ...OPORTUNIDADES_EXEMPLO[0],
+      id: `OP-2026-${100 + indice}`,
+      titulo: `Oportunidade de volume ${indice + 1}`,
+    }))
+    const total = OPORTUNIDADES_EXEMPLO.length + volume.length
+
+    servidorResponde([...OPORTUNIDADES_EXEMPLO, ...volume])
+    renderApp()
+
+    expect(await screen.findByText(`Mostrando 1–25 de ${total}`)).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument()
+
+    const seletor = screen.getByLabelText(/linhas por página/i)
+
+    expect(within(seletor).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
+      '10',
+      '25',
+      '50',
+      'Todos',
+    ])
+
+    await user.selectOptions(seletor, 'Todos')
+
+    expect(screen.getByText(`Mostrando 1–${total} de ${total}`)).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 1')).toBeInTheDocument()
+  })
+
+  it('lembra quantas linhas a pessoa escolheu', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderApp()
+    await esperarLista()
+
+    await user.selectOptions(screen.getByLabelText(/linhas por página/i), 'Todos')
+    unmount()
+
+    renderApp()
+    await esperarLista()
+
+    expect(screen.getByLabelText(/linhas por página/i)).toHaveDisplayValue('Todos')
   })
 
   it('busca por título, código e demandante', async () => {
@@ -400,6 +609,7 @@ describe('OportunidadesPage', () => {
     await esperarLista()
 
     expect(screen.queryByRole('button', { name: /aguardando minha atuação/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/sem responsável ou conduzidas por você/i)).not.toBeInTheDocument()
   })
 
   it('leva o Supervisor ao cadastro de ideia interna', async () => {
@@ -657,7 +867,22 @@ describe('oportunidadesData', () => {
     expect(interna.responsavel).toBe('')
   })
 
-  it('matching ainda não existe, então equipe, competência e lacuna chegam vazias', () => {
+  it('traduz o resumo da equipe que o servidor manda', () => {
+    const registro = daApi({
+      codigo: 'OP-2026-009',
+      titulo: 'Redução de nitrito em embutidos',
+      origem: 'externo',
+      demandante_nome: 'Cooperativa Terra Boa',
+      situacao: 'continuar',
+      criada_em: '2026-07-01T09:00:00.000Z',
+      atualizada_em: '2026-09-01T09:00:00.000Z',
+      resumo_da_equipe: { estado: 'com_equipe', membros: 2, lacunas: 1 },
+    })
+
+    expect(registro.equipe).toEqual({ estado: 'com_equipe', membros: 2, lacunas: 1 })
+  })
+
+  it('sem resumo da equipe, como na lista do Demandante, a equipe chega nula', () => {
     const registro = daApi({
       codigo: 'OP-2026-009',
       titulo: 'Redução de nitrito em embutidos',
@@ -668,8 +893,7 @@ describe('oportunidadesData', () => {
       atualizada_em: '2026-09-01T09:00:00.000Z',
     })
 
-    expect(registro.equipe).toEqual([])
-    expect(registro.competencias).toEqual([])
-    expect(registro.lacunas).toEqual([])
+    expect(registro.equipe).toBeNull()
+    expect(resumoPorSituacao([registro]).comLacuna).toBe(0)
   })
 })

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
-import { LIMITES_DE_GASTO, MOTIVOS_SEM_IA } from '../../../../lib/glossario'
+import { LIMITES_DE_GASTO, MOTIVOS_DE_FALHA_DA_PREANALISE } from '../../../../lib/glossario'
 import { Icone, appIcons } from '../../../../lib/icons'
 import {
   ROTULOS_DAS_DIMENSOES,
@@ -39,15 +39,12 @@ const NIVEIS = [
   { id: 'fragil', singular: 'frágil', plural: 'frágeis', rotulo: 'Frágil' },
 ]
 
-const MOTIVOS_DE_FALHA = {
-  fila_indisponivel: 'a fila de processamento não estava disponível',
-  falha_na_execucao: 'a execução falhou antes de terminar',
-  ator_indisponivel: 'quem pediu a análise não está mais disponível',
-  provedor_indisponivel: 'o serviço de IA não respondeu',
-  limite_da_oportunidade: MOTIVOS_SEM_IA.limite_da_oportunidade,
-  limite_do_mes: MOTIVOS_SEM_IA.limite_do_mes,
-  saida_invalida: 'a resposta da IA veio incompleta',
-  sem_dimensoes: 'a IA não avaliou nenhuma dimensão',
+function proximoPasso(erro) {
+  if (LIMITES_DE_GASTO.includes(erro)) return ''
+
+  if (erro === 'execucao_interrompida') return ' Reavalie para tentar de novo.'
+
+  return ' Tente reavaliar em alguns minutos.'
 }
 
 const rotuloDaDimensao = (dimensao) =>
@@ -401,11 +398,13 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   }
 
   const espera = ocupado === 'executar' ? (
-    <EsperaIA titulo="A prǸ-anǭlise estǭ lendo a proposta e a equipe potencial." />
+    <EsperaIA titulo="A pré-análise está lendo a proposta e a equipe potencial." />
   ) : null
 
   const esperaDaFila = emAndamento ? (
     <EsperaIA
+      key={analise.id_pre_analise}
+      desde={analise.executada_em}
       titulo={
         analise.status === 'pendente'
           ? 'A pré-análise está na fila para começar.'
@@ -518,6 +517,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   }
 
   const falhou = analise?.status === 'erro'
+  const concluida = analise?.status === 'ok'
   const dimensoes = analise.dimensoes || []
   const lacunas = analise.lacunas || []
   const recomendacoes = analise.recomendacoes || []
@@ -535,13 +535,15 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
 
         {podeExecutar ? (
           <div className="preanalise__acoes">
-            <Link
-              className="admin-btn admin-btn--outline"
-              to={`/oportunidades/${oportunidadeId}/relatorio/pre-analise`}
-            >
-              <Icone icon={appIcons.export} />
-              Gerar relatório
-            </Link>
+            {concluida ? (
+              <Link
+                className="admin-btn admin-btn--outline"
+                to={`/oportunidades/${oportunidadeId}/relatorio/pre-analise`}
+              >
+                <Icone icon={appIcons.export} />
+                Gerar relatório
+              </Link>
+            ) : null}
 
             <button
               type="button"
@@ -590,8 +592,10 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
             <Icone icon={appIcons.warning} className="admin-callout__icon" />
             <p className="admin-callout__text">
               A última execução não produziu resultado
-              {MOTIVOS_DE_FALHA[analise.erro] ? `: ${MOTIVOS_DE_FALHA[analise.erro]}` : ''}.
-              {LIMITES_DE_GASTO.includes(analise.erro) ? '' : ' Tente reavaliar em alguns minutos.'}
+              {MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]
+                ? `: ${MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]}`
+                : ''}.
+              {proximoPasso(analise.erro)}
             </p>
           </div>
         ) : null}
@@ -633,7 +637,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           aoAlternar={alternarRecomendacao}
         />
 
-        {!falhou && podeExecutar ? (
+        {concluida && podeExecutar ? (
           <ProximoPasso
             etapa="decisao"
             irPara={irPara}

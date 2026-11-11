@@ -195,6 +195,7 @@ class MudancaDeSituacaoSerializer(serializers.Serializer):
 
 class FiltroDaRedeSerializer(serializers.Serializer):
     ordenar = serializers.ChoiceField(choices=ORDENS_DA_REDE, required=False)
+    sem_competencia = serializers.BooleanField(required=False, default=False)
 
 
 class ResumoDaRedeSerializer(serializers.Serializer):

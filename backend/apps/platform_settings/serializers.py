@@ -131,6 +131,10 @@ class ContatoSuporteSerializer(serializers.Serializer):
     papel = serializers.CharField(max_length=120, allow_blank=True, required=False, default='')
 
 
+class ContatoSuporteLidoSerializer(ContatoSuporteSerializer):
+    padrao = serializers.BooleanField(read_only=True)
+
+
 class EncarregadoSerializer(serializers.Serializer):
     nome = serializers.CharField()
     email = serializers.EmailField()

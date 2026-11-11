@@ -28,6 +28,7 @@ from apps.ai.services.custo import (
     custo_da_chamada,
 )
 from apps.ai.services.sem_ia import resposta_vazia
+from core.medicao import espera_de_ia
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +356,8 @@ class ProvedorGemini:
         inicio = time.perf_counter()
 
         try:
-            response = self._gerar(prompt)
+            with espera_de_ia():
+                response = self._gerar(prompt)
             latencia_ms = int((time.perf_counter() - inicio) * 1000)
 
             tokens_entrada, tokens_saida = tokens_da_resposta(
@@ -366,7 +368,8 @@ class ProvedorGemini:
 
             if resultado.get('_erro_parse'):
                 logger.warning(f'Resposta malformada do Gemini ({tipo}); pedindo de novo.')
-                response = self._gerar(prompt)
+                with espera_de_ia():
+                    response = self._gerar(prompt)
                 latencia_ms = int((time.perf_counter() - inicio) * 1000)
                 entrada_extra, saida_extra = tokens_da_resposta(
                     response, prompt=prompt

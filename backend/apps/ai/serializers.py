@@ -58,14 +58,23 @@ class UltimaExecucaoSerializer(serializers.Serializer):
 
 
 class ProvedorDeIASerializer(serializers.Serializer):
-    """Uma linha por provedor registrado - o que o painel mostra por provedor."""
+    """
+    Uma linha por provedor e modelo - o que o painel mostra por provedor.
+
+    `papel` e `principal`, `reserva`, `fora_de_uso` (respondeu no mes, mas a
+    configuracao nao o poe mais para responder) ou `sem_uso` (registrado, sem
+    papel nem uso). `falhas` conta cada uso uma vez, com erro ou sem IA.
+    """
 
     nome = serializers.CharField(read_only=True)
     rotulo = serializers.CharField(read_only=True)
-    papel = serializers.CharField(read_only=True)
+    papel = serializers.ChoiceField(
+        choices=('principal', 'reserva', 'fora_de_uso', 'sem_uso'), read_only=True
+    )
     configurado = serializers.BooleanField(read_only=True)
     modelo = serializers.CharField(read_only=True, allow_blank=True)
     chamadas = serializers.IntegerField(read_only=True)
+    falhas = serializers.IntegerField(read_only=True)
     erros = serializers.IntegerField(read_only=True)
     fallbacks = serializers.IntegerField(read_only=True)
     custo_estimado_brl = serializers.FloatField(read_only=True)
@@ -102,6 +111,7 @@ class ConsumoDeIASerializer(serializers.Serializer):
     custo_por_tipo = serializers.DictField(
         child=serializers.FloatField(), read_only=True
     )
+    falhas = serializers.IntegerField(read_only=True)
     erros = serializers.IntegerField(read_only=True)
     fallbacks = serializers.IntegerField(read_only=True)
     tokens_entrada = serializers.IntegerField(read_only=True)
@@ -121,6 +131,22 @@ class ConsumoDeIASerializer(serializers.Serializer):
     provedores = ProvedorDeIASerializer(many=True, read_only=True)
     revisao_humana = RevisaoHumanaSerializer(read_only=True)
     ultima_execucao = UltimaExecucaoSerializer(read_only=True, allow_null=True)
+
+
+class ComparacaoComARedeSerializer(serializers.Serializer):
+    """
+    O modelo local que da a afinidade com o tema no matching.
+
+    Sem provedor nem custo, por isso fora do consumo. `rodadas_sem_afinidade`
+    conta as rodadas de matching do mes que sairam sem ela.
+    """
+
+    ligada = serializers.BooleanField(read_only=True)
+    modelo = serializers.CharField(read_only=True, allow_blank=True)
+    peso_na_nota = serializers.FloatField(read_only=True)
+    rodadas_no_mes = serializers.IntegerField(read_only=True)
+    rodadas_sem_afinidade = serializers.IntegerField(read_only=True)
+    ultimo_calculo = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
 class JobsSerializer(serializers.Serializer):
@@ -143,6 +169,8 @@ class SaudeSerializer(serializers.Serializer):
     desempenho_erro = serializers.CharField(read_only=True, allow_blank=True)
     ia = ConsumoDeIASerializer(read_only=True, allow_null=True)
     ia_erro = serializers.CharField(read_only=True, allow_blank=True)
+    comparacao = ComparacaoComARedeSerializer(read_only=True, allow_null=True)
+    comparacao_erro = serializers.CharField(read_only=True, allow_blank=True)
     jobs = JobsSerializer(read_only=True, allow_null=True)
     jobs_erro = serializers.CharField(read_only=True, allow_blank=True)
     banco = BancoSerializer(read_only=True, allow_null=True)

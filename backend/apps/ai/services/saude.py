@@ -17,6 +17,10 @@ da baseline que ninguem verifica por opiniao:
 - **fila assincrona**, que `Metodos_Integracao_IA.md` preve como pipeline de
   ingestao, embedding e pre-analise longa.
 
+A comparacao com a rede tambem fica fora do bloco de IA: o modelo roda no
+proprio servidor, sem provedor nem custo, e o que se acompanha dele e se as
+rodadas de matching estao recebendo a afinidade com o tema.
+
 O que **saiu** na poda de 16/10/2026: uptime do processo, ambiente, motor do
 banco, conexao reaproveitada e erros de servidor. Eram diagnostico barato
 herdado do plano 5.2, sem pedido em documento de baseline, e competiam com o
@@ -43,11 +47,12 @@ from django.utils import timezone
 
 from apps.ai.models import ExecucaoIA, StatusExecucao
 from apps.ai.services.custo import precos
+from apps.ai.services.embedding import ProvedorMiniLM
 from apps.ai.services.registro import (
     descritores,
     modelo_do_provedor,
     nome_do_principal,
-    papel_do_provedor,
+    papeis_configurados,
     provedor_configurado,
 )
 from core.medicao import medidor, percentil
@@ -56,6 +61,12 @@ MOTIVO_SEM_FILA = (
     'Fila assíncrona não configurada neste ambiente: nenhum worker publica '
     'execução aqui.'
 )
+
+FALHA = Q(status=StatusExecucao.ERRO) | Q(fallback_usado=True)
+
+ORDEM_DOS_PAPEIS = {'principal': 0, 'reserva': 1, 'fora_de_uso': 2, 'sem_uso': 3}
+
+MODELOS_LOCAIS = (ProvedorMiniLM.provedor,)
 
 
 def inicio_do_mes(agora: datetime | None = None) -> datetime:
@@ -92,10 +103,16 @@ def _revisao_humana() -> dict[str, Any]:
     """
     A "avaliacao humana" que a secao Observabilidade nomeia.
 
-    Nao e pesquisa de satisfacao: e quanto da saida de IA passou por gente.
-    Sai de coluna gravada - `revisada_por_humano` na proposta, `validada` na
-    indicacao, `acatada` na recomendacao -, e e o unico numero da pagina que
-    responde "o circuito de revisao esta acontecendo?" (AGENTS.md 0.2).
+    Nao e pesquisa de satisfacao: e quanto do que a plataforma sugeriu passou
+    por gente. Sai de coluna gravada - `revisada_por_humano` na proposta,
+    `validada` na indicacao, `acatada` na recomendacao -, e e o unico numero da
+    pagina que responde "o circuito de revisao esta acontecendo?" (AGENTS.md
+    0.2).
+
+    A janela e desde o comeco, e nao o mes do consumo. A proposta conta so
+    quando saiu do Copiloto; a indicacao e a recomendacao contam com ou sem
+    IA, porque o matching e a pre-analise tambem sugerem pelo caminho sem IA,
+    e essa sugestao precisa da mesma revisao.
     """
     from apps.copilot.models import PropostaEstruturada
     from apps.matching.models import EquipePotencial, MembroEquipe
@@ -124,40 +141,64 @@ def _revisao_humana() -> dict[str, Any]:
 
 def _provedores(execucoes) -> list[dict[str, Any]]:
     """
-    Uma linha por provedor registrado, com o consumo dele no mês.
+    Uma linha por provedor e modelo, com o consumo do mês.
 
-    O total do mês não diz qual provedor gastou nem qual falhou; a linha diz.
-    Provedor sem chamada aparece com zero, porque ele existe e está configurado
-    (ou não) - diferente de um provedor que não está registrado.
+    O par, e não só o provedor, porque a reserva pode ser outro modelo do mesmo
+    provedor. Entram os pares que a configuração põe para responder, os que
+    responderam no mês - inclusive de provedor que saiu do registro, para a
+    soma das linhas bater com o total - e os provedores registrados sem papel
+    nem uso. A ordem é a do papel: principal, reserva, fora de uso, sem uso.
     """
-    linhas = []
-
-    for provedor in descritores():
-        do_provedor = execucoes.filter(provedor=provedor.nome)
-        totais = do_provedor.aggregate(
-            chamadas=Count('id_execucao_ia'),
-            custo=Sum('custo_estimado'),
+    registrados = {provedor.nome: provedor for provedor in descritores()}
+    papeis = papeis_configurados()
+    usos = {
+        (linha['provedor'], linha['modelo']): linha
+        for linha in execucoes.order_by()
+        .values('provedor', 'modelo')
+        .annotate(
+            chamadas=Count('pk'),
+            falhas=Count('pk', filter=FALHA),
             erros=Count('pk', filter=Q(status=StatusExecucao.ERRO)),
             fallbacks=Count('pk', filter=Q(fallback_usado=True)),
+            custo=Sum('custo_estimado'),
+            apuradas=Count('custo_estimado'),
             latencia=Avg('latencia_ms'),
         )
-        preco_entrada, preco_saida = provedor.precos()
+    }
+
+    pares = list(papeis) + [par for par in usos if par not in papeis]
+    com_linha = {nome for nome, _ in pares}
+    pares += [
+        (nome, provedor.modelo())
+        for nome, provedor in registrados.items()
+        if nome not in com_linha
+    ]
+
+    linhas = []
+
+    for nome, modelo in pares:
+        provedor = registrados.get(nome)
+        uso = usos.get((nome, modelo), {})
+        preco_entrada, preco_saida = provedor.precos() if provedor else (0.0, 0.0)
 
         linhas.append(
             {
-                'nome': provedor.nome,
-                'rotulo': provedor.rotulo,
-                'papel': papel_do_provedor(provedor.nome),
-                'configurado': provedor.configurado(),
-                'modelo': provedor.modelo(),
-                'chamadas': totais['chamadas'] or 0,
-                'erros': totais['erros'] or 0,
-                'fallbacks': totais['fallbacks'] or 0,
-                'custo_estimado_brl': round(float(totais['custo'] or 0), 4),
-                'custo_apurado': do_provedor.exclude(custo_estimado__isnull=True).exists(),
+                'nome': nome,
+                'rotulo': provedor.rotulo if provedor else nome,
+                'papel': papeis.get(
+                    (nome, modelo), 'fora_de_uso' if uso else 'sem_uso'
+                ),
+                'configurado': provedor.configurado() if provedor else False,
+                'modelo': modelo,
+                'chamadas': uso.get('chamadas', 0),
+                'falhas': uso.get('falhas', 0),
+                'erros': uso.get('erros', 0),
+                'fallbacks': uso.get('fallbacks', 0),
+                'custo_estimado_brl': round(float(uso.get('custo') or 0), 4),
+                'custo_apurado': bool(uso.get('apuradas')),
                 'latencia_media_ms': (
-                    round(float(totais['latencia']))
-                    if totais['latencia'] is not None
+                    round(float(uso['latencia']))
+                    if uso.get('latencia') is not None
                     else None
                 ),
                 'preco_entrada_brl_por_milhao': preco_entrada,
@@ -165,12 +206,22 @@ def _provedores(execucoes) -> list[dict[str, Any]]:
             }
         )
 
-    return linhas
+    return sorted(
+        linhas,
+        key=lambda linha: (ORDEM_DOS_PAPEIS[linha['papel']], -linha['chamadas']),
+    )
 
 
 def _consumo_de_ia() -> dict[str, Any]:
+    """
+    O consumo da IA dos provedores, que e a que cobra.
+
+    O modelo que roda no proprio servidor fica de fora: nao tem provedor nem
+    preco, e tem bloco proprio em `_comparacao_com_a_rede`.
+    """
     desde = inicio_do_mes()
-    execucoes = ExecucaoIA.objects.filter(criado_em__gte=desde)
+    das_ias_de_provedor = ExecucaoIA.objects.exclude(provedor__in=MODELOS_LOCAIS)
+    execucoes = das_ias_de_provedor.filter(criado_em__gte=desde)
 
     totais = execucoes.aggregate(
         chamadas=Count('id_execucao_ia'),
@@ -178,6 +229,7 @@ def _consumo_de_ia() -> dict[str, Any]:
         soma_entrada=Sum('tokens_entrada'),
         soma_saida=Sum('tokens_saida'),
         contexto_medio=Avg('tokens_entrada'),
+        falhas=Count('pk', filter=FALHA),
         erros=Count('pk', filter=Q(status=StatusExecucao.ERRO)),
         fallbacks=Count('pk', filter=Q(fallback_usado=True)),
     )
@@ -192,7 +244,7 @@ def _consumo_de_ia() -> dict[str, Any]:
     custo = float(totais['custo'] or 0)
     preco_entrada, preco_saida = precos(nome_do_principal())
     teto = float(settings.AI_CUSTO_TETO_MENSAL_BRL)
-    ultima = ExecucaoIA.objects.order_by('-criado_em').first()
+    ultima = das_ias_de_provedor.order_by('-criado_em').first()
     chamadas = totais['chamadas'] or 0
     custo_apurado = execucoes.exclude(custo_estimado__isnull=True).exists()
     percentual = (custo / teto) * 100 if teto else None
@@ -222,6 +274,7 @@ def _consumo_de_ia() -> dict[str, Any]:
             .values('tipo')
             .annotate(custo=Sum('custo_estimado'))
         },
+        'falhas': totais['falhas'],
         'erros': totais['erros'],
         'fallbacks': totais['fallbacks'],
         'tokens_entrada': totais['soma_entrada'] or 0,
@@ -287,6 +340,33 @@ def _estado_do_consumo(
     return 'atencao' if percentual >= alerta else 'normal'
 
 
+def _comparacao_com_a_rede() -> dict[str, Any]:
+    """
+    O modelo que roda no proprio servidor e da a afinidade com o tema.
+
+    Nao e provedor nem tem custo, entao fica fora do consumo. O que importa a
+    quem administra e se o matching esta recebendo a afinidade, que pesa na
+    nota: a rodada que saiu sem ela fica marcada em `fallback_usado`.
+    """
+    from apps.matching.models import ExecucaoMatching
+
+    rodadas = ExecucaoMatching.objects.filter(iniciado_em__gte=inicio_do_mes())
+    ultimo = (
+        ExecucaoIA.objects.filter(provedor__in=MODELOS_LOCAIS)
+        .order_by('-criado_em')
+        .first()
+    )
+
+    return {
+        'ligada': bool(settings.SEARCH_EMBEDDING_ENABLED),
+        'modelo': str(settings.SEARCH_EMBEDDING_MODEL),
+        'peso_na_nota': float(settings.AI_MATCH_WEIGHT_SEMANTIC),
+        'rodadas_no_mes': rodadas.count(),
+        'rodadas_sem_afinidade': rodadas.filter(fallback_usado=True).count(),
+        'ultimo_calculo': ultimo.criado_em if ultimo else None,
+    }
+
+
 def _jobs() -> dict[str, Any]:
     """
     A fila, e se a ausencia dela e problema.
@@ -330,6 +410,7 @@ def saude_da_plataforma() -> dict[str, Any]:
     for nome, montador in (
         ('desempenho', _desempenho),
         ('ia', _consumo_de_ia),
+        ('comparacao', _comparacao_com_a_rede),
         ('jobs', _jobs),
         ('banco', _banco),
     ):

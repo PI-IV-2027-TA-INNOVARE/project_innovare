@@ -52,16 +52,6 @@
   color: var(--text-muted);
 }
 
-.stat-card--alert {
-  &::before {
-    background: var(--accent-error);
-  }
-
-  .stat-card__icon {
-    color: var(--accent-error);
-  }
-}
-
 .competencia-lista {
   display: flex;
   gap: 6px;

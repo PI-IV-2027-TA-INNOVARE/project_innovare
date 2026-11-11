@@ -68,6 +68,14 @@
   }
 }
 
+.filtros-oportunidades__nota {
+  margin-top: -6px;
+  max-width: 80ch;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .filtros-oportunidades__refino {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
@@ -142,19 +150,6 @@
 .oportunidade-link__meta {
   font-size: 0.8125rem;
   color: var(--text-muted);
-}
-
-.oportunidade-lacuna {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 10px;
-  font-weight: 600;
-  color: var(--accent-error);
-
-  svg {
-    font-size: 0.7rem;
-  }
 }
 
 .lacuna-tag {

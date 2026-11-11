@@ -6,7 +6,9 @@ import {
   ROTULOS_DAS_DIMENSOES,
   agruparPorLacuna,
   rotuloDoCriterio,
+  separarDescricao,
 } from '../../../lib/lacunas'
+import { MOTIVOS_DE_FALHA_DA_PREANALISE } from '../../../lib/glossario'
 import { obterRelatorioPreAnalise } from '../../../services/pdConnectApi'
 import './RelatorioPage.scss'
 
@@ -150,7 +152,9 @@ export default function RelatorioPreAnalisePage() {
     { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
     { rotulo: 'Gerado em', valor: formatarData(relatorio.gerado_em) },
   ]
-  const falhou = analise.status !== 'ok'
+  const emAndamento = ['pendente', 'executando'].includes(analise.status)
+  const falhou = analise.status !== 'ok' && !emAndamento
+  const motivo = MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]
   const { grupos, soltas } = agruparPorLacuna(analise.lacunas, analise.recomendacoes)
 
   return (
@@ -192,12 +196,18 @@ export default function RelatorioPreAnalisePage() {
             <Campo rotulo="Execução de IA">{analise.ai_run_id || '—'}</Campo>
           </dl>
 
+          {emAndamento ? (
+            <p className="relatorio-vazio">
+              A pré-análise ainda está em andamento. O relatório fica completo
+              quando ela terminar.
+            </p>
+          ) : null}
+
           {falhou ? (
             <p className="relatorio-vazio">
-              A execução não produziu resultado
-              {analise.erro ? ` (motivo: ${analise.erro})` : ''}. Nenhuma dimensão
-              é apresentada: um relatório preenchido sem análise diria o que o
-              módulo não concluiu.
+              A execução não produziu resultado{motivo ? `: ${motivo}` : ''}. Nenhuma
+              dimensão é apresentada: um relatório preenchido sem análise diria o
+              que o módulo não concluiu.
             </p>
           ) : null}
 
@@ -289,12 +299,16 @@ export default function RelatorioPreAnalisePage() {
         {criterios.length > 0 ? (
           <Secao titulo={`Critérios de referência · versão ${analise.versao_criterios}`}>
             <ul className="relatorio-lista">
-              {criterios.map((criterio) => (
-                <li key={criterio.id_criterio}>
-                  <strong>{criterio.codigo}</strong> · {criterio.dimensao_rotulo} ·{' '}
-                  {criterio.descricao}
-                </li>
-              ))}
+              {criterios.map((criterio) => {
+                const { titulo, pergunta } = separarDescricao(criterio.descricao)
+
+                return (
+                  <li key={criterio.id_criterio}>
+                    <strong>{titulo}</strong> ({criterio.codigo}) · {criterio.dimensao_rotulo}
+                    {pergunta ? ` — ${pergunta}` : ''}
+                  </li>
+                )
+              })}
             </ul>
           </Secao>
         ) : null}

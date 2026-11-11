@@ -391,6 +391,16 @@ AI_CUSTO_SAIDA_BRL_POR_MILHAO = config(
 # Fila assincrona (SPEC-14). A pre-analise continua sincrona por padrao; so
 # liga no worker quando o ambiente tiver Redis e um worker rodando.
 PREANALISE_ASSINCRONA = config('PREANALISE_ASSINCRONA', default=False, cast=bool)
+PREANALISE_TEMPO_MAXIMO_S = config(
+    'PREANALISE_TEMPO_MAXIMO_S',
+    default=(2 if AI_PROVEDOR_RESERVA or AI_MODELO_RESERVA else 1)
+    * (
+        AI_GEMINI_TENTATIVAS * AI_GEMINI_TIMEOUT_S
+        + AI_GEMINI_ESPERA_INICIAL_S * (2 ** (AI_GEMINI_TENTATIVAS - 1) - 1)
+    )
+    + 15,
+    cast=float,
+)
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='')
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)

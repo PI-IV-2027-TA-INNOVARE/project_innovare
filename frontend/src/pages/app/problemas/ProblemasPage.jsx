@@ -9,6 +9,7 @@ import { useAuth } from '../../../context/AuthContext'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
+import { todasAsPaginas } from '../../../lib/paginas'
 import { listOportunidades } from '../../../services/pdConnectApi'
 import { SITUACOES, daApi, situacaoLabel } from '../oportunidades/oportunidadesData'
 import { precisaComplementacao, resumoDoDemandante } from './problemasData'
@@ -55,8 +56,7 @@ export default function ProblemasPage() {
     setErroCarga('')
 
     try {
-      const resposta = await listOportunidades()
-      setMeus((resposta.results || resposta).map(daApi))
+      setMeus((await todasAsPaginas(listOportunidades)).map(daApi))
     } catch (problema) {
       setMeus([])
       setErroCarga(problema?.message || 'Não foi possível carregar os seus problemas.')

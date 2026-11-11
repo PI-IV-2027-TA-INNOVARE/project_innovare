@@ -55,6 +55,11 @@ class BaseConhecimentoPIPE:
         return self._dados.get('metadata', {}).get('baseline_id', VERSAO_DESCONHECIDA)
 
     @property
+    def chamada(self) -> str:
+        """A chamada FAPESP de que a base foi tirada, como o arquivo a nomeia."""
+        return str(self._dados.get('metadata', {}).get('call', '') or '')
+
+    @property
     def versao(self) -> str:
         """
         A versao ATIVA da secao `versioning`.
@@ -68,6 +73,14 @@ class BaseConhecimentoPIPE:
                 return str(registro.get('version', VERSAO_DESCONHECIDA))[:12]
 
         return VERSAO_DESCONHECIDA
+
+    def revisoes_pendentes(self) -> list[dict[str, Any]]:
+        """As versoes que o proprio arquivo planeja e ainda nao sairam."""
+        return [
+            registro
+            for registro in self._dados.get('versioning', [])
+            if str(registro.get('status', '')).upper().startswith('PENDENTE')
+        ]
 
     def criterios(self) -> list[dict[str, Any]]:
         """Os criterios da secao 8.5 da chamada, como estao no arquivo."""

@@ -8,6 +8,7 @@ esquecer que a analise e orientativa (AGENTS.md 0.2).
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.ai.models import StatusExecucao
 from apps.copilot.serializers import LacunaSerializer
 from apps.maturity.models import (
     CriterioPreAnalise,
@@ -197,6 +198,19 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
     def get_aviso(self, instancia) -> str:
         return AVISO_ORIENTATIVO
 
+    def to_representation(self, instancia):
+        """A execucao que passou do teto sai como erro, sem gravar (ver `interrompida`)."""
+        from apps.maturity.services import ERRO_INTERROMPIDA, interrompida
+
+        dados = super().to_representation(instancia)
+
+        if interrompida(instancia):
+            dados['status'] = StatusExecucao.ERRO
+            dados['status_rotulo'] = StatusExecucao.ERRO.label
+            dados['erro'] = ERRO_INTERROMPIDA
+
+        return dados
+
     @extend_schema_field(ComparacaoSerializer(allow_null=True))
     def get_comparacao(self, instancia):
         from apps.maturity.services import comparacao_com_anterior
@@ -254,6 +268,33 @@ class ResultadoImportacaoCriteriosSerializer(serializers.Serializer):
     sem_dimensao = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
+
+
+class CriterioDoArquivoSerializer(serializers.Serializer):
+    codigo = serializers.CharField(read_only=True)
+    titulo = serializers.CharField(read_only=True)
+
+
+class RevisaoPrevistaSerializer(serializers.Serializer):
+    versao = serializers.CharField(read_only=True)
+    data = serializers.DateField(read_only=True, allow_null=True)
+    descricao = serializers.CharField(read_only=True)
+    vencida = serializers.BooleanField(read_only=True)
+
+
+class SituacaoDaBaseSerializer(serializers.Serializer):
+    """O arquivo da base PIPE comparado com a versao em uso, antes de ativar."""
+
+    disponivel = serializers.BooleanField(read_only=True)
+    versao_do_arquivo = serializers.CharField(read_only=True)
+    chamada = serializers.CharField(read_only=True)
+    versao_em_uso = serializers.CharField(read_only=True, allow_null=True)
+    pendente = serializers.BooleanField(read_only=True)
+    novos = CriterioDoArquivoSerializer(many=True, read_only=True)
+    alterados = CriterioDoArquivoSerializer(many=True, read_only=True)
+    removidos = CriterioDoArquivoSerializer(many=True, read_only=True)
+    sem_dimensao = serializers.ListField(child=serializers.CharField(), read_only=True)
+    revisao_prevista = RevisaoPrevistaSerializer(read_only=True, allow_null=True)
 
 
 class AcatarRecomendacaoSerializer(serializers.Serializer):

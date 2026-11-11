@@ -236,6 +236,85 @@ describe('AbaPreAnalise', () => {
     expect(await screen.findByText(/na fila para começar/i)).toBeInTheDocument()
   })
 
+  it('a espera de uma execução em andamento conta desde o início dela', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'executando',
+      status_rotulo: 'Executando',
+      executada_em: new Date(Date.now() - 40000).toISOString(),
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/está em andamento/i)).toBeInTheDocument()
+    expect(screen.getByText(/está demorando mais que o normal/i)).toBeInTheDocument()
+    expect(screen.getByText(/^4\ds$/)).toBeInTheDocument()
+  })
+
+  /**
+   * O servidor apresenta como interrompida a execução que passou do teto sem
+   * terminar. Antes, a tela esperava para sempre, com o Reavaliar travado.
+   */
+  it('com resultado, oferece o relatório e aponta a decisão como próximo passo', async () => {
+    renderizar()
+
+    expect(await screen.findByRole('link', { name: /gerar relatório/i }))
+      .toHaveAttribute('href', '/oportunidades/OP-2026-001/relatorio/pre-analise')
+    expect(screen.getByText(/depois de acatar as recomendações/i)).toBeInTheDocument()
+  })
+
+  /**
+   * O relatório é da última execução: sem resultado, o botão abria um
+   * documento vazio. E o próximo passo mandava acatar recomendações que ainda
+   * não existiam.
+   */
+  it('sem resultado, não oferece o relatório nem o próximo passo', async () => {
+    const semResultado = { dimensoes: [], lacunas: [], recomendacoes: [], sintese: '' }
+    const casos = [
+      { ...ANALISE, ...semResultado, status: 'executando', executada_em: new Date().toISOString() },
+      { ...ANALISE, ...semResultado, status: 'pendente', executada_em: new Date().toISOString() },
+      { ...ANALISE, ...semResultado, status: 'erro', erro: 'execucao_interrompida' },
+    ]
+
+    for (const caso of casos) {
+      api.obterPreAnalise = vi.fn().mockResolvedValue(caso)
+      const { unmount } = renderizar()
+
+      expect(await screen.findByRole('button', { name: /reavaliar/i })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /gerar relatório/i })).not.toBeInTheDocument()
+      expect(screen.queryByText(/depois de acatar as recomendações/i)).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('execução interrompida explica o que houve e libera o Reavaliar', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'erro',
+      status_rotulo: 'Erro',
+      erro: 'execucao_interrompida',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    const aviso = await screen.findByRole('alert')
+
+    expect(aviso).toHaveTextContent(/passou do tempo esperado sem terminar/i)
+    expect(aviso).toHaveTextContent(/reavalie para tentar de novo/i)
+    expect(aviso).not.toHaveTextContent(/em alguns minutos/i)
+    expect(screen.queryByText(/está em andamento/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toBeEnabled()
+  })
+
   it('não desenha dimensão quando a execução falhou', async () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue({
       ...ANALISE,
@@ -370,7 +449,7 @@ describe('AbaPreAnalise', () => {
 
     const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
     expect(ligada).toHaveTextContent('Plano de pesquisa')
-    expect(ligada).toHaveTextContent('A3 · Metodologia adequada')
+    expect(ligada).toHaveTextContent('Metodologia adequada (A3)')
     expect(within(ligada).getByText('Defina o controle negativo.')).toBeInTheDocument()
 
     await userEvent.click(within(ligada).getByRole('button', { name: /marcar como acatada/i }))
@@ -449,6 +528,8 @@ describe('AbaPreAnalise', () => {
     await userEvent.click(await screen.findByRole('button', { name: /reavaliar/i }))
 
     expect(await screen.findByText(/10 a 30 segundos/i)).toBeInTheDocument()
+    expect(screen.getByText('A pré-análise está lendo a proposta e a equipe potencial.'))
+      .toBeInTheDocument()
     expect(aoOcupar).toHaveBeenLastCalledWith(true)
   })
 

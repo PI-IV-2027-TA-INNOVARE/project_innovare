@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -90,5 +93,31 @@ describe('PainelPage', () => {
 
     expect(screen.queryByText(/demonstração/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/dados fictícios/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('PainelPage — largura', () => {
+  /**
+   * A fila de Oportunidades e a Rede ocupam a tela inteira, com a margem
+   * lateral do console. O Painel parava em 1200 px e centralizava, deixando
+   * faixas vazias dos dois lados em monitor largo.
+   */
+  const scss = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'PainelPage.scss'),
+    'utf8'
+  )
+
+  const regraDoPainel = scss.slice(scss.indexOf('.painel {'), scss.indexOf('\n}', scss.indexOf('.painel {')))
+
+  it('ocupa a largura da tela como a fila e a Rede, sem teto nem centralização', () => {
+    expect(regraDoPainel).not.toMatch(/max-width/)
+    expect(regraDoPainel).not.toMatch(/margin:\s*0 auto/)
+  })
+
+  it('usa a mesma margem lateral do console', () => {
+    const { container } = renderizar()
+
+    expect(regraDoPainel).toMatch(/padding:\s*32px var\(--admin-gutter\) 64px/)
+    expect(container.querySelector('.painel')).toHaveClass('console')
   })
 })

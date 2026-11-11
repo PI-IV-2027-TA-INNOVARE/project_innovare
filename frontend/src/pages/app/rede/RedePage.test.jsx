@@ -201,20 +201,142 @@ describe('RedePage', () => {
    * A tela pedia 100 pessoas e contava no navegador: da 101a em diante, a
    * pessoa sumia da lista, da busca e dos números do topo sem aviso.
    */
-  it('mostra a rede em páginas de 20 e pede a próxima à API', async () => {
+  it('mostra a rede em páginas de 25 e pede a próxima à API', async () => {
     const user = userEvent.setup()
     api.listarRede = vi.fn().mockResolvedValue({ count: 45, results: REDE })
     renderRede()
     await esperarLista()
 
-    expect(api.listarRede).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20 }))
-    expect(screen.getByText('Página 1 de 3')).toBeInTheDocument()
+    expect(api.listarRede).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 25 }))
+    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /próxima página/i }))
 
     await waitFor(() =>
       expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })),
     )
+  })
+
+  it('ir para a próxima página logo ao abrir não volta sozinho para a página 1', async () => {
+    /**
+     * A busca espera 300 ms depois da última tecla e então volta à página 1.
+     * Essa espera também corria ao abrir a tela, sem ninguém ter digitado:
+     * quem passava de página antes dela era jogado de volta para a primeira.
+     * Era isso que derrubava, de vez em quando, o teste acima.
+     */
+    const user = userEvent.setup()
+    api.listarRede = vi.fn().mockResolvedValue({ count: 45, results: REDE })
+    renderRede()
+    await esperarLista()
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument()
+
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument()
+    expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+  })
+
+  it('"Todos" busca a rede inteira, página por página da API, e mostra numa só', async () => {
+    /**
+     * A paginação da Rede é feita pela API, que entrega no máximo 100 pessoas
+     * por vez. "Todos" segue as páginas até a última e junta as pessoas.
+     */
+    const user = userEvent.setup()
+    api.listarRede = vi.fn(async (params) => {
+      if (params.page_size !== 100) return { count: REDE.length, results: REDE.slice(0, 2) }
+
+      return params.page === '1'
+        ? { count: REDE.length, next: '/?page=2', results: REDE.slice(0, 3) }
+        : { count: REDE.length, next: null, results: REDE.slice(3) }
+    })
+    renderRede()
+    await esperarLista()
+
+    const seletor = screen.getByLabelText(/linhas por página/i)
+
+    expect(seletor).toHaveDisplayValue('25')
+    expect(within(seletor).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
+      '10',
+      '25',
+      '50',
+      'Todos',
+    ])
+
+    await user.selectOptions(seletor, 'Todos')
+
+    expect(
+      await screen.findByText(`Mostrando 1–${REDE.length} de ${REDE.length}`),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 1')).toBeInTheDocument()
+    expect(api.listarRede).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: '2', page_size: 100 }),
+    )
+  })
+
+  it('aberta pelo Painel, mostra só quem não declarou competência', async () => {
+    /**
+     * "Perfis invisíveis ao matching", no Painel, levava à rede inteira. O
+     * link agora abre a Rede já recortada em quem não declarou competência,
+     * que é exatamente o que o número do Painel conta.
+     */
+    renderRede('/rede?sem_competencia=1')
+    await esperarLista()
+
+    expect(api.listarRede).toHaveBeenCalledWith(
+      expect.objectContaining({ sem_competencia: 'true' }),
+    )
+    expect(screen.getByRole('button', { name: /sem competência declarada/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('o recorte de quem não declarou competência liga, desliga e sai com "Limpar filtros"', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const recorte = screen.getByRole('button', { name: /sem competência declarada/i })
+
+    expect(recorte).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(recorte)
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sem_competencia: 'true', page: 1 }),
+      ),
+    )
+
+    await user.click(
+      within(screen.getByLabelText('Filtros aplicados')).getByRole('button', {
+        name: /limpar filtros/i,
+      }),
+    )
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sem_competencia: '' }),
+      ),
+    )
+    expect(recorte).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lembra quantas linhas a pessoa escolheu', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderRede()
+    await esperarLista()
+
+    await user.selectOptions(screen.getByLabelText(/linhas por página/i), '50')
+    unmount()
+
+    renderRede()
+    await esperarLista()
+
+    expect(screen.getByLabelText(/linhas por página/i)).toHaveDisplayValue('50')
+    expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ page_size: 50 }))
   })
 
   it('os números do topo vêm do resumo da rede inteira', async () => {

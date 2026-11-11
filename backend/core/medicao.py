@@ -14,6 +14,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 CAPACIDADE_DA_JANELA = 500
@@ -44,9 +46,8 @@ class MedidorDeRequisicoes:
         self._inicio = time.time()
         self._total = 0
         self._erros = 0
-        self._lentas = 0
 
-    def registrar(self, *, duracao_ms: float, status: int, limite_ms: int) -> None:
+    def registrar(self, *, duracao_ms: float, status: int) -> None:
         with self._trava:
             self._amostras.append(duracao_ms)
             self._total += 1
@@ -54,15 +55,11 @@ class MedidorDeRequisicoes:
             if status >= 500:
                 self._erros += 1
 
-            if duracao_ms > limite_ms:
-                self._lentas += 1
-
     def resumo(self, *, limite_ms: int) -> dict[str, Any]:
         with self._trava:
             amostras = list(self._amostras)
             total = self._total
             erros = self._erros
-            lentas = self._lentas
             inicio = self._inicio
 
         return {
@@ -71,7 +68,7 @@ class MedidorDeRequisicoes:
             'p50_ms': percentil(amostras, 0.50),
             'p90_ms': percentil(amostras, 0.90),
             'limite_ms': limite_ms,
-            'acima_do_limite': lentas,
+            'acima_do_limite': sum(1 for amostra in amostras if amostra > limite_ms),
             'erros_servidor': erros,
             'uptime_segundos': int(time.time() - inicio),
         }
@@ -82,7 +79,6 @@ class MedidorDeRequisicoes:
             self._amostras.clear()
             self._total = 0
             self._erros = 0
-            self._lentas = 0
             self._inicio = time.time()
 
 
@@ -92,3 +88,32 @@ _medidor = MedidorDeRequisicoes()
 def medidor() -> MedidorDeRequisicoes:
     """O medidor do processo."""
     return _medidor
+
+
+_espera_de_ia_ms: ContextVar[float] = ContextVar('espera_de_ia_ms', default=0.0)
+
+
+@contextmanager
+def espera_de_ia():
+    """
+    Marca a espera por um servico externo de IA.
+
+    O criterio dos 3 s desconsidera esse tempo (`CONTEXT.md` secao 6): o
+    middleware desconta da requisicao o que passou aqui dentro.
+    """
+    inicio = time.perf_counter()
+
+    try:
+        yield
+    finally:
+        _espera_de_ia_ms.set(
+            _espera_de_ia_ms.get() + (time.perf_counter() - inicio) * 1000
+        )
+
+
+def zerar_espera_de_ia() -> None:
+    _espera_de_ia_ms.set(0.0)
+
+
+def espera_de_ia_ms() -> float:
+    return _espera_de_ia_ms.get()

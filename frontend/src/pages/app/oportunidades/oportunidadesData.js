@@ -263,9 +263,13 @@ export function daApi(registro) {
     atualizadaEm: Date.parse(registro.atualizada_em),
     aguardaMinhaAtuacao: Boolean(registro.aguarda_minha_atuacao),
     decisao: decisaoDaApi(registro.ultima_decisao),
-    competencias: [],
-    equipe: [],
-    lacunas: [],
+    equipe: registro.resumo_da_equipe
+      ? {
+          estado: registro.resumo_da_equipe.estado,
+          membros: registro.resumo_da_equipe.membros,
+          lacunas: registro.resumo_da_equipe.lacunas,
+        }
+      : null,
   }
 }
 
@@ -276,6 +280,32 @@ export const situacaoLabel = (id) => rotulo(SITUACOES, id)
 export const decisaoLabel = (id) => rotulo(DECISOES, id)
 export const prioridadeLabel = (id) => rotulo(PRIORIDADES, id)
 
+export const FILTRO_EM_ANDAMENTO = 'em_andamento'
+
+export const NOTAS_DOS_INDICADORES = Object.freeze({
+  total: 'Todas as cadastradas, inclusive as decididas',
+  emAndamento: 'Ainda sem decisão registrada',
+  aguardandoDecisao: 'Prontas para você decidir',
+  comLacuna: 'A equipe sugerida não cobre todas as competências',
+})
+
+export const ESTADOS_DA_EQUIPE = Object.freeze([
+  { id: 'aguardando_competencias', label: 'Aguardando competências' },
+  { id: 'nao_executado', label: 'Matching não executado' },
+  { id: 'sem_resultado', label: 'Nenhum perfil encontrado' },
+  { id: 'com_equipe', label: 'Com equipe potencial' },
+])
+
+const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
+
+export function textoDaEquipe(equipe) {
+  if (!equipe) return '—'
+
+  if (equipe.estado === 'com_equipe') return plural(equipe.membros, 'pessoa', 'pessoas')
+
+  return rotulo(ESTADOS_DA_EQUIPE, equipe.estado)
+}
+
 export function emAndamento(oportunidade) {
   return !SITUACOES.find((situacao) => situacao.id === oportunidade.situacao)?.desfecho
 }
@@ -285,7 +315,7 @@ export function resumoPorSituacao(oportunidades) {
     total: oportunidades.length,
     emAndamento: oportunidades.filter(emAndamento).length,
     aguardandoDecisao: oportunidades.filter((item) => item.situacao === 'aguardando_decisao').length,
-    comLacuna: oportunidades.filter((item) => item.lacunas.length > 0).length,
+    comLacuna: oportunidades.filter((item) => (item.equipe?.lacunas ?? 0) > 0).length,
   }
 }
 

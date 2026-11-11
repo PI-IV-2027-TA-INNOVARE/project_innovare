@@ -142,7 +142,7 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     renderizar()
 
     const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
-    expect(ligada).toHaveTextContent('Plano de pesquisa · A3 · Metodologia adequada')
+    expect(ligada).toHaveTextContent('Plano de pesquisa · Metodologia adequada (A3)')
     expect(within(ligada).getByText(/Defina o controle negativo\./)).toHaveTextContent('(acatada)')
 
     const semCriterio = screen.getByText('Não há prazo.').closest('li')
@@ -163,6 +163,16 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
 
     expect(await screen.findByText('Critérios V2')).toBeInTheDocument()
     expect(screen.getByText(/metodologia adequada/i)).toBeInTheDocument()
+  })
+
+  it('cita cada critério de referência pelo nome, com o código entre parênteses', async () => {
+    renderizar()
+
+    const nome = await screen.findByText('Metodologia adequada', { selector: 'strong' })
+
+    expect(nome.closest('li')).toHaveTextContent(
+      'Metodologia adequada (A3) · Plano de pesquisa — a metodologia é adequada aos objetivos?'
+    )
   })
 
   it('mostra a equipe considerada e a proposta avaliada', async () => {
@@ -222,6 +232,59 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
       await screen.findByText(/não produziu resultado/i),
     ).toBeInTheDocument()
     expect(screen.queryByText(/desafio tecnologico/i)).not.toBeInTheDocument()
+  })
+
+  /**
+   * O motivo saía como código cru, "(motivo: provedor_indisponivel)". O
+   * relatório usa o mesmo texto da aba Pré-análise.
+   */
+  it('explica a falha com o texto da aba, sem o código cru', async () => {
+    for (const [erro, texto] of [
+      ['provedor_indisponivel', /o serviço de ia não respondeu/i],
+      ['execucao_interrompida', /passou do tempo esperado sem terminar/i],
+    ]) {
+      api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+        ...RELATORIO,
+        pre_analise: {
+          ...RELATORIO.pre_analise,
+          status: 'erro',
+          status_rotulo: 'Erro',
+          erro,
+          dimensoes: [],
+          lacunas: [],
+          recomendacoes: [],
+          sintese: '',
+        },
+      })
+
+      const { unmount } = renderizar()
+
+      expect(await screen.findByText(texto)).toBeInTheDocument()
+      expect(screen.queryByText(new RegExp(erro))).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('execução em andamento não aparece como falha', async () => {
+    api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      pre_analise: {
+        ...RELATORIO.pre_analise,
+        status: 'executando',
+        status_rotulo: 'Executando',
+        erro: '',
+        dimensoes: [],
+        lacunas: [],
+        recomendacoes: [],
+        sintese: '',
+      },
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/ainda está em andamento/i)).toBeInTheDocument()
+    expect(screen.queryByText(/não produziu resultado/i)).not.toBeInTheDocument()
   })
 
   it('oferece impressão e volta para a oportunidade', async () => {

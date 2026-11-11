@@ -33,6 +33,12 @@ export function rotuloDoCriterio(item) {
   if (!item?.criterio_codigo) return SEM_EVIDENCIA
 
   return item.criterio_rotulo
-    ? `${item.criterio_codigo} · ${item.criterio_rotulo}`
+    ? `${item.criterio_rotulo} (${item.criterio_codigo})`
     : item.criterio_codigo
+}
+
+export function separarDescricao(descricao) {
+  const [titulo, ...pergunta] = descricao.split(' — ')
+
+  return { titulo, pergunta: pergunta.join(' — ') }
 }

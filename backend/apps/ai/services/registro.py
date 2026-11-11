@@ -99,15 +99,24 @@ def nome_da_reserva() -> str:
     return str(getattr(settings, 'AI_PROVEDOR_RESERVA', '') or '')
 
 
-def papel_do_provedor(nome: str) -> str:
-    """`principal`, `reserva` ou `registrado` - o que a tela de saúde mostra."""
-    if nome == nome_do_principal():
-        return 'principal'
+def papeis_configurados() -> dict[tuple[str, str], str]:
+    """
+    Os pares de provedor e modelo que a configuração põe para responder.
 
-    if nome == nome_da_reserva():
-        return 'reserva'
+    Segue a regra de `provedor_com_reserva`: a reserva pode ser outro provedor
+    ou outro modelo do mesmo provedor, e reserva igual ao principal não é
+    reserva.
+    """
+    principal = descritor(nome_do_principal())
+    papeis = {(principal.nome, principal.modelo()): 'principal'}
+    reserva_nome = nome_da_reserva()
+    modelo_reserva = str(getattr(settings, 'AI_MODELO_RESERVA', '') or '')
 
-    return 'registrado'
+    if reserva_nome or modelo_reserva:
+        reserva = descritor(reserva_nome) if reserva_nome else principal
+        papeis.setdefault((reserva.nome, modelo_reserva or reserva.modelo()), 'reserva')
+
+    return papeis
 
 
 def provedor_principal(**kwargs) -> ProvedorDeIA:

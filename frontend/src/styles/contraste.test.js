@@ -42,8 +42,8 @@ import { getDefaultBranding } from '../theme/brandTokens'
  * A tinta de Sucesso com texto verde nao serve: chega a 3,7:1 no tema claro.
  * Na legenda os mesmos valores parciais ficam fora do cartao, entao a conta
  * vale tambem sobre o fundo da pagina.
- * O aviso da tabela de provedores, na Saude, e texto de Alerta sobre uma tinta
- * de Alerta. Os selos de estado da Saude seguem a mesma conta: atencao e texto
+ * O aviso de provedor nao configurado, na Saude, e texto de Alerta sobre uma
+ * tinta de Alerta. Os selos de estado da Saude seguem a mesma conta: atencao e texto
  * de Alerta sobre tinta de Alerta, e critico e um selo cheio de Erro com o
  * texto da cor de destaque, porque texto vermelho sobre tinta vermelha fica
  * abaixo de 4,5:1 no tema claro. Os selos de situacao da Auditoria usam a mesma
@@ -242,10 +242,30 @@ describe('selos da tela de Permissões — WCAG 2.2 AA', () => {
   }
 })
 
-describe('aviso da tabela de provedores na Saúde — WCAG 2.2 AA', () => {
+describe('papel e modelo do provedor na Saúde — WCAG 2.2 AA', () => {
+  const telaAdmin = fonte('../pages/admin/AdminPage.scss')
+
+  it('o selo do papel é texto principal sobre o fundo secundário, e o modelo é texto discreto', () => {
+    expect(telaAdmin).toMatch(
+      /\.saude__papel\s*\{[^}]*color:\s*var\(--text-primary\);[^}]*background:\s*var\(--bg-secondary\)/
+    )
+    expect(telaAdmin).toMatch(/\.saude__provedor-modelo\s*\{[^}]*color:\s*var\(--text-muted\)/)
+  })
+
+  for (const tema of ['light', 'dark']) {
+    it(`o selo e o modelo entregam 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+
+      expect(contraste(paleta.textPrimary, paleta.bgSecondary)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(paleta.textMuted, paleta.bgCard)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+describe('aviso de provedor não configurado na Saúde — WCAG 2.2 AA', () => {
   const telaAdmin = fonte('../pages/admin/AdminPage.scss')
   const aviso = telaAdmin.match(
-    /\.saude__tabela-aviso\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%[^}]*color:\s*var\(--accent-warning\)/
+    /\.saude__provedor-aviso\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%[^}]*color:\s*var\(--accent-warning\)/
   )
 
   it('usa a cor de Alerta, e não cores fixas de tema claro', () => {
@@ -331,6 +351,24 @@ describe('o Laranja claro é fundo, não alerta', () => {
       .map((linha) => `${arquivo}: ${linha.trim()}`))
 
     expect(usos).toEqual([])
+  })
+
+  it('o cartão de número em alerta é vermelho e mora no estilo comum, que toda tela carrega', () => {
+    /**
+     * O vermelho do cartão em alerta estava no estilo da tela da Rede. No
+     * Painel, aberto antes da Rede, o estilo não existia, e o ícone de
+     * "Perfis invisíveis ao matching" saía no laranja padrão do cartão.
+     */
+    const inicio = console_.indexOf('\n.stat-card--alert {')
+    const bloco = console_.slice(inicio, console_.indexOf('\n}', inicio))
+    const donos = folhas
+      .filter(({ scss }) => scss.includes('.stat-card--alert {'))
+      .map(({ arquivo }) => arquivo)
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).toMatch(/&::before\s*\{[^}]*background:\s*var\(--accent-error\)/)
+    expect(bloco).toMatch(/\.stat-card__icon\s*\{[^}]*color:\s*var\(--accent-error\)/)
+    expect(donos).toEqual([join('styles', 'components', '_console.scss')])
   })
 
   it('o aviso de alerta usa a cor de Alerta e mora no estilo comum, que toda tela carrega', () => {

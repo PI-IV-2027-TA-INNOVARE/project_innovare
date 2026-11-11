@@ -5459,13 +5459,14 @@
       "date": "03/09/2026",
       "baseline": "PIPE_JT_F1_2026_R1_V2",
       "change": "Ampliação com orçamento, bolsas, documentos, PI/terceiros, projeto completo suplementar, Súmula, SAGe, banco de perguntas, projetos BV, schema de BD e prompt robusto.",
+      "review": "Conferida em 07/11/2026 com as Normas PIPE vigentes desde 15/09/2026 (fapesp.br/pipe/normas): os 23 critérios de análise do item 11.1.5, de a) a f), são os mesmos de A1 a F3; prazo, teto e demais regras seguem a Chamada 33/2026, que prevalece sobre as normas gerais.",
       "status": "ATIVA"
     },
     {
-      "version": "V3 planejada",
-      "date": "15/09/2026 ou após",
+      "version": "Próxima revisão",
+      "date": "16/11/2026",
       "baseline": "Nova baseline",
-      "change": "Reavaliar novas Normas PIPE que entram em vigor em 15/09/2026; nunca sobrescrever retroativamente a baseline da Chamada 33/2026.",
+      "change": "Lançamento previsto da 8ª Chamada – Geral do PIPE Jornada Tecnológica (fapesp.br/pipejornada). Conferir prazo, teto e critérios da chamada nova; nunca sobrescrever retroativamente a baseline da Chamada 33/2026.",
       "status": "PENDENTE"
     }
   ]

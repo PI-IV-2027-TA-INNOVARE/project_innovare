@@ -98,6 +98,19 @@ describe('ProblemasPage', () => {
     expect(api.listOportunidades).toHaveBeenCalledTimes(1)
   })
 
+  it('lista todos os problemas, mesmo quando passam de uma página da API', async () => {
+    api.listOportunidades = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 2, next: '/?page=2', results: [BIOINSUMO] })
+      .mockResolvedValueOnce({ count: 2, next: null, results: [SUCO] })
+
+    renderApp()
+
+    expect(await screen.findByText('Vida de prateleira de suco integral')).toBeInTheDocument()
+    expect(screen.getByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
+    expect(api.listOportunidades).toHaveBeenCalledTimes(2)
+  })
+
   it('avisa e oferece nova tentativa quando a API falha', async () => {
     const user = userEvent.setup({ delay: null })
     api.listOportunidades = vi.fn().mockRejectedValue(new Error('Servidor fora do ar.'))

@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import {
-  Paginacao,
   RowActionsMenu,
   SkeletonRows,
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { BotaoPessoa, FichaDePessoa } from '../../../components/console/Pessoa'
+import RodapeDePaginacao from '../../../components/console/RodapeDePaginacao'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
+import { TODAS_AS_LINHAS, useLinhasPorPagina } from '../../../lib/linhasPorPagina'
+import { todasAsPaginas } from '../../../lib/paginas'
 import {
   inativarMembro,
   liberarAcessoMembro,
@@ -39,7 +41,6 @@ const COLUNAS = [
   { id: 'acoes', label: 'Ações', ordenavel: false },
 ]
 
-const POR_PAGINA = 20
 const ESPERA_DA_BUSCA_MS = 300
 
 const RESUMO_VAZIO = { total: 0, ativos: 0, titulados: 0, sem_competencia: 0 }
@@ -47,6 +48,7 @@ const RESUMO_VAZIO = { total: 0, ativos: 0, titulados: 0, sem_competencia: 0 }
 export default function RedePage() {
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
+  const [parametros, setParametros] = useSearchParams()
 
   const [pessoas, setPessoas] = useState([])
   const [total, setTotal] = useState(0)
@@ -57,33 +59,49 @@ export default function RedePage() {
   const [buscaAplicada, setBuscaAplicada] = useState('')
   const [papelFiltro, setPapelFiltro] = useState('todos')
   const [situacaoFiltro, setSituacaoFiltro] = useState('todos')
+  const [soSemCompetencia, setSoSemCompetencia] = useState(
+    () => parametros.get('sem_competencia') === '1'
+  )
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
   const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useLinhasPorPagina('rede', 25)
   const [detalhe, setDetalhe] = useState(null)
   const [liberando, setLiberando] = useState(() => new Set())
 
   useEffect(() => {
+    const termo = busca.trim()
+
+    if (termo === buscaAplicada) return undefined
+
     const relogio = setTimeout(() => {
-      setBuscaAplicada(busca.trim())
+      setBuscaAplicada(termo)
       setPagina(1)
     }, ESPERA_DA_BUSCA_MS)
 
     return () => clearTimeout(relogio)
-  }, [busca])
+  }, [busca, buscaAplicada])
 
   const carregar = useCallback(async () => {
     setCarregando(true)
     setErroCarga('')
 
+    const filtros = {
+      busca: buscaAplicada,
+      papel_rede: papelFiltro === 'todos' ? '' : papelFiltro,
+      situacao: situacaoFiltro === 'todos' ? '' : situacaoFiltro,
+      sem_competencia: soSemCompetencia ? 'true' : '',
+      ordenar: (ordem.direcao === 'desc' ? '-' : '') + ordem.campo,
+    }
+
     try {
-      const resposta = await listarRede({
-        page: pagina,
-        page_size: POR_PAGINA,
-        busca: buscaAplicada,
-        papel_rede: papelFiltro === 'todos' ? '' : papelFiltro,
-        situacao: situacaoFiltro === 'todos' ? '' : situacaoFiltro,
-        ordenar: (ordem.direcao === 'desc' ? '-' : '') + ordem.campo,
-      })
+      if (porPagina === TODAS_AS_LINHAS) {
+        const rede = await todasAsPaginas(listarRede, { ...filtros, page_size: 100 })
+        setPessoas(rede.map(membroDaApi))
+        setTotal(rede.length)
+        return
+      }
+
+      const resposta = await listarRede({ ...filtros, page: pagina, page_size: porPagina })
       const resultados = resposta.results || resposta
       setPessoas(resultados.map(membroDaApi))
       setTotal(resposta.count ?? resultados.length)
@@ -94,7 +112,7 @@ export default function RedePage() {
     } finally {
       setCarregando(false)
     }
-  }, [buscaAplicada, ordem, pagina, papelFiltro, situacaoFiltro])
+  }, [buscaAplicada, ordem, pagina, porPagina, papelFiltro, situacaoFiltro, soSemCompetencia])
 
   const carregarResumo = useCallback(async () => {
     try {
@@ -119,7 +137,17 @@ export default function RedePage() {
 
   useAtualizarAoFocar(atualizar)
 
-  const temFiltro = Boolean(busca) || papelFiltro !== 'todos' || situacaoFiltro !== 'todos'
+  const temFiltro =
+    Boolean(busca) || papelFiltro !== 'todos' || situacaoFiltro !== 'todos' || soSemCompetencia
+
+  const tamanhoDaPagina = porPagina === TODAS_AS_LINHAS ? Math.max(total, 1) : porPagina
+  const totalPaginas = Math.max(1, Math.ceil(total / tamanhoDaPagina))
+  const inicio = (pagina - 1) * tamanhoDaPagina
+
+  const escolherLinhas = (valor) => {
+    setPorPagina(valor)
+    setPagina(1)
+  }
 
   const ordenarPor = (campo) => {
     setOrdem((atual) => ({
@@ -139,12 +167,18 @@ export default function RedePage() {
     setPagina(1)
   }
 
+  const recortarSemCompetencia = (ligado) => {
+    setSoSemCompetencia(ligado)
+    setParametros(ligado ? { sem_competencia: '1' } : {}, { replace: true })
+    setPagina(1)
+  }
+
   const limparFiltros = () => {
     setBusca('')
     setBuscaAplicada('')
     setPapelFiltro('todos')
     setSituacaoFiltro('todos')
-    setPagina(1)
+    recortarSemCompetencia(false)
   }
 
   const marcarLiberando = (id, emAndamento) => {
@@ -294,6 +328,16 @@ export default function RedePage() {
         </div>
 
         <div className="admin-toolbar__actions">
+          <button
+            type="button"
+            className={`admin-btn admin-btn--outline${soSemCompetencia ? ' is-active' : ''}`}
+            aria-pressed={soSemCompetencia}
+            title="Quem não declarou competência fica de fora do matching."
+            onClick={() => recortarSemCompetencia(!soSemCompetencia)}
+          >
+            Sem competência declarada ({resumo.sem_competencia})
+          </button>
+
           <label className="sr-only" htmlFor="filtro-papel">Filtrar por papel</label>
           <select
             id="filtro-papel"
@@ -485,13 +529,19 @@ export default function RedePage() {
         </table>
       </div>
 
-      <Paginacao
-        pagina={pagina}
-        total={total}
-        porPagina={POR_PAGINA}
-        rotulo={total === 1 ? 'pessoa' : 'pessoas'}
-        onMudar={setPagina}
-      />
+      {!carregando ? (
+        <RodapeDePaginacao
+          rotulo="Paginação da rede interna"
+          total={total}
+          inicio={inicio}
+          fim={inicio + pessoas.length}
+          pagina={pagina}
+          totalPaginas={totalPaginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={escolherLinhas}
+        />
+      ) : null}
 
       {detalhe ? (
         <FichaDePessoa

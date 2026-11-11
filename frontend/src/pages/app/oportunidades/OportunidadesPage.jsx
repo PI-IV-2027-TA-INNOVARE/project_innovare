@@ -5,21 +5,28 @@ import {
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
+import RodapeDePaginacao from '../../../components/console/RodapeDePaginacao'
 import { useAuth } from '../../../context/AuthContext'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
+import { paginar, useLinhasPorPagina } from '../../../lib/linhasPorPagina'
+import { todasAsPaginas } from '../../../lib/paginas'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import { listOportunidades } from '../../../services/pdConnectApi'
 import {
+  FILTRO_EM_ANDAMENTO,
+  NOTAS_DOS_INDICADORES,
   ORIGENS,
   PRIORIDADES,
   SITUACOES,
   daApi,
+  emAndamento,
   origemLabel,
   prioridadeLabel,
   resumoPorSituacao,
   situacaoLabel,
+  textoDaEquipe,
 } from './oportunidadesData'
 import './OportunidadesPage.scss'
 
@@ -29,8 +36,15 @@ const COLUNAS = [
   { id: 'situacao', label: 'Situação', ordenavel: true },
   { id: 'prioridade', label: 'Prioridade', ordenavel: true },
   { id: 'equipe', label: 'Equipe potencial', ordenavel: false },
+  { id: 'criadaEm', label: 'Cadastrada', ordenavel: true },
   { id: 'atualizadaEm', label: 'Atualizada', ordenavel: true },
 ]
+
+function dataCompleta(instante) {
+  const data = new Date(instante)
+  const hora = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `${data.toLocaleDateString('pt-BR')} às ${hora}`
+}
 
 function diaLocal(instante) {
   const data = new Date(instante)
@@ -44,6 +58,8 @@ const ordemDaPrioridade = (id) =>
 
 function comparar(a, b, campo) {
   if (campo === 'atualizadaEm') return a.atualizadaEm - b.atualizadaEm
+
+  if (campo === 'criadaEm') return a.criadaEm - b.criadaEm
 
   if (campo === 'prioridade') {
     return (
@@ -83,6 +99,8 @@ export default function OportunidadesPage() {
   const [cadastradaAte, setCadastradaAte] = useState('')
   const [soMinhaAtuacao, setSoMinhaAtuacao] = useState(false)
   const [ordem, setOrdem] = useState({ campo: 'prioridade', direcao: 'asc' })
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useLinhasPorPagina('oportunidades', 25)
 
   const acompanhaFila = ehSupervisor || ehPesquisador
 
@@ -97,8 +115,8 @@ export default function OportunidadesPage() {
     setErroCarga('')
 
     try {
-      const resposta = await listOportunidades({ ordenar: 'prioridade' })
-      setOportunidades((resposta.results || resposta).map(daApi))
+      const fila = await todasAsPaginas(listOportunidades, { ordenar: 'prioridade' })
+      setOportunidades(fila.map(daApi))
     } catch (erro) {
       setOportunidades([])
       setErroCarga(erro.message || 'Não foi possível carregar as oportunidades.')
@@ -119,7 +137,11 @@ export default function OportunidadesPage() {
     const termo = busca.trim().toLowerCase()
 
     return oportunidades.filter((item) => {
-      const situacaoOk = situacaoFiltro === 'todas' || item.situacao === situacaoFiltro
+      const situacaoOk =
+        situacaoFiltro === 'todas' ||
+        (situacaoFiltro === FILTRO_EM_ANDAMENTO
+          ? emAndamento(item)
+          : item.situacao === situacaoFiltro)
       const origemOk = origemFiltro === 'todas' || item.origem === origemFiltro
       const prioridadeOk = prioridadeFiltro === 'todas' || item.prioridade === prioridadeFiltro
       const buscaOk =
@@ -155,6 +177,26 @@ export default function OportunidadesPage() {
     const fator = ordem.direcao === 'asc' ? 1 : -1
     return [...filtradas].sort((a, b) => comparar(a, b, ordem.campo) * fator)
   }, [filtradas, ordem])
+
+  useEffect(() => {
+    setPagina(1)
+  }, [
+    busca,
+    situacaoFiltro,
+    origemFiltro,
+    prioridadeFiltro,
+    cadastradaDe,
+    cadastradaAte,
+    soMinhaAtuacao,
+    ordem,
+    porPagina,
+  ])
+
+  const { visiveis, paginaAtual, totalPaginas, inicio, fim } = paginar(
+    ordenadas,
+    pagina,
+    porPagina
+  )
 
   const temFiltro =
     Boolean(busca) ||
@@ -229,6 +271,7 @@ export default function OportunidadesPage() {
             <div>
               <p className="stat-card__label">Oportunidades</p>
               <p className="stat-card__value">{indicadores.total}</p>
+              <p className="stat-card__nota">{NOTAS_DOS_INDICADORES.total}</p>
             </div>
           </article>
 
@@ -237,14 +280,16 @@ export default function OportunidadesPage() {
             <div>
               <p className="stat-card__label">Em andamento</p>
               <p className="stat-card__value">{indicadores.emAndamento}</p>
+              <p className="stat-card__nota">{NOTAS_DOS_INDICADORES.emAndamento}</p>
             </div>
           </article>
 
           <article className="stat-card">
             <Icone icon={appIcons.decision} className="stat-card__icon" />
             <div>
-              <p className="stat-card__label">Aguardando sua decisão</p>
+              <p className="stat-card__label">Aguardando decisão</p>
               <p className="stat-card__value">{indicadores.aguardandoDecisao}</p>
+              <p className="stat-card__nota">{NOTAS_DOS_INDICADORES.aguardandoDecisao}</p>
             </div>
           </article>
 
@@ -253,6 +298,7 @@ export default function OportunidadesPage() {
             <div>
               <p className="stat-card__label">Com lacuna de competência</p>
               <p className="stat-card__value">{indicadores.comLacuna}</p>
+              <p className="stat-card__nota">{NOTAS_DOS_INDICADORES.comLacuna}</p>
             </div>
           </article>
         </div>
@@ -288,13 +334,21 @@ export default function OportunidadesPage() {
               type="button"
               className={`admin-btn admin-btn--outline${soMinhaAtuacao ? ' is-active' : ''}`}
               aria-pressed={soMinhaAtuacao}
-              title="Sem responsável ou conduzidas por você, em Entrada, aguardando decisão ou com resposta do Demandante a um pedido de revisão."
+              aria-describedby="regra-da-atuacao"
               onClick={() => setSoMinhaAtuacao((atual) => !atual)}
             >
               Aguardando minha atuação ({aguardandoMinhaAtuacao})
             </button>
           ) : null}
         </div>
+
+        {ehSupervisor ? (
+          <p id="regra-da-atuacao" className="filtros-oportunidades__nota">
+            Aguardando minha atuação reúne as oportunidades sem responsável ou conduzidas
+            por você, em Entrada, aguardando decisão ou com resposta do Demandante a um
+            pedido de revisão.
+          </p>
+        ) : null}
 
         <div className="filtros-oportunidades__refino">
           <label className="admin-field">
@@ -305,6 +359,7 @@ export default function OportunidadesPage() {
               onChange={(event) => trocarSituacao(event.target.value)}
             >
               <option value="todas">Todas as situações</option>
+              <option value={FILTRO_EM_ANDAMENTO}>Em andamento</option>
               {SITUACOES.map((situacao) => (
                 <option key={situacao.id} value={situacao.id}>{situacao.label}</option>
               ))}
@@ -400,7 +455,7 @@ export default function OportunidadesPage() {
           <tbody>
             {carregando ? <SkeletonRows colunas={COLUNAS.length} /> : null}
 
-            {!carregando && ordenadas.map((item) => (
+            {!carregando && visiveis.map((item) => (
               <tr key={item.id}>
                 <td data-label="Oportunidade">
                   <Link className="oportunidade-link" to={`/oportunidades/${item.id}`}>
@@ -432,23 +487,23 @@ export default function OportunidadesPage() {
                 </td>
 
                 <td data-label="Equipe potencial">
-                  {item.equipe.length > 0 ? (
-                    <span className="user-cell__meta">
-                      {item.equipe.length} {item.equipe.length === 1 ? 'pessoa' : 'pessoas'}
-                      {item.lacunas.length > 0 ? (
-                        <span className="oportunidade-lacuna" title={item.lacunas.join(' · ')}>
-                          <Icone icon={appIcons.warning} aria-hidden="true" />
-                          {item.lacunas.length} lacuna
-                        </span>
-                      ) : null}
-                    </span>
-                  ) : (
-                    <span className="user-cell__meta">Ainda sem matching</span>
-                  )}
+                  <span className="user-cell__meta">{textoDaEquipe(item.equipe)}</span>
+                </td>
+
+                <td data-label="Cadastrada">
+                  <span className="user-cell__meta">
+                    {new Date(item.criadaEm).toLocaleDateString('pt-BR')}
+                  </span>
                 </td>
 
                 <td data-label="Atualizada">
-                  <span className="user-cell__meta">{formatarUltimoAcesso(item.atualizadaEm)}</span>
+                  <time
+                    className="user-cell__meta"
+                    dateTime={new Date(item.atualizadaEm).toISOString()}
+                    title={`Atualizada em ${dataCompleta(item.atualizadaEm)}`}
+                  >
+                    {formatarUltimoAcesso(item.atualizadaEm)}
+                  </time>
                 </td>
               </tr>
             ))}
@@ -482,6 +537,20 @@ export default function OportunidadesPage() {
           </tbody>
         </table>
       </div>
+
+      {acompanhaFila && !carregando ? (
+        <RodapeDePaginacao
+          rotulo="Paginação da fila de oportunidades"
+          total={ordenadas.length}
+          inicio={inicio}
+          fim={fim}
+          pagina={paginaAtual}
+          totalPaginas={totalPaginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={setPorPagina}
+        />
+      ) : null}
     </div>
   )
 }

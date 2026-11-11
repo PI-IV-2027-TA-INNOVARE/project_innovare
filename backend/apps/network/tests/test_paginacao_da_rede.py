@@ -60,6 +60,30 @@ class RedeEmPaginasTests(TestCase):
         self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('ordenar', resposta.data)
 
+    def test_filtra_quem_esta_invisivel_ao_matching(self):
+        """
+        O Painel conta "perfis invisiveis ao matching" pelo resumo, e o clique
+        levava a rede inteira. O filtro traz exatamente quem o resumo conta:
+        quem nao declarou competencia, mesmo que tenha tecnica.
+        """
+        MembroRedeBuilder().chamado('Com competencia').com_competencia('Microbiologia').build()
+        MembroRedeBuilder().chamado('So tecnica').com_tecnica('PCR').build()
+        MembroRedeBuilder().chamado('Perfil vazio').build()
+
+        nomes = [item['nome'] for item in self.listar(sem_competencia='true').data['results']]
+        todos = self.listar(sem_competencia='false').data['count']
+        resumo = self.client.get(reverse('membro-rede-resumo')).data['sem_competencia']
+
+        self.assertEqual(sorted(nomes), ['Perfil vazio', 'So tecnica'])
+        self.assertEqual(len(nomes), resumo)
+        self.assertEqual(todos, 3)
+
+    def test_filtro_de_competencia_com_valor_invalido_e_recusado(self):
+        resposta = self.listar(sem_competencia='talvez')
+
+        self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('sem_competencia', resposta.data)
+
 
 class ResumoDaRedeTests(TestCase):
     def setUp(self):
