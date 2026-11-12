@@ -1412,6 +1412,9 @@
   border-radius: var(--admin-radius);
   box-shadow: var(--admin-glow-soft);
   transition: border-color var(--admin-motion);
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
 
   &:hover {
     border-color: var(--admin-card-border-hover);
@@ -1439,6 +1442,11 @@
   font-size: 0.875rem;
   line-height: 1.55;
   color: var(--text-muted);
+}
+
+.descricao-una-linha {
+  max-width: none;
+  white-space: nowrap;
 }
 
 .criterios__resumo {
@@ -1654,6 +1662,10 @@
   }
 }
 
+.perfil-card--acesso-plataforma {
+  min-height: 160px;
+}
+
 .perfil-card__body {
   display: grid;
   gap: var(--admin-gap);
@@ -1661,6 +1673,7 @@
   margin: 0;
   padding: 0;
   border: 0;
+  flex: 1;
 
   &:disabled .admin-input {
     opacity: 0.75;

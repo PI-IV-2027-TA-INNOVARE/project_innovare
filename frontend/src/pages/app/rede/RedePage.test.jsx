@@ -96,7 +96,16 @@ const BANCADA = {
   tem_acesso: false,
 }
 
-const REDE = [MARIA, HELENA, CARLA, PEDRO, BANCADA]
+const JOAO = {
+  ...MARIA,
+  id_membro: 8,
+  nome: 'João Silva',
+  email: 'joao.silva@ac2microbiologia.com.br',
+  disponibilidade: 'integral',
+  competencias: ['Microbiologia de alimentos', 'Fermentação', 'PCR em tempo real', 'Bioinformática'],
+}
+
+const REDE = [MARIA, HELENA, CARLA, PEDRO, BANCADA, JOAO]
 
 function renderRede(rota = '/rede') {
   return render(
@@ -197,6 +206,94 @@ describe('RedePage', () => {
     expect(['Pedro Salgado', 'Núcleo de P&D — Bancada 2']).toContain(primeiro)
   })
 
+  it('filtra por disponibilidade e envia o parâmetro à API', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const select = screen.getByLabelText(/filtrar por disponibilidade/i)
+    await user.selectOptions(select, 'integral')
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ disponibilidade: 'integral', page: 1 }),
+      ),
+    )
+  })
+
+  it('exibe chips de filtros ativos e remove individualmente pelo ×', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await user.type(screen.getByLabelText(/buscar na rede interna/i), 'silva')
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busca: 'silva', page: 1 }),
+      ),
+    )
+
+    // O chip da busca deve aparecer
+    const chipBusca = screen.getByText('Busca')
+    expect(chipBusca).toBeInTheDocument()
+
+    // O botão de remoção do chip remove o filtro
+    const container = chipBusca.closest('.active-chip')
+    await user.click(within(container).getByRole('button', { name: /remover filtro busca/i }))
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busca: '', page: 1 }),
+      ),
+    )
+    expect(screen.queryByText('Busca')).not.toBeInTheDocument()
+  })
+
+  it('abre o popover de competências ao clicar no +N', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    // João Silva tem 4 competências, então mostra 2 + o botão +2
+    await waitFor(() => expect(screen.getByText('João Silva')).toBeInTheDocument())
+
+    const linhaJoao = screen.getByText('João Silva').closest('tr')
+    const botaoMais = within(linhaJoao).getByRole('button', { name: /ver as 2 competências restantes/i })
+
+    await user.click(botaoMais)
+
+    // O popover deve mostrar as competências restantes
+    await waitFor(() =>
+      expect(screen.getByRole('listbox')).toHaveTextContent('PCR em tempo real'),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('listbox')).toHaveTextContent('Bioinformática'),
+    )
+
+    // Clicar novamente fecha o popover
+    await user.click(botaoMais)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('fecha o popover de competências ao clicar em outra parte da tela', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await waitFor(() => expect(screen.getByText('João Silva')).toBeInTheDocument())
+
+    const linhaJoao = screen.getByText('João Silva').closest('tr')
+    const botaoMais = within(linhaJoao).getByRole('button', { name: /ver as 2 competências restantes/i })
+
+    await user.click(botaoMais)
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+
+    // Clica fora do popover (no body)
+    await user.click(document.body)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
   /**
    * A tela pedia 100 pessoas e contava no navegador: da 101a em diante, a
    * pessoa sumia da lista, da busca e dos números do topo sem aviso.
@@ -287,10 +384,9 @@ describe('RedePage', () => {
     expect(api.listarRede).toHaveBeenCalledWith(
       expect.objectContaining({ sem_competencia: 'true' }),
     )
-    expect(screen.getByRole('button', { name: /sem competência declarada/i })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    expect(
+      screen.getByRole('button', { name: /sem competência declarada \(\d\)/i }),
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('o recorte de quem não declarou competência liga, desliga e sai com "Limpar filtros"', async () => {
@@ -298,7 +394,7 @@ describe('RedePage', () => {
     renderRede()
     await esperarLista()
 
-    const recorte = screen.getByRole('button', { name: /sem competência declarada/i })
+    const recorte = screen.getByRole('button', { name: /sem competência declarada \(\d\)/i })
 
     expect(recorte).toHaveAttribute('aria-pressed', 'false')
 
@@ -514,14 +610,11 @@ describe('RedeFormPage', () => {
   it('a dica da instituição fica dentro do campo que ela explica', async () => {
     renderRede('/rede/novo')
 
-    const instituicao = await screen.findByLabelText('Instituição')
-    const campo = instituicao.closest('.admin-field')
+    const campo = await screen.findByText('Instituição')
+      .then((el) => el.closest('.admin-field'))
 
     expect(within(campo).getByText(/vínculo institucional vem do cadastro/i))
       .toBeInTheDocument()
-    expect(instituicao).toHaveAccessibleDescription(
-      /vínculo institucional vem do cadastro/i
-    )
   })
 
   it('separa cadastrar na rede de liberar o acesso', async () => {
@@ -554,20 +647,119 @@ describe('RedeFormPage', () => {
     expect(screen.getByText(/o convite de primeiro acesso sai para o e-mail/i)).toBeInTheDocument()
   })
 
-  it('as listas do matching têm nome visível e um aviso só quando estão todas vazias', async () => {
+  it('as listas do matching aparecem progressivamente: técnicas e linhas só após preencher competências', async () => {
     const user = userEvent.setup()
     renderRede('/rede/novo')
 
     const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
       .closest('.perfil-card')
 
-    expect(within(cartao).getByText('Técnicas', { selector: '.admin-field__label' })).toBeInTheDocument()
+    // Apenas Competências aparece inicialmente
+    expect(within(cartao).getByText('Competências', { selector: '.admin-field__label' })).toBeInTheDocument()
+    expect(within(cartao).queryByText('Técnicas', { selector: '.admin-field__label' })).not.toBeInTheDocument()
+    expect(within(cartao).queryByText('Linhas de pesquisa', { selector: '.admin-field__label' })).not.toBeInTheDocument()
     expect(within(cartao).queryByText(/fica de fora do matching/i)).not.toBeInTheDocument()
     expect(within(cartao).getByText(/dificilmente aparece nas sugestões/i)).toBeInTheDocument()
 
     await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
 
+    // Após preencher competências, Técnicas aparece
+    expect(within(cartao).getByText('Técnicas', { selector: '.admin-field__label' })).toBeInTheDocument()
     expect(within(cartao).queryByText(/dificilmente aparece nas sugestões/i)).not.toBeInTheDocument()
+
+    await user.type(within(cartao).getByLabelText(/adicionar em técnicas/i), 'PCR{Enter}')
+
+    // Após preencher técnicas, Linhas de pesquisa aparece
+    expect(within(cartao).getByText('Linhas de pesquisa', { selector: '.admin-field__label' })).toBeInTheDocument()
+  })
+
+  it('remove um chip sem afetar os outros da mesma lista', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
+      .closest('.perfil-card')
+
+    // Adiciona duas competências
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Fermentação{Enter}')
+
+    expect(await screen.findByText('Microbiologia')).toBeInTheDocument()
+    expect(await screen.findByText('Fermentação')).toBeInTheDocument()
+
+    // Remove apenas a primeira competência
+    const chipMicrobiologia = within(cartao).getByText('Microbiologia').closest('li')
+    const botaoRemover = within(chipMicrobiologia).getByRole('button', { name: /remover microbiologia/i })
+    await user.click(botaoRemover)
+
+    // A primeira sumiu
+    expect(within(cartao).queryByText('Microbiologia')).not.toBeInTheDocument()
+    // A segunda permanece
+    expect(await screen.findByText('Fermentação')).toBeInTheDocument()
+  })
+
+  it('remove o único chip de técnicas e linhas de pesquisa some, técnicas também somem', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
+      .closest('.perfil-card')
+
+    // Adiciona uma competência para técnicas aparecer
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
+
+    await user.type(within(cartao).getByLabelText(/adicionar em técnicas/i), 'PCR{Enter}')
+
+    expect(await screen.findByText('PCR')).toBeInTheDocument()
+    expect(within(cartao).getByText('Linhas de pesquisa', { selector: '.admin-field__label' })).toBeInTheDocument()
+
+    // Remove o único chip de técnicas
+    const chipPcr = within(cartao).getByText('PCR').closest('li')
+    const botaoRemover = within(chipPcr).getByRole('button', { name: /remover pcr/i })
+    await user.click(botaoRemover)
+
+    // Técnica sumiu
+    expect(within(cartao).queryByText('PCR')).not.toBeInTheDocument()
+    // Linhas de pesquisa sumiu porque técnicas ficou vazio
+    expect(within(cartao).queryByText('Linhas de pesquisa', { selector: '.admin-field__label' })).not.toBeInTheDocument()
+  })
+
+  it('quando todos os chips são removidos, apenas competências permanece visível', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
+      .closest('.perfil-card')
+
+    // Adiciona um chip em cada lista
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
+    await user.type(within(cartao).getByLabelText(/adicionar em técnicas/i), 'PCR{Enter}')
+    await user.type(within(cartao).getByLabelText(/adicionar em linhas de pesquisa/i), 'Bioinsumos{Enter}')
+
+    // Todas as três listas devem estar visíveis
+    expect(await screen.findByText('Microbiologia')).toBeInTheDocument()
+    expect(await screen.findByText('PCR')).toBeInTheDocument()
+    expect(await screen.findByText('Bioinsumos')).toBeInTheDocument()
+
+    // Remove Linhas de Pesquisa
+    const chipBioinsumos = within(cartao).getByText('Bioinsumos').closest('li')
+    await user.click(within(chipBioinsumos).getByRole('button', { name: /remover bioinsumos/i }))
+    expect(within(cartao).queryByText('Bioinsumos')).not.toBeInTheDocument()
+
+    // Remove Técnicas
+    const chipPcr = within(cartao).getByText('PCR').closest('li')
+    await user.click(within(chipPcr).getByRole('button', { name: /remover pcr/i }))
+    expect(within(cartao).queryByText('PCR')).not.toBeInTheDocument()
+
+    // Remove Competências
+    const chipMicrobiologia = within(cartao).getByText('Microbiologia').closest('li')
+    await user.click(within(chipMicrobiologia).getByRole('button', { name: /remover microbiologia/i }))
+    expect(within(cartao).queryByText('Microbiologia')).not.toBeInTheDocument()
+
+    // Apenas Competências deve permanecer visível como seção
+    expect(within(cartao).getByText('Competências', { selector: '.admin-field__label' })).toBeInTheDocument()
+    expect(within(cartao).queryByText('Técnicas', { selector: '.admin-field__label' })).not.toBeInTheDocument()
+    expect(within(cartao).queryByText('Linhas de pesquisa', { selector: '.admin-field__label' })).not.toBeInTheDocument()
   })
 
   it('pede confirmação ao cancelar com dados preenchidos', async () => {

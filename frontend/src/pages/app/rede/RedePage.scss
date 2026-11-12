@@ -71,3 +71,121 @@
   }
 }
 
+.competencia-celula {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.competencia-popover {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  min-width: 140px;
+  max-width: 220px;
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-glow);
+  list-style: none;
+  margin: 0;
+  overflow: hidden;
+}
+
+.competencia-popover li {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.competencia-popover li:hover {
+  background: color-mix(in srgb, var(--accent-secondary) 8%, transparent);
+}
+
+.admin-tag--mais {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  min-width: auto;
+}
+
+.admin-tag--mais:hover {
+  background: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
+}
+
+.active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  margin-right: 8px;
+  margin-bottom: 6px;
+}
+
+.active-chip__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.active-chip__valor {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.active-chip__remover {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.active-chip__remover:hover {
+  background: color-mix(in srgb, var(--accent-error) 12%, transparent);
+  color: var(--accent-error);
+}
+
+.active-chip__remover:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Instituição como informação institucional (não é campo editável) */
+.admin-field--info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-field__valor {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
