@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
@@ -13,6 +13,7 @@ import {
   registrarDecisao as registrarDecisaoNaApi,
 } from '../../../services/pdConnectApi'
 import AnexosOportunidade from '../../../components/AnexosOportunidade'
+import NaoEncontradaPage from '../../system/NaoEncontradaPage'
 import AbaCompetencias from './abas/AbaCompetencias'
 import AbaContexto from './abas/AbaContexto'
 import AbaCopiloto from './abas/AbaCopiloto'
@@ -27,6 +28,7 @@ import {
   ETAPAS,
   REGISTROS,
   andamentoDasEtapas,
+  etapaDaSituacao,
   etapaPorId,
 } from './etapas'
 import {
@@ -40,6 +42,29 @@ import {
 import './OportunidadesPage.scss'
 
 const ABAS = [...ETAPAS, ...REGISTROS]
+
+const FORMATO_DO_CODIGO = /^OP-\d{4}-\d{3,}$/
+
+const VOLTA_PARA_A_LISTA = { to: '/oportunidades', label: 'Voltar para oportunidades' }
+
+const ESTADO_VISIVEL = {
+  [CONCLUIDA]: 'concluída',
+  [EM_ANDAMENTO]: 'em andamento',
+}
+
+function posicaoDa(etapa, andamento) {
+  const partes = [`Etapa ${etapa.numero} de ${ETAPAS.length}`]
+  const estado = andamento[etapa.id]
+  const atual = ETAPAS.find((item) => andamento[item.id] === EM_ANDAMENTO)
+
+  if (estado) partes.push(ESTADO_VISIVEL[estado])
+
+  if (atual && estado !== EM_ANDAMENTO) {
+    partes.push(`a oportunidade está na etapa ${atual.numero}, ${atual.label}`)
+  }
+
+  return partes.join(' · ')
+}
 
 function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
   const classes = [
@@ -85,9 +110,19 @@ export default function OportunidadePage() {
   const [abaAtiva, setAbaAtiva] = useState('contexto')
   const [abaOcupada, setAbaOcupada] = useState(false)
   const [rascunhoPendente, setRascunhoPendente] = useState(false)
+  const [naoEncontrada, setNaoEncontrada] = useState(false)
+  const barraDeEtapas = useRef(null)
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
-    if (!silencioso) setCarregando(true)
+    if (!FORMATO_DO_CODIGO.test(id)) {
+      setCarregando(false)
+      return
+    }
+
+    if (!silencioso) {
+      setCarregando(true)
+      setNaoEncontrada(false)
+    }
     setErroCarga('')
 
     try {
@@ -96,10 +131,16 @@ export default function OportunidadePage() {
         listarHistorico(id).catch(() => []),
       ])
 
-      setRegistro(daApi(dados))
+      const carregado = daApi(dados)
+
+      setRegistro(carregado)
       setEventos((trilha.results || trilha).map(eventoDaApi))
+      if (!silencioso) setAbaAtiva(etapaDaSituacao(carregado.situacao))
     } catch (falha) {
-      if (!silencioso) setRegistro(null)
+      if (!silencioso) {
+        setRegistro(null)
+        setNaoEncontrada(falha?.status === 404)
+      }
       setErroCarga(falha?.message || 'Não foi possível carregar esta oportunidade.')
     } finally {
       setCarregando(false)
@@ -109,6 +150,14 @@ export default function OportunidadePage() {
   useEffect(() => {
     carregar()
   }, [carregar])
+
+  useEffect(() => {
+    if (carregando) return
+
+    barraDeEtapas.current
+      ?.querySelector('[aria-current="step"]')
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [carregando])
 
   const atualizarEmSegundoPlano = useCallback(
     () => carregar({ silencioso: true }),
@@ -155,6 +204,10 @@ export default function OportunidadePage() {
     }
   }
 
+  if (!FORMATO_DO_CODIGO.test(id)) {
+    return <NaoEncontradaPage voltar={VOLTA_PARA_A_LISTA} />
+  }
+
   if (carregando) {
     return (
       <div className="console oportunidade-page">
@@ -166,12 +219,27 @@ export default function OportunidadePage() {
     )
   }
 
+  if (!registro && naoEncontrada) {
+    return (
+      <NaoEncontradaPage
+        titulo="Oportunidade não encontrada"
+        texto={
+          <>
+            Não encontramos a oportunidade <code>{id}</code>. Ela pode não existir ou
+            não estar disponível para o seu perfil.
+          </>
+        }
+        voltar={VOLTA_PARA_A_LISTA}
+      />
+    )
+  }
+
   if (!registro) {
     return (
       <div className="console oportunidade-page">
         <BackLink to="/oportunidades">Voltar para oportunidades</BackLink>
         <p className="oportunidade-page__vazio">
-          Nenhuma oportunidade com o código <code>{id}</code>.
+          Não foi possível carregar a oportunidade <code>{id}</code>.
           {erroCarga ? ` ${erroCarga}` : ''}
         </p>
         <button type="button" className="admin-btn admin-btn--outline" onClick={() => carregar()}>
@@ -239,7 +307,7 @@ export default function OportunidadePage() {
         </div>
       </header>
 
-      <nav className="oportunidade-abas" aria-label="Etapas da oportunidade">
+      <nav className="oportunidade-abas" aria-label="Etapas da oportunidade" ref={barraDeEtapas}>
         <ol className="oportunidade-abas__etapas">
           {ETAPAS.map((item) => (
             <li key={item.id}>
@@ -269,9 +337,7 @@ export default function OportunidadePage() {
       </nav>
 
       {etapaAtiva ? (
-        <p className="oportunidade-abas__posicao">
-          Etapa {etapaAtiva.numero} de {ETAPAS.length}
-        </p>
+        <p className="oportunidade-abas__posicao">{posicaoDa(etapaAtiva, andamento)}</p>
       ) : null}
 
       {abaOcupada ? (

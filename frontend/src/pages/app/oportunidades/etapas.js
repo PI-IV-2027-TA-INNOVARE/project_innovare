@@ -64,6 +64,22 @@ const EM_CURSO_POR_SITUACAO = {
   aguardando_decisao: ['decisao'],
 }
 
+const ENCERRADAS = ['continuar', 'arquivada']
+
+const ETAPA_FORA_DO_CURSO = {
+  revisar: 'proposta',
+  continuar: 'decisao',
+  arquivada: 'decisao',
+}
+
+export function situacaoEncerrada(situacao) {
+  return ENCERRADAS.includes(situacao)
+}
+
+export function etapaDaSituacao(situacao) {
+  return ETAPA_FORA_DO_CURSO[situacao] || EM_CURSO_POR_SITUACAO[situacao]?.[0] || 'contexto'
+}
+
 export const CONCLUIDA = 'concluida'
 export const EM_ANDAMENTO = 'em_andamento'
 

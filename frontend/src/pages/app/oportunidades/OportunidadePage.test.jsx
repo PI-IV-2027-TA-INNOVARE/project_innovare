@@ -13,6 +13,9 @@ const api = vi.hoisted(() => ({
   obterEstadoCopiloto: null,
   estruturarComCopiloto: null,
   definirPrioridade: null,
+  listarCompetencias: null,
+  obterEquipePotencial: null,
+  obterPreAnalise: null,
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
@@ -30,10 +33,16 @@ vi.mock('../../../services/pdConnectApi', () => ({
   responderCopiloto: vi.fn(),
   concluirSessaoCopiloto: vi.fn(),
   definirPrioridade: (...args) => api.definirPrioridade(...args),
+  listarCompetencias: (...args) => api.listarCompetencias(...args),
+  obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
+  obterPreAnalise: (...args) => api.obterPreAnalise(...args),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { role: 'supervisor', displayName: 'Rafael Antunes' } }),
+  useAuth: () => ({
+    user: { role: 'supervisor', displayName: 'Rafael Antunes' },
+    isAuthenticated: true,
+  }),
 }))
 
 const OPORTUNIDADE = {
@@ -53,9 +62,9 @@ const OPORTUNIDADE = {
   atualizada_em: '2026-09-16T10:00:00.000Z',
 }
 
-function renderPagina() {
+function renderPagina(rota = '/oportunidades/OP-2026-014') {
   return render(
-    <MemoryRouter initialEntries={['/oportunidades/OP-2026-014']}>
+    <MemoryRouter initialEntries={[rota]}>
       <Routes>
         <Route path="/oportunidades/:id" element={<OportunidadePage />} />
       </Routes>
@@ -81,6 +90,9 @@ beforeEach(() => {
     .fn()
     .mockResolvedValue({ preenchidos: ['metodologia'], fallback_usado: false })
   api.definirPrioridade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, prioridade: 'alta' })
+  api.listarCompetencias = vi.fn().mockResolvedValue([])
+  api.obterEquipePotencial = vi.fn().mockResolvedValue(null)
+  api.obterPreAnalise = vi.fn().mockResolvedValue(null)
 })
 
 describe('OportunidadePage — prioridade na fila', () => {
@@ -99,6 +111,58 @@ describe('OportunidadePage — prioridade na fila', () => {
 
     expect(api.definirPrioridade).toHaveBeenCalledWith('OP-2026-014', 'alta')
     expect(await screen.findByText(/prioridade alta na fila/i)).toBeInTheDocument()
+  })
+})
+
+describe('OportunidadePage — oportunidade que não existe', () => {
+  /**
+   * Um endereço como /oportunidades/admin caía nesta página, que buscava o
+   * código "admin" e dizia "Não foi possível concluir a operação", com
+   * "Tentar de novo". Agora o endereço fora do formato do código é página não
+   * encontrada, sem ir ao servidor; o código que o servidor não acha, ou que
+   * não está no escopo de quem pede, é oportunidade não encontrada; e só a
+   * falha do servidor ou da rede oferece tentar de novo.
+   */
+  it('endereço fora do formato do código é página não encontrada, sem ir ao servidor', async () => {
+    renderPagina('/oportunidades/admin')
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Página não encontrada' }),
+    ).toBeInTheDocument()
+    expect(api.obterOportunidade).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toHaveAttribute(
+      'href',
+      '/oportunidades',
+    )
+    expect(screen.getByRole('link', { name: 'Ir para o painel' })).toHaveAttribute('href', '/painel')
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).not.toBeInTheDocument()
+  })
+
+  it('código que o servidor não acha é oportunidade não encontrada', async () => {
+    api.obterOportunidade = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('Não encontrado.'), { status: 404 }))
+
+    renderPagina()
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Oportunidade não encontrada' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('OP-2026-014')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).not.toBeInTheDocument()
+  })
+
+  it('falha do servidor ou da rede continua oferecendo tentar de novo', async () => {
+    api.obterOportunidade = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('O servidor não respondeu.'), { status: 500 }))
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /tentar de novo/i })).toBeInTheDocument()
+    expect(screen.getByText(/não foi possível carregar a oportunidade/i)).toBeInTheDocument()
+    expect(screen.queryByText(/não encontrada/i)).not.toBeInTheDocument()
   })
 })
 
@@ -208,9 +272,97 @@ describe('OportunidadePage — andamento das etapas', () => {
     expect(screen.queryByText('concluída')).not.toBeInTheDocument()
   })
 
-  it('diz em que etapa a pessoa está', async () => {
+  /**
+   * A linha sob a barra dizia só a posição da aba aberta. Em Contexto, numa
+   * oportunidade aguardando decisão, "Etapa 1 de 7" era lido como "a
+   * oportunidade está no começo". Agora ela separa a etapa que a pessoa está
+   * vendo da etapa em que a oportunidade está.
+   */
+  it('diz em que etapa a pessoa está e em qual a oportunidade está', async () => {
     renderPagina()
 
-    expect(await screen.findByText('Etapa 1 de 7')).toBeInTheDocument()
+    expect(await screen.findByText('Etapa 7 de 7 · em andamento')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Contexto/ }))
+
+    expect(
+      screen.getByText('Etapa 1 de 7 · concluída · a oportunidade está na etapa 7, Decisão'),
+    ).toBeInTheDocument()
+  })
+
+  it('numa oportunidade arquivada, a linha diz só a posição', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'arquivada' })
+
+    renderPagina()
+
+    expect(await screen.findByText('Etapa 7 de 7')).toBeInTheDocument()
+  })
+})
+
+describe('OportunidadePage — abre onde a oportunidade está', () => {
+  /**
+   * A página abria sempre em Contexto. Quem voltava para trabalhar numa
+   * oportunidade adiantada precisava achar sozinho a etapa em que tinha
+   * parado. Agora ela abre na etapa em que a oportunidade está; com decisão
+   * registrada, na Decisão; de volta para revisão, na Proposta estruturada,
+   * que é para onde a aba Decisão já manda retomar.
+   */
+  it.each([
+    ['entrada', 'Contexto'],
+    ['estruturacao', 'Copiloto'],
+    ['competencias', 'Competências'],
+    ['matching', 'Equipe potencial'],
+    ['pre_analise', 'Pré-análise'],
+    ['aguardando_decisao', 'Decisão'],
+    ['revisar', 'Proposta estruturada'],
+    ['continuar', 'Decisão'],
+    ['arquivada', 'Decisão'],
+  ])('em %s, abre na etapa %s', async (situacao, etapa) => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao })
+
+    renderPagina()
+
+    expect(
+      await screen.findByRole('button', { name: new RegExp(`^${etapa}`) }),
+    ).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('a atualização em segundo plano não tira a pessoa da etapa que ela abriu', async () => {
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^copiloto/i }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /estruturar o que falta/i }),
+    )
+
+    await waitFor(() => expect(api.obterOportunidade).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: /^copiloto/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  /**
+   * No celular a barra de etapas rola na horizontal. Abrindo na etapa 7, a
+   * aba aberta ficava fora da tela, à direita. A barra rola até ela, sem
+   * mexer na rolagem vertical da página.
+   */
+  it('a barra de etapas rola até a aba em que a página abriu', async () => {
+    const original = Element.prototype.scrollIntoView
+    const rolagens = []
+    Element.prototype.scrollIntoView = function rolar(opcoes) {
+      rolagens.push({ alvo: this, opcoes })
+    }
+
+    try {
+      renderPagina()
+
+      const decisao = await screen.findByRole('button', { name: /^Decisão/ })
+
+      await waitFor(() => expect(rolagens.map((item) => item.alvo)).toContain(decisao))
+      expect(rolagens.find((item) => item.alvo === decisao).opcoes).toEqual({
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
   })
 })

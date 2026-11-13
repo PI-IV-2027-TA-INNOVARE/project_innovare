@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import ScrollToTop from './components/ScrollToTop'
 import ProtectedRoute from './components/ProtectedRoute'
 import AuthenticatedLayout from './components/AuthenticatedLayout'
@@ -58,6 +58,14 @@ function RouteFallback() {
       </div>
     </section>
   )
+}
+
+function LayoutDaPaginaNaoEncontrada() {
+  const { isAuthenticated, isBootstrapping } = useAuth()
+
+  if (isBootstrapping) return <RouteFallback />
+
+  return isAuthenticated ? <AuthenticatedLayout /> : <Outlet />
 }
 
 function App() {
@@ -196,7 +204,9 @@ function App() {
           </Route>
 
           <Route path="/" element={<RotaInicial />} />
-          <Route path="*" element={<NaoEncontradaPage />} />
+          <Route element={<LayoutDaPaginaNaoEncontrada />}>
+            <Route path="*" element={<NaoEncontradaPage />} />
+          </Route>
         </Routes>
       </Suspense>
     </>

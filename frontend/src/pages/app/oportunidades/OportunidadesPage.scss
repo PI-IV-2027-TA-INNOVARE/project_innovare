@@ -486,7 +486,8 @@
 
 .copiloto__subtitulo,
 .equipe__subtitulo,
-.preanalise__subtitulo {
+.preanalise__subtitulo,
+.roteiro__subtitulo {
   margin-bottom: 8px;
   font-size: 0.9375rem;
   font-weight: 600;
@@ -1062,13 +1063,19 @@
 .roteiro {
   display: grid;
   margin: 0;
-  padding: 0 var(--admin-pad) var(--admin-pad);
+  padding: 0;
   list-style: none;
+}
+
+.roteiro__situacao {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
 }
 
 .roteiro__etapa {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 10px 0;
@@ -1469,15 +1476,6 @@
 @media (max-width: 640px) {
   .oportunidade-abas__registros {
     margin-left: 0;
-  }
-
-  .roteiro__etapa {
-    grid-template-columns: 28px minmax(0, 1fr);
-
-    .admin-btn {
-      grid-column: 2;
-      justify-self: start;
-    }
   }
 
   .espera-ia {

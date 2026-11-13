@@ -45,10 +45,16 @@
 }
 
 .system-card__code {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: var(--text-muted);
+  font-size: clamp(3.5rem, 14vw, 5rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-primary-text);
+
+  + .system-card__title {
+    margin-top: 14px;
+  }
 }
 
 .system-card__title {
@@ -72,8 +78,7 @@
   color: var(--text-muted);
 }
 
-.system-card__acoes,
-.system-destinos {
+.system-card__acoes {
   display: flex;
   justify-content: center;
   gap: 8px;

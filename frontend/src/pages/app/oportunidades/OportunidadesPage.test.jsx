@@ -632,10 +632,11 @@ describe('OportunidadesPage', () => {
 })
 
 describe('OportunidadePage', () => {
-  it('abre no contexto e oferece as nove etapas do fluxo, nenhuma planejada', async () => {
+  it('abre na etapa em que a oportunidade está e oferece as nove etapas do fluxo, nenhuma planejada', async () => {
     renderApp('/oportunidades/OP-2026-014')
 
-    expect(await screen.findByRole('heading', { name: 'Entrada', level: 2 })).toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1 })
+    expect(abaDaNavegacao(/^decisão/i)).toHaveAttribute('aria-current', 'step')
     expect(api.obterOportunidade).toHaveBeenCalledWith('OP-2026-014')
 
     for (const etapa of [
@@ -658,7 +659,7 @@ describe('OportunidadePage', () => {
   it('oferece volta explícita para a lista, não só o breadcrumb', async () => {
     renderApp('/oportunidades/OP-2026-014')
 
-    await screen.findByRole('heading', { name: 'Entrada', level: 2 })
+    await screen.findByRole('heading', { level: 1 })
 
     expect(screen.getByRole('link', { name: /voltar para oportunidades/i }))
       .toHaveAttribute('href', '/oportunidades')
@@ -672,7 +673,7 @@ describe('OportunidadePage', () => {
 
     renderApp('/oportunidades/OP-2026-014')
 
-    await screen.findByRole('heading', { name: 'Entrada', level: 2 })
+    await screen.findByRole('heading', { level: 1 })
     await user.click(abaDaNavegacao(/pré-análise/i))
 
     expect(
@@ -681,12 +682,16 @@ describe('OportunidadePage', () => {
   })
 
   it('o escopo do detalhe é do servidor: recusa vira "não encontrada"', async () => {
-    api.obterOportunidade.mockRejectedValue(new Error('Não encontrado.'))
+    api.obterOportunidade.mockRejectedValue(
+      Object.assign(new Error('Não encontrado.'), { status: 404 }),
+    )
     entrarComo('pesquisador', 'Maria Ferreira')
 
     renderApp('/oportunidades/OP-2026-011')
 
-    expect(await screen.findByText(/nenhuma oportunidade com o código/i)).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Oportunidade não encontrada' }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^decisão/i })).not.toBeInTheDocument()
   })
 
@@ -718,7 +723,7 @@ describe('OportunidadePage', () => {
 
     renderApp('/oportunidades/OP-2026-014')
 
-    await screen.findByRole('heading', { name: 'Entrada', level: 2 })
+    await screen.findByRole('heading', { level: 1 })
     await user.click(screen.getByRole('button', { name: /^decisão/i }))
     await user.click(screen.getByRole('button', { name: /registrar decisão/i }))
 
@@ -775,7 +780,7 @@ describe('OportunidadePage', () => {
 
     renderApp('/oportunidades/OP-2026-014')
 
-    await screen.findByRole('heading', { name: 'Entrada', level: 2 })
+    await screen.findByRole('heading', { level: 1 })
     await user.click(screen.getByRole('button', { name: /^decisão/i }))
 
     expect(screen.getByRole('heading', { name: 'Aguardando decisão', level: 2 })).toBeInTheDocument()
@@ -788,7 +793,7 @@ describe('OportunidadePage', () => {
 
     renderApp('/oportunidades/OP-2026-014')
 
-    await screen.findByRole('heading', { name: 'Entrada', level: 2 })
+    await screen.findByRole('heading', { level: 1 })
     await user.click(screen.getByRole('button', { name: /histórico/i }))
 
     expect(screen.getByText('Oportunidade cadastrada.')).toBeInTheDocument()
