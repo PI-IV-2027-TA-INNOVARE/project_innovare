@@ -27,6 +27,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
 from apps.accounts.models import Usuario
@@ -154,6 +155,49 @@ def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
     return analise
 
 
+def preanalises_de(oportunidade: Oportunidade) -> QuerySet[PreAnalise]:
+    """
+    Todas as rodadas da proposta, da mais nova para a mais antiga (PB98).
+
+    A contagem vem junto, para a lista nao abrir cada rodada so para dizer
+    quantas lacunas e recomendacoes ela trouxe.
+    """
+    return (
+        proposta_de(oportunidade)
+        .pre_analises.select_related('versao_criterio')
+        .annotate(
+            total_lacunas=Count('lacunas', distinct=True),
+            total_recomendacoes=Count('recomendacoes', distinct=True),
+            total_acatadas=Count(
+                'recomendacoes', filter=Q(recomendacoes__acatada=True), distinct=True
+            ),
+        )
+        .order_by('-executada_em')
+    )
+
+
+def preanalise_da_rodada(oportunidade: Oportunidade, identificador: str) -> PreAnalise:
+    """Uma rodada *desta* oportunidade: o filtro impede abrir a de outra."""
+    analise = (
+        PreAnalise.objects.filter(
+            proposta__oportunidade=oportunidade, id_pre_analise=identificador
+        )
+        .select_related('versao_criterio')
+        .prefetch_related(
+            'dimensoes', 'lacunas__criterio', 'recomendacoes__lacuna__criterio'
+        )
+        .first()
+    )
+
+    if analise is None:
+        raise RecursoNaoEncontrado(
+            'Pré-análise não encontrada nesta oportunidade.',
+            'preanalise_inexistente',
+        )
+
+    return analise
+
+
 def interrompida(analise: PreAnalise, agora: datetime | None = None) -> bool:
     """
     A execucao que passou do teto sem terminar: o processo morreu no meio ou a
@@ -254,12 +298,14 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
             executada_em__lt=analise.executada_em,
         )
         .select_related('versao_criterio')
-        .prefetch_related('dimensoes', 'lacunas')
+        .prefetch_related('dimensoes', 'lacunas', 'recomendacoes')
         .first()
     )
 
     if anterior is None:
         return None
+
+    recomendacoes_antes = list(anterior.recomendacoes.all())
 
     niveis_antes = {item.dimensao: item.nivel for item in anterior.dimensoes.all()}
     niveis_agora = {item.dimensao: item.nivel for item in analise.dimensoes.all()}
@@ -290,6 +336,15 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
         'lacunas': {
             'anterior': len(anterior.lacunas.all()),
             'atual': len(analise.lacunas.all()),
+        },
+        'recomendacoes': {
+            'anterior': len(recomendacoes_antes),
+            'atual': len(analise.recomendacoes.all()),
+            'acatadas_na_anterior': [
+                {'id_recomendacao': item.id_recomendacao, 'texto': item.texto}
+                for item in sorted(recomendacoes_antes, key=lambda item: item.id_recomendacao)
+                if item.acatada
+            ],
         },
     }
 

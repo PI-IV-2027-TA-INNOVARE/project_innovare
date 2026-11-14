@@ -5,7 +5,17 @@ import {
   destinoAposLogin,
   podeAcessar,
   rotaDaEntidade,
+  rotuloDoInicio,
 } from './rotas'
+
+describe('rotuloDoInicio', () => {
+  it('diz para onde o botão de início leva cada papel', () => {
+    expect(rotuloDoInicio(ROLES.ADMINISTRADOR)).toBe('Ir para a administração')
+    expect(rotuloDoInicio(ROLES.SUPERVISOR)).toBe('Ir para o painel')
+    expect(rotuloDoInicio(ROLES.DEMANDANTE)).toBe('Ir para o painel')
+    expect(rotuloDoInicio(undefined)).toBe('Ir para o painel')
+  })
+})
 
 describe('podeAcessar', () => {
   /**

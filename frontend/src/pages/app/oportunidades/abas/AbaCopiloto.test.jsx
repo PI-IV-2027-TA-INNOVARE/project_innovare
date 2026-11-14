@@ -66,6 +66,7 @@ const COM_SESSAO = {
     estado: 'aberta',
     estado_rotulo: 'Aberta',
     sintese: 'Problema: lotes perdidos por contaminação.\nContexto: linha de envase.',
+    sintese_conferida: true,
   },
   mensagens: [
     {
@@ -90,6 +91,8 @@ const COM_SESSAO = {
     },
   ],
 }
+
+const PRONTA_PARA_ESTRUTURAR = { ...SEM_SESSAO, sessao: COM_SESSAO.sessao }
 
 describe('AbaCopiloto', () => {
   beforeEach(() => {
@@ -175,6 +178,7 @@ describe('AbaCopiloto', () => {
   })
 
   it('explica que o limite de gasto barrou a chamada', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
     api.estruturarComCopiloto = vi.fn().mockResolvedValue({
       preenchidos: [],
       fallback_usado: true,
@@ -198,6 +202,7 @@ describe('AbaCopiloto', () => {
    * página para travar a troca de etapa.
    */
   it('mostra a espera enquanto o Copiloto trabalha e trava a troca de etapa', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
     let liberar
     api.estruturarComCopiloto = vi.fn(
       () => new Promise((resolve) => {
@@ -226,6 +231,7 @@ describe('AbaCopiloto', () => {
    * recarregava a oportunidade. Agora fica na aba, com o caminho da revisão.
    */
   it('diz o que foi preenchido e leva à revisão da proposta', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
     const irPara = vi.fn()
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" irPara={irPara} />)
@@ -297,6 +303,57 @@ describe('AbaCopiloto', () => {
     )
   })
 
+  /**
+   * PB87: a estruturacao parte do resumo validado. Sem conversa, ou com o
+   * resumo ainda nao conferido, o botao de estruturar espera.
+   */
+  it('sem conversa, a estruturação espera o resumo da entrada', async () => {
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    expect(
+      await screen.findByRole('button', { name: /estruturar com o copiloto/i }),
+    ).toBeDisabled()
+  })
+
+  it('com o resumo ainda não conferido, oferece usar o resumo e só então estrutura', async () => {
+    const naoConferida = { ...COM_SESSAO, sessao: { ...COM_SESSAO.sessao, sintese_conferida: false } }
+    api.obterEstadoCopiloto = vi
+      .fn()
+      .mockResolvedValueOnce(naoConferida)
+      .mockResolvedValue(COM_SESSAO)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByRole('button', { name: /estruturar o que falta/i })).toBeDisabled()
+    expect(screen.getByText(/confira o resumo antes de estruturar/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /usar este resumo/i }))
+
+    await waitFor(() =>
+      expect(api.atualizarSinteseCopiloto).toHaveBeenCalledWith(
+        'OP-2026-001',
+        COM_SESSAO.sessao.sintese,
+      ),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /estruturar o que falta/i })).toBeEnabled(),
+    )
+  })
+
+  it('responder com o resumo ainda não conferido registra a resposta sem estruturar', async () => {
+    const naoConferida = { ...COM_SESSAO, sessao: { ...COM_SESSAO.sessao, sintese_conferida: false } }
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(naoConferida)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await userEvent.type(await screen.findByLabelText(/sua resposta/i), 'Mais contexto.')
+    await userEvent.click(screen.getByRole('button', { name: /responder e atualizar/i }))
+
+    await waitFor(() => expect(api.responderCopiloto).toHaveBeenCalled())
+    expect(api.estruturarComCopiloto).not.toHaveBeenCalled()
+    expect(await screen.findByText(/resposta registrada/i)).toBeInTheDocument()
+  })
+
   it('sem conversa, oferece ler a entrada antes de estruturar', async () => {
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
@@ -306,6 +363,7 @@ describe('AbaCopiloto', () => {
   })
 
   it('mostra a sugestão para o elemento escrito e grava só ao aceitar', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
     const aoEstruturar = vi.fn()
     api.estruturarComCopiloto = vi.fn().mockResolvedValue({
       preenchidos: [],
@@ -346,6 +404,7 @@ describe('AbaCopiloto', () => {
   })
 
   it('recusar a sugestão tira da tela sem gravar', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
     api.estruturarComCopiloto = vi.fn().mockResolvedValue({
       preenchidos: [],
       fallback_usado: false,
@@ -406,6 +465,7 @@ describe('AbaCopiloto', () => {
   })
 
   it('diz que nada foi preenchido quando o provedor cai no fallback', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
     api.estruturarComCopiloto = vi
       .fn()
       .mockResolvedValue({ preenchidos: [], fallback_usado: true })

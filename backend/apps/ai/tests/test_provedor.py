@@ -215,8 +215,34 @@ class TimeoutERetryTests(TestCase):
         self.assertTrue(resultado['fallback_usado'])
         self.assertEqual(len(self.cliente.chamadas), 3)
         self.assertEqual(len(self.esperas), 2)
-        execucao = ExecucaoIA.objects.get()
-        self.assertIn('3 tentativas', execucao.erro)
+        self.assertEqual(ExecucaoIA.objects.count(), 3)
+        self.assertIn('3 tentativas', resultado['execucao_ia'].erro)
+
+    def test_cada_tentativa_vira_uma_linha_no_registro(self):
+        """PB108: cada tentativa realizada fica no registro de chamadas (PB107)."""
+        provedor = self._provedor(
+            erros_genai.ClientError(429, {'error': {'message': 'cota'}}),
+            erros_genai.ServerError(503, {'error': {'message': 'fora'}}),
+            RespostaFalsa(),
+        )
+
+        resultado = self._derivar(provedor)
+
+        linhas = list(ExecucaoIA.objects.order_by('criado_em', 'id_execucao_ia'))
+        self.assertEqual(len(linhas), 3)
+        self.assertEqual(len({linha.correlation_id for linha in linhas}), 1)
+        self.assertEqual(
+            sorted(linha.status for linha in linhas), ['erro', 'erro', 'ok']
+        )
+        falhas = sorted(linha.erro for linha in linhas if linha.status == 'erro')
+        self.assertTrue(falhas[0].startswith('Tentativa 1 de 3'))
+        self.assertTrue(falhas[1].startswith('Tentativa 2 de 3'))
+        self.assertEqual(resultado['execucao_ia'].status, 'ok')
+
+    def test_chamada_de_primeira_continua_numa_linha_so(self):
+        self._derivar(self._provedor(RespostaFalsa()))
+
+        self.assertEqual(ExecucaoIA.objects.count(), 1)
 
     def test_erro_que_nao_e_passageiro_nao_e_repetido(self):
         provedor = self._provedor(

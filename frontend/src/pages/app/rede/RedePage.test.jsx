@@ -58,6 +58,10 @@ const HELENA = {
   competencias: ['Biologia molecular', 'Bioinformática'],
   tecnicas: ['Sequenciamento'],
   linhas: ['Microbiota de solo'],
+  formacoes: [
+    { curso: 'Ciências Biológicas', instituicao: 'Unicamp', titulacao_codigo: 'mestrado', ano_conclusao: 2016 },
+    { curso: 'Agronomia', instituicao: 'USP', titulacao_codigo: 'graduacao', ano_conclusao: null },
+  ],
 }
 
 const CARLA = {
@@ -529,6 +533,60 @@ describe('RedePage', () => {
     confirmar.mockRestore()
   })
 
+  /**
+   * PB84: a inativacao nao tira ninguem de equipe. O Supervisor fica sabendo
+   * de quais equipes em andamento a pessoa faz parte e decide o ajuste.
+   */
+  it('depois de inativar, lista as oportunidades com a pessoa na equipe', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    api.inativarMembro = vi.fn().mockResolvedValue({
+      ...MARIA,
+      situacao: 'inativo',
+      equipes_afetadas: [
+        { codigo: 'OP-2026-014', titulo: 'Detecção de Alicyclobacillus' },
+        { codigo: 'OP-2026-020', titulo: 'Bioinsumo para soja' },
+      ],
+    })
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Maria Ferreira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /inativar na rede/i }))
+
+    const aviso = await screen.findByRole('region', { name: /equipes com maria ferreira/i })
+    expect(aviso).toHaveTextContent(/está na equipe potencial de 2 oportunidades em andamento/i)
+    expect(within(aviso).getByRole('link', { name: /OP-2026-014/ })).toHaveAttribute(
+      'href',
+      '/oportunidades/OP-2026-014'
+    )
+    expect(within(aviso).getByRole('link', { name: /OP-2026-020/ })).toHaveAttribute(
+      'href',
+      '/oportunidades/OP-2026-020'
+    )
+
+    await user.click(within(aviso).getByRole('button', { name: /fechar o aviso/i }))
+    expect(screen.queryByRole('region', { name: /equipes com maria ferreira/i })).not.toBeInTheDocument()
+    confirmar.mockRestore()
+  })
+
+  it('sem equipe em andamento, a inativação não abre aviso', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    api.inativarMembro = vi.fn().mockResolvedValue({ ...MARIA, situacao: 'inativo', equipes_afetadas: [] })
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Maria Ferreira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /inativar na rede/i }))
+
+    expect(await screen.findByText(/não entra mais na plataforma/i)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /equipes com/i })).not.toBeInTheDocument()
+    confirmar.mockRestore()
+  })
+
   it('sem confirmar, nada muda', async () => {
     const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const user = userEvent.setup()
@@ -568,6 +626,34 @@ describe('RedePage', () => {
     const dialogo = screen.getByRole('dialog')
     expect(dialogo).toHaveTextContent('Biologia molecular')
     expect(dialogo).toHaveTextContent('Sequenciamento')
+  })
+
+  /**
+   * PB83: o Supervisor ve a formacao cadastrada junto da titulacao, e quem nao
+   * cadastrou aparece como "nao informada", sem travar nada.
+   */
+  it('a ficha mostra a formação acadêmica cadastrada', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de helena torres/i }))
+
+    const linha = within(screen.getByRole('dialog')).getByText('Formação').closest('div')
+    expect(linha).toHaveTextContent(
+      'Ciências Biológicas, Mestrado, Unicamp, 2016; Agronomia, Graduação, USP'
+    )
+  })
+
+  it('sem formação cadastrada, a ficha diz que ela não foi informada', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    const linha = within(screen.getByRole('dialog')).getByText('Formação').closest('div')
+    expect(linha).toHaveTextContent('Não informada')
   })
 
   it('a ficha manda editar na página, não dentro do modal', async () => {

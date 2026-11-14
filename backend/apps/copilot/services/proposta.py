@@ -17,7 +17,7 @@ from apps.accounts.models import Usuario
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.copilot.models import PropostaEstruturada
-from apps.copilot.services.copiloto import ELEMENTOS, elementos_vazios
+from apps.copilot.services.copiloto import ELEMENTOS, elementos_vazios, versao_anterior
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
 from apps.opportunities.services.fluxo import avancar
 from core.exceptions import ConflitoDeEstado, RecursoNaoEncontrado
@@ -127,6 +127,9 @@ class AtualizarPropostaService:
             entidade_id=proposta.id_proposta,
             oportunidade=proposta.oportunidade,
             ator=ator.email,
-            detalhe={'campos': sorted(mudou)},
+            detalhe={
+                'campos': sorted(mudou),
+                'anterior': versao_anterior({campo: antes[campo] for campo in mudou}),
+            },
         )
         return proposta

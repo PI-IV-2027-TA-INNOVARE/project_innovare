@@ -22,6 +22,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import F, OuterRef, Subquery
 from django.utils import timezone
 
 from apps.accounts.models import Usuario
@@ -128,6 +129,35 @@ def equipe_atual_de(oportunidade: Oportunidade) -> EquipePotencial:
         )
 
     return equipe
+
+
+def oportunidades_com_a_pessoa_na_equipe(membro: MembroRede) -> list[Oportunidade]:
+    """
+    As oportunidades em curso cuja equipe vigente inclui a pessoa (PB84).
+
+    Vigente e a ultima equipe gerada; a decidida (Continuar, Arquivada) ficou
+    como estava na decisao e nao pede ajuste. Quem o Supervisor ja tirou da
+    equipe tambem nao conta.
+    """
+    vigente = (
+        EquipePotencial.objects.filter(oportunidade=OuterRef('pk'))
+        .order_by('-data_geracao', '-id_equipe')
+        .values('id_equipe')[:1]
+    )
+
+    return list(
+        Oportunidade.objects.exclude(
+            situacao__in=(SituacaoOportunidade.CONTINUAR, SituacaoOportunidade.ARQUIVADA)
+        )
+        .annotate(equipe_vigente=Subquery(vigente))
+        .filter(
+            equipes_potenciais__id_equipe=F('equipe_vigente'),
+            equipes_potenciais__membros__membro=membro,
+            equipes_potenciais__membros__incluido=True,
+        )
+        .distinct()
+        .order_by('codigo')
+    )
 
 
 def membro_da_equipe(equipe: EquipePotencial, identificador: int) -> MembroEquipe:

@@ -152,6 +152,22 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     expect(screen.getByRole('heading', { name: 'Outras recomendações' })).toBeInTheDocument()
   })
 
+  it('sinaliza no documento a lacuna que veio sem recomendação (PB97)', async () => {
+    api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      pre_analise: {
+        ...RELATORIO.pre_analise,
+        lacunas: [{ id_lacuna: 5, campo_afetado: 'viabilidade', descricao: 'Não há prazo.' }],
+        recomendacoes: [],
+      },
+    })
+
+    renderizar()
+
+    const lacuna = (await screen.findByText('Não há prazo.')).closest('li')
+    expect(lacuna).toHaveTextContent('A pré-análise não trouxe recomendação para esta lacuna.')
+  })
+
   it('carrega o aviso de que o documento é orientativo', async () => {
     renderizar()
 

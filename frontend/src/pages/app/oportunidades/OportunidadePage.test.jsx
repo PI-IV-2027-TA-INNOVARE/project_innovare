@@ -36,6 +36,8 @@ vi.mock('../../../services/pdConnectApi', () => ({
   listarCompetencias: (...args) => api.listarCompetencias(...args),
   obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
   obterPreAnalise: (...args) => api.obterPreAnalise(...args),
+  listarPreAnalises: vi.fn(() => Promise.resolve([])),
+  obterPreAnaliseDaRodada: vi.fn(),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -79,7 +81,12 @@ beforeEach(() => {
   api.listarAnexos = vi.fn().mockResolvedValue([])
   api.obterProposta = vi.fn().mockResolvedValue(null)
   api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
-    sessao: null,
+    sessao: {
+      id_sessao: 'abc',
+      estado: 'aberta',
+      sintese: 'Problema: lotes perdidos por contaminação.',
+      sintese_conferida: true,
+    },
     mensagens: [],
     perguntas: [],
     lacunas: [],

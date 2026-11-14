@@ -189,6 +189,33 @@ class EdicaoDaPropostaTests(PropostaBaseTests):
         self.assertEqual(evento.categoria, CategoriaEvento.COPILOTO)
         self.assertEqual(evento.detalhe['campos'], ['metodologia'])
 
+    def test_edicao_guarda_a_versao_anterior_do_que_ja_estava_escrito(self):
+        """PB88 / RN-IA02: a versao anterior do elemento continua consultavel."""
+        self.client.patch(self.url(), PREENCHIDA, format='json')
+
+        self.client.patch(
+            self.url(),
+            {'metodologia': 'Cultivo seletivo e sequenciamento.', 'objetivos_especificos': ['Isolar cepas']},
+            format='json',
+        )
+
+        evento = EventoAuditoria.objects.filter(tipo='proposta_atualizada').order_by('-ocorrido_em').first()
+        self.assertEqual(
+            evento.detalhe['anterior'],
+            {
+                'metodologia': PREENCHIDA['metodologia'],
+                'objetivos_especificos': PREENCHIDA['objetivos_especificos'],
+            },
+        )
+
+    def test_elemento_que_estava_vazio_nao_tem_versao_anterior(self):
+        self.client.patch(
+            self.url(), {'metodologia': 'Cultivo seletivo.'}, format='json'
+        )
+
+        evento = EventoAuditoria.objects.get(tipo='proposta_atualizada')
+        self.assertEqual(evento.detalhe['anterior'], {})
+
     def test_editar_proposta_nao_iniciada_responde_404_explicado(self):
         PropostaEstruturada.objects.all().delete()
 

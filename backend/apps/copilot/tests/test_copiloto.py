@@ -41,6 +41,7 @@ from core.tests.builders import (
     OportunidadeBuilder,
     OrganizacaoBuilder,
     UsuarioBuilder,
+    conferir_sintese,
     indicar_na_equipe,
 )
 from core.tests.dubles import (
@@ -93,6 +94,7 @@ class CopilotoBaseTests(TestCase):
         )
 
     def estruturar(self, provedor=None):
+        conferir_sintese(self.oportunidade, self.supervisor)
         return EstruturarPropostaService(
             provedor=provedor or ProvedorFake()
         ).execute(oportunidade=self.oportunidade, ator=self.supervisor)
@@ -323,6 +325,7 @@ class ChamadaForaDaTransacaoTests(CopilotoBaseTests):
     """A espera pela IA nao segura conexao nem bloqueio do banco."""
 
     def test_o_provedor_e_chamado_fora_de_transacao_aberta_pelo_caso_de_uso(self):
+        conferir_sintese(self.oportunidade, self.supervisor)
         provedor = ProvedorQueObservaATransacao()
         antes = len(connection.atomic_blocks)
 
@@ -339,6 +342,7 @@ class ChamadaForaDaTransacaoTests(CopilotoBaseTests):
         IA responde. O caso de uso tem de reler antes de gravar.
         """
         PropostaEstruturada.objects.create(oportunidade=self.oportunidade)
+        conferir_sintese(self.oportunidade, self.supervisor)
 
         def supervisor_salva_a_metodologia():
             PropostaEstruturada.objects.filter(
@@ -435,6 +439,7 @@ class LimiteDeGastoNoCopilotoTests(CopilotoBaseTests):
 
     def test_api_devolve_o_motivo(self):
         self.iniciar_sessao()
+        conferir_sintese(self.oportunidade, self.supervisor)
 
         from unittest import mock
 

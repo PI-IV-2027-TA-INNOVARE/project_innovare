@@ -16,6 +16,7 @@ O que estes testes protegem:
 
 Provedor sempre duble (AGENTS.md 0.1).
 """
+import json
 import tempfile
 
 from django.db import connection
@@ -25,6 +26,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.competencies.models import CompetenciaNecessaria, NivelImportancia
 from apps.copilot.models import PropostaEstruturada
@@ -225,6 +227,66 @@ class MaturidadeTests(IndicadoresDeIABaseTests):
             self.assertNotIn(proibido, campos)
 
 
+class UsoDaIATests(IndicadoresDeIABaseTests):
+    """
+    PB105: volume de chamadas e falhas por fluxo, ao lado dos indicadores de
+    matching e maturidade, tirado do registro de chamadas (PB107) e sem dado
+    pessoal de ninguem.
+    """
+
+    def chamada(self, tipo, status_execucao=StatusExecucao.OK, fallback=False):
+        return ExecucaoIA.objects.create(
+            tipo=tipo,
+            provedor='google',
+            modelo='gemini-2.5-flash',
+            status=status_execucao,
+            fallback_usado=fallback,
+            oportunidade=self.oportunidade,
+            executado_por=self.supervisor.email,
+        )
+
+    def uso(self):
+        return self.client.get(self.url).data['uso']
+
+    def fluxo(self, uso, tipo):
+        return next(item for item in uso['por_fluxo'] if item['fluxo'] == tipo)
+
+    def test_sem_chamada_o_bloco_declara_a_ausencia(self):
+        uso = self.uso()
+
+        self.assertFalse(uso['houve_chamada'])
+        self.assertEqual(uso['chamadas'], 0)
+
+    def test_conta_chamadas_e_falhas_de_cada_fluxo(self):
+        self.chamada(TipoExecucaoIA.COPILOTO)
+        self.chamada(TipoExecucaoIA.COPILOTO)
+        self.chamada(TipoExecucaoIA.COPILOTO, StatusExecucao.ERRO)
+        self.chamada(TipoExecucaoIA.PREANALISE, fallback=True)
+
+        uso = self.uso()
+
+        self.assertTrue(uso['houve_chamada'])
+        self.assertEqual(uso['chamadas'], 4)
+        self.assertEqual(uso['falhas'], 2)
+        self.assertEqual(
+            self.fluxo(uso, 'copiloto'),
+            {'fluxo': 'copiloto', 'rotulo': 'Copiloto de estruturação', 'chamadas': 3, 'falhas': 1},
+        )
+        self.assertEqual(self.fluxo(uso, 'preanalise')['falhas'], 1)
+
+    def test_fluxo_sem_chamada_aparece_zerado(self):
+        self.chamada(TipoExecucaoIA.COPILOTO)
+
+        matching = self.fluxo(self.uso(), 'matching')
+
+        self.assertEqual((matching['chamadas'], matching['falhas']), (0, 0))
+
+    def test_bloco_nao_traz_quem_chamou(self):
+        self.chamada(TipoExecucaoIA.COPILOTO)
+
+        self.assertNotIn(self.supervisor.email, json.dumps(self.uso()))
+
+
 class AcessoAosIndicadoresDeIATests(IndicadoresDeIABaseTests):
     def test_so_o_supervisor_le(self):
         """PB74 e PB75 sao historias do Supervisor; PB71 corta o Demandante."""
@@ -249,6 +311,7 @@ class AcessoAosIndicadoresDeIATests(IndicadoresDeIABaseTests):
 
         A rota e separada de `/api/indicadores/` justamente porque le cinco
         tabelas das fases 3.2/3.3; o que ela nao pode e crescer com o volume.
+        O uso da IA (PB105) soma um agregado fixo, e o teto foi de 12 para 13.
         """
         self.competencia('Microbiologia de alimentos')
         MembroRedeBuilder().pesquisador().build()
@@ -259,7 +322,7 @@ class AcessoAosIndicadoresDeIATests(IndicadoresDeIABaseTests):
             resposta = self.client.get(self.url)
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
-        self.assertLessEqual(len(capturadas.captured_queries), 12)
+        self.assertLessEqual(len(capturadas.captured_queries), 13)
 
     def test_indicadores_essenciais_nao_pagam_pelo_bloco_novo(self):
         """O painel que abre com a sessao segue com o orcamento dele."""

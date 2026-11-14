@@ -4,6 +4,7 @@ import BackLink from '../../../components/console/BackLink'
 import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
 import {
   ROTULOS_DAS_DIMENSOES,
+  SEM_RECOMENDACAO,
   agruparPorLacuna,
   rotuloDoCriterio,
   separarDescricao,
@@ -255,7 +256,9 @@ export default function RelatorioPreAnalisePage() {
                         <Recomendacao key={recomendacao.id_recomendacao} recomendacao={recomendacao} />
                       ))}
                     </ul>
-                  ) : null}
+                  ) : (
+                    <span className="relatorio-lacuna__sem-recomendacao">{SEM_RECOMENDACAO}</span>
+                  )}
                 </li>
               ))}
             </ul>

@@ -35,13 +35,32 @@ function renderRota(Componente, rota, state) {
 }
 
 describe('AcessoRestritoPage', () => {
-  it('diz qual página foi barrada e sob qual perfil', () => {
+  /**
+   * A página seguia outro desenho que a 404: cadeado no lugar do número,
+   * "Acesso restrito" como título e "Voltar ao painel" até para o
+   * Administrador, cujo início é a Administração. Agora segue o mesmo padrão:
+   * o 403 em destaque, o título que diz o que aconteceu, o perfil de quem
+   * tentou, os contatos de suporte (PB81) e uma saída para o início do papel.
+   */
+  it('mostra o 403 em destaque e diz sob qual perfil o acesso foi negado', () => {
     renderRota(AcessoRestritoPage, '/sem-acesso', { from: '/admin' })
 
-    expect(screen.getByRole('heading', { name: /acesso restrito/i })).toBeInTheDocument()
-    expect(screen.getByText('/admin')).toBeInTheDocument()
+    expect(screen.getByText('403')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Acesso não autorizado' })).toBeInTheDocument()
     expect(screen.getByText('Maria Ferreira')).toBeInTheDocument()
     expect(screen.getByText('Pesquisador')).toBeInTheDocument()
+  })
+
+  it('diz qual página foi barrada, para a pessoa contar ao suporte', () => {
+    renderRota(AcessoRestritoPage, '/sem-acesso', { from: '/admin' })
+
+    expect(screen.getByText('/admin')).toBeInTheDocument()
+  })
+
+  it('sem o endereço barrado, fala da página sem citar caminho', () => {
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(screen.getByText(/esta página não está disponível para o seu perfil/i)).toBeInTheDocument()
   })
 
   it('oferece com quem falar, não só um botão de voltar', async () => {
@@ -49,7 +68,24 @@ describe('AcessoRestritoPage', () => {
 
     expect(await screen.findByRole('link', { name: /pd@ac2microbiologia\.com\.br/ }))
       .toHaveAttribute('href', 'mailto:pd@ac2microbiologia.com.br')
-    expect(screen.getByRole('link', { name: /voltar ao painel/i })).toHaveAttribute('href', '/painel')
+    expect(screen.getByRole('link', { name: 'Ir para o painel' })).toHaveAttribute('href', '/painel')
+  })
+
+  it('leva o Administrador para a administração, e não para o painel', () => {
+    auth.user = { role: 'administrador', displayName: 'Ana Souza' }
+
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(screen.getByRole('link', { name: 'Ir para a administração' })).toHaveAttribute(
+      'href',
+      '/admin'
+    )
+  })
+
+  it('não oferece tentar de novo', () => {
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(screen.queryByRole('button', { name: /tentar/i })).not.toBeInTheDocument()
   })
 
   it('mostra os contatos gravados pelo Administrador, que valem para todos', async () => {

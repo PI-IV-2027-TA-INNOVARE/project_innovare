@@ -198,8 +198,29 @@ export const OPORTUNIDADES_EXEMPLO = Object.freeze([
 
 export const NUCLEO_INTERNO = 'Núcleo de P&D — AC2'
 
+export const ROTULOS_DOS_ELEMENTOS = Object.freeze({
+  problema_pesquisa: 'Problema de pesquisa',
+  hipotese: 'Hipótese',
+  objetivo_geral: 'Objetivo geral',
+  objetivos_especificos: 'Objetivos específicos',
+  metodologia: 'Metodologia',
+  resultados_esperados: 'Resultados esperados',
+  caracterizacao_inovacao: 'Caracterização da inovação',
+  infraestrutura_recursos: 'Infraestrutura e recursos',
+})
+
+function versaoAnterior(anterior = {}) {
+  return Object.entries(anterior).map(([elemento, valor]) => ({
+    elemento,
+    rotulo: ROTULOS_DOS_ELEMENTOS[elemento] || elemento,
+    texto: Array.isArray(valor) ? valor.join('; ') : valor,
+  }))
+}
+
 const TEXTO_DO_EVENTO = Object.freeze({
   oportunidade_cadastrada: 'Oportunidade cadastrada.',
+  proposta_atualizada: 'Proposta estruturada atualizada.',
+  sugestao_aceita: 'Sugestão do Copiloto aceita na proposta.',
   contexto_atualizado: 'Contexto atualizado pelo Núcleo de P&D.',
   complementacao_enviada: 'Complementação enviada pelo demandante.',
   anexo_enviado: 'Documento anexado ao registro.',
@@ -244,6 +265,7 @@ export function eventoDaApi(evento, indice) {
       textoComDetalhe(evento.tipo, detalhe) ||
       TEXTO_DO_EVENTO[evento.tipo] ||
       String(evento.tipo || '').replace(/[._]/g, ' '),
+    anterior: versaoAnterior(detalhe.anterior),
   }
 }
 

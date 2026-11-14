@@ -145,6 +145,17 @@ def _vazio(valor) -> bool:
     return not (valor or '').strip()
 
 
+def versao_anterior(valores: dict[str, Any]) -> dict[str, Any]:
+    """
+    O que cada elemento tinha antes de mudar (PB88 / RN-IA02).
+
+    Vai no detalhe do evento da trilha, que nao e editado nem apagado: e o que
+    deixa a versao anterior consultavel no Historico. Elemento vazio nao tinha
+    versao.
+    """
+    return {elemento: valor for elemento, valor in valores.items() if not _vazio(valor)}
+
+
 def elementos_vazios(proposta: PropostaEstruturada) -> list[str]:
     """Os elementos do RF04 que seguem sem conteudo."""
     return [elemento for elemento in ELEMENTOS if _vazio(getattr(proposta, elemento))]
@@ -272,6 +283,35 @@ def sessao_atual_de(oportunidade: Oportunidade) -> SessaoCopiloto:
         )
 
     return sessao
+
+
+def sintese_conferida(sessao: SessaoCopiloto | None) -> bool:
+    """
+    O Supervisor aceitou ou corrigiu o resumo desta sessao (PB87).
+
+    A marca e o evento `sintese_revisada` da propria sessao, que a trilha
+    guarda sem apagar; resumo vazio nao conta, porque nao orienta nada.
+    """
+    if sessao is None or not sessao.sintese.strip():
+        return False
+
+    from apps.audit.models import EventoAuditoria
+
+    return EventoAuditoria.objects.filter(
+        tipo='sintese_revisada',
+        entidade='sessao_copiloto',
+        entidade_id=str(sessao.id_sessao),
+    ).exists()
+
+
+def exigir_sintese_conferida(sessao: SessaoCopiloto | None) -> None:
+    """PB87: a estruturacao parte da sintese validada, e nao da entrada crua."""
+    if not sintese_conferida(sessao):
+        raise ConflitoDeEstado(
+            'Antes de estruturar, confira o resumo da entrada: aceite ou corrija o '
+            'resumo, porque é dele que o Copiloto parte.',
+            codigo='sintese_nao_conferida',
+        )
 
 
 def _exigir_aberta(sessao: SessaoCopiloto) -> None:
@@ -542,8 +582,9 @@ class EstruturarPropostaService(ComProvedor):
         from apps.copilot.serializers import SaidaCopilotoSerializer
 
         conferir_avanco(oportunidade, ESTRUTURACAO)
-        proposta = proposta_para_estruturar(oportunidade)
         sessao = sessao_aberta_de(oportunidade)
+        exigir_sintese_conferida(sessao)
+        proposta = proposta_para_estruturar(oportunidade)
         correlation_id = uuid.uuid4()
 
         resultado = self._resolver_provedor().estruturar_proposta(
@@ -888,6 +929,7 @@ class AceitarSugestaoService:
         else:
             valor = texto.strip()
 
+        anterior = versao_anterior({elemento: getattr(proposta, elemento)})
         setattr(proposta, elemento, valor)
         proposta.save()
 
@@ -898,7 +940,7 @@ class AceitarSugestaoService:
             entidade_id=proposta.id_proposta,
             oportunidade=oportunidade,
             ator=ator.email,
-            detalhe={'elemento': elemento},
+            detalhe={'elemento': elemento, 'anterior': anterior},
         )
         return proposta
 

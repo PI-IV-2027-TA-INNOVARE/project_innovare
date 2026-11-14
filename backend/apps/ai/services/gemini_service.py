@@ -272,19 +272,25 @@ class ProvedorGemini:
         logger.warning(f'Falha ao parsear JSON da IA: {texto[:200]}')
         return {'_erro_parse': True, '_raw': texto[:500]}
 
-    def _gerar(self, prompt: str):
+    def _gerar(self, prompt: str, ao_repetir: Callable[..., None] | None = None):
         """
         A chamada ao provedor com timeout e retry limitado.
 
         `Metodos_Integracao_IA.md` pede "timeout e retry limitado; tratamento
         de 429, 5xx e indisponibilidade". A espera dobra a cada tentativa para
         nao insistir sobre um provedor que pediu calma (429).
+
+        `ao_repetir` e avisado de cada tentativa que falhou e vai ser repetida,
+        depois da espera: e o que deixa cada tentativa com a sua linha no
+        registro de chamadas (PB108).
         """
         tentativas = max(1, settings.AI_GEMINI_TENTATIVAS)
         espera = settings.AI_GEMINI_ESPERA_INICIAL_S
         sistema, _ = prompts.prompt_de_sistema()
 
         for tentativa in range(1, tentativas + 1):
+            inicio = time.perf_counter()
+
             try:
                 return self.model.generate_content(
                     prompt,
@@ -299,12 +305,21 @@ class ProvedorGemini:
                     raise ChamadaEsgotada(
                         f'Falha passageira em {tentativas} tentativas: {falha}'
                     ) from falha
+                latencia_ms = int((time.perf_counter() - inicio) * 1000)
                 logger.warning(
                     f'Falha passageira no Gemini (tentativa {tentativa} de '
                     f'{tentativas}): {falha}'
                 )
                 self._dormir(espera)
                 espera *= 2
+
+                if ao_repetir is not None:
+                    ao_repetir(
+                        tentativa=tentativa,
+                        tentativas=tentativas,
+                        falha=falha,
+                        latencia_ms=latencia_ms,
+                    )
 
     def _ler(self, response, validar: Callable[[dict], bool] | None) -> dict[str, Any]:
         resultado = self._parse_json_seguro(getattr(response, 'text', None) or '{}')
@@ -344,20 +359,35 @@ class ProvedorGemini:
                 'motivo_fallback': MOTIVO_SEM_IA,
             }
 
-        execucao = self._criar_execucao(
-            tipo=tipo,
-            oportunidade_id=oportunidade_id,
-            correlation_id=correlation_id,
-            prompt_versao=prompt_versao,
-            parametros=parametros,
-            executado_por=executado_por,
-        )
+        def abrir_execucao() -> ExecucaoIA:
+            return self._criar_execucao(
+                tipo=tipo,
+                oportunidade_id=oportunidade_id,
+                correlation_id=correlation_id,
+                prompt_versao=prompt_versao,
+                parametros=parametros,
+                executado_por=executado_por,
+            )
 
+        execucao = abrir_execucao()
         inicio = time.perf_counter()
+
+        def nova_tentativa(*, tentativa, tentativas, falha, latencia_ms) -> None:
+            """A tentativa que falhou fecha a sua linha; a proxima abre outra."""
+            nonlocal execucao, inicio
+
+            self._finalizar_execucao(
+                execucao=execucao,
+                status=StatusExecucao.ERRO,
+                latencia_ms=latencia_ms,
+                erro=f'Tentativa {tentativa} de {tentativas}: {falha}',
+            )
+            execucao = abrir_execucao()
+            inicio = time.perf_counter()
 
         try:
             with espera_de_ia():
-                response = self._gerar(prompt)
+                response = self._gerar(prompt, ao_repetir=nova_tentativa)
             latencia_ms = int((time.perf_counter() - inicio) * 1000)
 
             tokens_entrada, tokens_saida = tokens_da_resposta(
@@ -369,7 +399,7 @@ class ProvedorGemini:
             if resultado.get('_erro_parse'):
                 logger.warning(f'Resposta malformada do Gemini ({tipo}); pedindo de novo.')
                 with espera_de_ia():
-                    response = self._gerar(prompt)
+                    response = self._gerar(prompt, ao_repetir=nova_tentativa)
                 latencia_ms = int((time.perf_counter() - inicio) * 1000)
                 entrada_extra, saida_extra = tokens_da_resposta(
                     response, prompt=prompt

@@ -95,3 +95,40 @@ describe('eventoDaApi — situação e prioridade', () => {
     expect(evento.texto).toBe('Prioridade: Média.')
   })
 })
+
+describe('eventoDaApi — versão anterior da proposta (PB88)', () => {
+  it('traz o texto que cada elemento tinha antes de mudar', () => {
+    const evento = eventoDaApi(
+      {
+        ocorrido_em: '2026-11-12T10:00:00.000Z',
+        categoria: 'copiloto',
+        tipo: 'sugestao_aceita',
+        ator_nome: 'Rafael Antunes',
+        detalhe: {
+          elemento: 'metodologia',
+          anterior: {
+            metodologia: 'PCR em tempo real.',
+            objetivos_especificos: ['Isolar cepas', 'Validar o método'],
+          },
+        },
+      },
+      0,
+    )
+
+    expect(evento.texto).toBe('Sugestão do Copiloto aceita na proposta.')
+    expect(evento.anterior).toEqual([
+      { elemento: 'metodologia', rotulo: 'Metodologia', texto: 'PCR em tempo real.' },
+      { elemento: 'objetivos_especificos', rotulo: 'Objetivos específicos', texto: 'Isolar cepas; Validar o método' },
+    ])
+  })
+
+  it('evento sem versão anterior não traz nada a consultar', () => {
+    const evento = eventoDaApi(
+      { ocorrido_em: '2026-11-12T10:00:00.000Z', categoria: 'copiloto', tipo: 'proposta_atualizada', detalhe: { campos: ['metodologia'], anterior: {} } },
+      0,
+    )
+
+    expect(evento.texto).toBe('Proposta estruturada atualizada.')
+    expect(evento.anterior).toEqual([])
+  })
+})

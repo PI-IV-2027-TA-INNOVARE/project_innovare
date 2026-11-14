@@ -33,13 +33,14 @@ from apps.matching.services import (
     candidato_de,
     termos,
 )
-from apps.network.models import Disponibilidade, PapelNaRede
+from apps.network.models import Disponibilidade, Formacao, MembroRede, PapelNaRede
 from core.tests.builders import (
     MembroRedeBuilder,
     OportunidadeBuilder,
     OrganizacaoBuilder,
     UsuarioBuilder,
     indicar_na_equipe,
+    titulacao,
 )
 from core.tests.dubles import ProvedorFake, ProvedorQueObservaATransacao
 
@@ -175,6 +176,32 @@ class MotorTests(MatchingBaseTests):
 
         self.assertIn('Microbiologia de alimentos', texto)
         self.assertIn('Doutorado', texto)
+
+    def test_justificativa_cita_a_formacao_cadastrada(self):
+        """PB93: a formacao aparece entre os fatores considerados."""
+        Formacao.objects.create(
+            membro=self.especialista,
+            curso='Engenharia de Alimentos',
+            instituicao='Universidade Estadual',
+            titulacao=titulacao('doutorado'),
+        )
+        membro = MembroRede.objects.prefetch_related(
+            'vinculos_competencia__competencia', 'formacoes__titulacao'
+        ).get(pk=self.especialista.pk)
+
+        avaliacao = MotorDeMatching().avaliar([self.essencial], [candidato_de(membro)])[0]
+
+        self.assertIn(
+            'Formação: Engenharia de Alimentos (Doutorado).', avaliacao.motivos
+        )
+
+    def test_sem_formacao_a_justificativa_diz_que_nao_foi_informada(self):
+        """PB93: o fator formacao e indicado como nao informado."""
+        avaliacao = MotorDeMatching().avaliar(
+            [self.essencial], [candidato_de(self.especialista)]
+        )[0]
+
+        self.assertIn('Formação: não informada.', avaliacao.motivos)
 
     @override_settings(AI_MATCH_PESO_DESEJAVEL=0.0)
     def test_peso_da_desejavel_vem_da_configuracao(self):

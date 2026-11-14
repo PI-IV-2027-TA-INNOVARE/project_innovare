@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import {
@@ -246,6 +247,22 @@ export default function AbaHistorico({
 
                 <div className="trilha__corpo">
                   <p className="trilha__texto">{evento.texto}</p>
+                  {evento.anterior?.length > 0 ? (
+                    <VerDetalhes
+                      rotulo="Ver a versão anterior"
+                      rotuloAberto="Ocultar a versão anterior"
+                      className="trilha__anterior"
+                    >
+                      <dl className="trilha__anterior-lista">
+                        {evento.anterior.map((item) => (
+                          <div key={item.elemento}>
+                            <dt>{item.rotulo}</dt>
+                            <dd>{item.texto}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </VerDetalhes>
+                  ) : null}
                   <p className="trilha__meta">
                     <span className="trilha__ator">{evento.ator}</span>
                     <span aria-hidden="true">·</span>

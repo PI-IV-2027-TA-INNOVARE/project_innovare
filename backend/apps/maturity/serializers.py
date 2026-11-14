@@ -149,6 +149,19 @@ class ContagemDeLacunasSerializer(serializers.Serializer):
     atual = serializers.IntegerField()
 
 
+class RecomendacaoAcatadaSerializer(serializers.Serializer):
+    id_recomendacao = serializers.IntegerField()
+    texto = serializers.CharField()
+
+
+class ComparacaoDeRecomendacoesSerializer(serializers.Serializer):
+    """PB98 e PB100: quantas antes e agora, e quais da anterior foram acatadas."""
+
+    anterior = serializers.IntegerField()
+    atual = serializers.IntegerField()
+    acatadas_na_anterior = RecomendacaoAcatadaSerializer(many=True)
+
+
 class ComparacaoSerializer(serializers.Serializer):
     """A evolucao em relacao a rodada anterior (PB59). Nivel, nunca nota."""
 
@@ -156,6 +169,54 @@ class ComparacaoSerializer(serializers.Serializer):
     mesmos_criterios = serializers.BooleanField()
     dimensoes = MovimentoDimensaoSerializer(many=True)
     lacunas = ContagemDeLacunasSerializer()
+    recomendacoes = ComparacaoDeRecomendacoesSerializer()
+
+
+class RodadaDaPreAnaliseSerializer(serializers.ModelSerializer):
+    """
+    Uma linha do historico de pre-analises (PB98): o bastante para escolher
+    qual abrir. A rodada inteira vem por `PreAnaliseSerializer`.
+    """
+
+    versao_criterios = serializers.CharField(
+        source='versao_criterio.versao', read_only=True
+    )
+    status_rotulo = serializers.CharField(source='get_status_display', read_only=True)
+    lacunas = serializers.IntegerField(source='total_lacunas', read_only=True)
+    recomendacoes = serializers.IntegerField(source='total_recomendacoes', read_only=True)
+    recomendacoes_acatadas = serializers.IntegerField(source='total_acatadas', read_only=True)
+    atual = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PreAnalise
+        fields = [
+            'id_pre_analise',
+            'executada_em',
+            'versao_proposta',
+            'versao_criterios',
+            'status',
+            'status_rotulo',
+            'lacunas',
+            'recomendacoes',
+            'recomendacoes_acatadas',
+            'atual',
+        ]
+        read_only_fields = fields
+
+    def get_atual(self, instancia) -> bool:
+        return instancia.id_pre_analise == self.context.get('atual')
+
+    def to_representation(self, instancia):
+        """A execucao que passou do teto sai como erro, como na rodada inteira."""
+        from apps.maturity.services import interrompida
+
+        dados = super().to_representation(instancia)
+
+        if interrompida(instancia):
+            dados['status'] = StatusExecucao.ERRO
+            dados['status_rotulo'] = StatusExecucao.ERRO.label
+
+        return dados
 
 
 class PreAnaliseSerializer(serializers.ModelSerializer):

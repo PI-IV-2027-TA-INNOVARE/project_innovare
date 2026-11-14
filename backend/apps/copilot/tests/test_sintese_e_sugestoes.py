@@ -38,6 +38,7 @@ from core.tests.builders import (
     MembroRedeBuilder,
     OportunidadeBuilder,
     UsuarioBuilder,
+    conferir_sintese,
     indicar_na_equipe,
 )
 from core.tests.dubles import (
@@ -95,13 +96,88 @@ class CopilotoV2Tests(TestCase):
             oportunidade=self.oportunidade, ator=self.supervisor
         )
 
-    def estruturar(self, provedor):
+    def estruturar(self, provedor, conferir=True):
+        if conferir:
+            conferir_sintese(self.oportunidade, self.supervisor)
         return EstruturarPropostaService(provedor=provedor).execute(
             oportunidade=self.oportunidade, ator=self.supervisor
         )
 
     def proposta(self, **elementos):
         return PropostaEstruturada.objects.create(oportunidade=self.oportunidade, **elementos)
+
+
+class SinteseConferidaAntesDeEstruturarTests(CopilotoV2Tests):
+    """
+    PB87: a IA apresenta primeiro a sintese, editavel, e a estruturacao parte
+    da sintese validada - aceita ou corrigida pelo Supervisor.
+    """
+
+    def conferir(self, texto=None):
+        sessao = SessaoCopiloto.objects.get(oportunidade=self.oportunidade)
+        return self.client.patch(
+            self.url('copiloto-sintese'),
+            {'sintese': sessao.sintese if texto is None else texto},
+            format='json',
+        )
+
+    def test_sem_sessao_a_estruturacao_e_recusada_sem_chamar_a_ia(self):
+        provedor = ProvedorFake(proposta=saida())
+
+        with mock.patch(
+            'apps.copilot.services.copiloto.EstruturarPropostaService._resolver_provedor',
+            return_value=provedor,
+        ):
+            resposta = self.client.post(self.url('copiloto-estruturar'))
+
+        self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(resposta.data['codigo'], 'sintese_nao_conferida')
+        self.assertNotIn('estruturar_proposta', provedor.pedidos)
+
+    def test_resumo_ainda_nao_conferido_trava_a_estruturacao(self):
+        self.iniciar()
+
+        resposta = self.client.post(self.url('copiloto-estruturar'))
+
+        self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(resposta.data['codigo'], 'sintese_nao_conferida')
+
+    def test_resumo_aceito_libera_e_a_estruturacao_parte_dele(self):
+        sessao = self.iniciar()
+        self.assertEqual(self.conferir().status_code, status.HTTP_200_OK)
+        provedor = ProvedorFake(proposta=saida())
+
+        self.estruturar(provedor, conferir=False)
+
+        self.assertEqual(provedor.pedidos['estruturar_proposta']['sintese'], sessao.sintese)
+
+    def test_resumo_corrigido_tambem_conta_como_conferido(self):
+        self.iniciar()
+        self.conferir('Problema: perdas por Alicyclobacillus.')
+        provedor = ProvedorFake(proposta=saida())
+
+        self.estruturar(provedor, conferir=False)
+
+        self.assertEqual(
+            provedor.pedidos['estruturar_proposta']['sintese'],
+            'Problema: perdas por Alicyclobacillus.',
+        )
+
+    def test_resumo_vazio_nao_conta_como_conferido(self):
+        self.iniciar(ProvedorIndisponivel())
+        self.conferir('')
+
+        resposta = self.client.post(self.url('copiloto-estruturar'))
+
+        self.assertEqual(resposta.status_code, status.HTTP_409_CONFLICT)
+
+    def test_o_estado_da_aba_diz_se_o_resumo_foi_conferido(self):
+        self.iniciar()
+        self.assertFalse(self.client.get(self.url()).data['sessao']['sintese_conferida'])
+
+        self.conferir()
+
+        self.assertTrue(self.client.get(self.url()).data['sessao']['sintese_conferida'])
 
 
 class SinteseDaEntradaTests(CopilotoV2Tests):
@@ -270,6 +346,7 @@ class PreenchimentoESugestaoTests(CopilotoV2Tests):
 
     def test_a_api_devolve_a_sugestao_com_o_nome_do_elemento(self):
         self.proposta(metodologia='PCR em tempo real.')
+        conferir_sintese(self.oportunidade, self.supervisor)
         provedor = ProvedorFake(proposta=saida(sugestoes=[
             {'elemento': 'metodologia', 'texto_sugerido': 'Com controle.', 'motivo': 'Resposta nova.'},
         ]))
@@ -299,7 +376,10 @@ class PreenchimentoESugestaoTests(CopilotoV2Tests):
         self.assertEqual(proposta.metodologia, 'PCR com controle positivo.')
         self.assertFalse(proposta.revisada_por_humano)
         evento = EventoAuditoria.objects.get(tipo='sugestao_aceita')
-        self.assertEqual(evento.detalhe, {'elemento': 'metodologia'})
+        self.assertEqual(
+            evento.detalhe,
+            {'elemento': 'metodologia', 'anterior': {'metodologia': 'PCR em tempo real.'}},
+        )
 
     def test_sugestao_para_os_objetivos_vira_um_objetivo_por_linha(self):
         self.proposta(objetivos_especificos=['Isolar cepas'])

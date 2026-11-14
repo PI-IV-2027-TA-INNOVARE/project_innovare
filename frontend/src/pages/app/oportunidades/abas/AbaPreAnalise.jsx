@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import AdminModal from '../../../../components/console/AdminModal'
 import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
@@ -7,6 +8,7 @@ import { LIMITES_DE_GASTO, MOTIVOS_DE_FALHA_DA_PREANALISE } from '../../../../li
 import { Icone, appIcons } from '../../../../lib/icons'
 import {
   ROTULOS_DAS_DIMENSOES,
+  SEM_RECOMENDACAO,
   agruparPorLacuna,
   rotuloDoCriterio,
 } from '../../../../lib/lacunas'
@@ -14,8 +16,10 @@ import { ROLES } from '../../../../lib/roles'
 import {
   acatarRecomendacao,
   executarPreAnalise,
+  listarPreAnalises,
   obterEquipePotencial,
   obterPreAnalise,
+  obterPreAnaliseDaRodada,
 } from '../../../../services/pdConnectApi'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
@@ -179,7 +183,133 @@ function Comparacao({ comparacao, versaoAtual }) {
       <p className="preanalise__comparacao-lacunas">
         {lacunasPorExtenso(comparacao.lacunas.anterior)} antes, {comparacao.lacunas.atual} agora.
       </p>
+
+      {comparacao.recomendacoes ? (
+        <>
+          <p className="preanalise__comparacao-lacunas">
+            {recomendacoesPorExtenso(comparacao.recomendacoes.anterior)} antes,{' '}
+            {comparacao.recomendacoes.atual} agora.
+          </p>
+
+          {comparacao.recomendacoes.acatadas_na_anterior.length > 0 ? (
+            <div className="preanalise__acatadas-anterior">
+              <p className="preanalise__rotulo">Acatadas na análise anterior</p>
+              <ul>
+                {comparacao.recomendacoes.acatadas_na_anterior.map((recomendacao) => (
+                  <li key={recomendacao.id_recomendacao}>
+                    <Icone icon={appIcons.done} aria-hidden="true" />
+                    <span>{recomendacao.texto}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
+  )
+}
+
+const recomendacoesPorExtenso = (total) =>
+  `${total} ${total === 1 ? 'recomendação' : 'recomendações'}`
+
+function HistoricoDePreAnalises({ rodadas, aoVer }) {
+  if (rodadas.length < 2) return null
+
+  return (
+    <VerDetalhes
+      rotulo={`Todas as pré-análises (${rodadas.length})`}
+      rotuloAberto="Ocultar as pré-análises anteriores"
+      className="preanalise__historico"
+    >
+      <ul className="preanalise__rodadas" aria-label="Pré-análises desta oportunidade">
+        {rodadas.map((rodada) => {
+          const data = formatarData(rodada.executada_em)
+
+          return (
+            <li key={rodada.id_pre_analise} className="preanalise__rodada">
+              <div className="preanalise__rodada-texto">
+                <span className="preanalise__rodada-data">{data || 'Sem data'}</span>
+                <span className="preanalise__rodada-detalhe">
+                  Proposta na versão {rodada.versao_proposta} · critérios {rodada.versao_criterios}
+                  {rodada.status === 'ok' ? '' : ` · ${rodada.status_rotulo}`}
+                </span>
+                <span className="preanalise__rodada-detalhe">
+                  {rodada.status === 'ok'
+                    ? `${lacunasPorExtenso(rodada.lacunas)} · ${rodada.recomendacoes_acatadas} de ${
+                        rodada.recomendacoes
+                      } ${rodada.recomendacoes === 1 ? 'recomendação acatada' : 'recomendações acatadas'}`
+                    : 'Sem resultado'}
+                </span>
+              </div>
+
+              {rodada.atual ? (
+                <span className="proposta__selo">Atual</span>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--sm admin-btn--outline"
+                  onClick={() => aoVer(rodada)}
+                  aria-label={`Ver a pré-análise de ${data}`}
+                >
+                  <Icone icon={appIcons.view} />
+                  Ver
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </VerDetalhes>
+  )
+}
+
+function RodadaAnterior({ analise, onFechar }) {
+  const dimensoes = analise.dimensoes || []
+  const lacunas = analise.lacunas || []
+
+  return (
+    <AdminModal
+      title={`Pré-análise de ${formatarData(analise.executada_em)}`}
+      description={`Proposta na versão ${analise.versao_proposta} · critérios ${analise.versao_criterios}. Somente leitura: as recomendações se marcam na pré-análise atual.`}
+      onClose={onFechar}
+      size="lg"
+      footer={
+        <button type="button" className="admin-btn admin-btn--outline" onClick={onFechar}>
+          Fechar
+        </button>
+      }
+    >
+      <div className="preanalise__corpo">
+        {analise.sintese ? <p className="preanalise__sintese">{analise.sintese}</p> : null}
+        {dimensoes.length > 0 ? <Resumo dimensoes={dimensoes} /> : null}
+
+        {analise.comparacao ? (
+          <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} />
+        ) : null}
+
+        {dimensoes.length > 0 ? (
+          <div className="preanalise__bloco">
+            <h3 className="preanalise__subtitulo">Dimensões avaliadas</h3>
+            <ul className="preanalise__dimensoes">
+              {dimensoes.map((dimensao) => (
+                <Dimensao
+                  key={dimensao.id_dimensao}
+                  dimensao={dimensao}
+                  lacunas={lacunas.filter((lacuna) => lacuna.campo_afetado === dimensao.dimensao)}
+                />
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <OQueMelhorar
+          lacunas={lacunas}
+          recomendacoes={analise.recomendacoes || []}
+          podeExecutar={false}
+        />
+      </div>
+    </AdminModal>
   )
 }
 
@@ -247,7 +377,11 @@ function OQueMelhorar({ lacunas, recomendacoes, ...acoes }) {
 
               <p className="preanalise__grupo-lacuna">{lacuna.descricao}</p>
 
-              {daLacuna.length > 0 ? <Recomendacoes itens={daLacuna} {...acoes} /> : null}
+              {daLacuna.length > 0 ? (
+                <Recomendacoes itens={daLacuna} {...acoes} />
+              ) : (
+                <p className="preanalise__sem-recomendacao">{SEM_RECOMENDACAO}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -298,6 +432,37 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   const [propostaPendente, setPropostaPendente] = useState(false)
   const [erroCarga, setErroCarga] = useState('')
   const [ocupado, setOcupado] = useState('')
+  const [rodadas, setRodadas] = useState([])
+  const [rodadaAberta, setRodadaAberta] = useState(null)
+
+  const idDaAtual = analise?.id_pre_analise
+  const acatadasDaAtual = (analise?.recomendacoes || []).filter((item) => item.acatada).length
+
+  useEffect(() => {
+    if (!idDaAtual) return undefined
+
+    let ativo = true
+
+    listarPreAnalises(oportunidadeId)
+      .then((lista) => {
+        if (ativo) setRodadas(lista || [])
+      })
+      .catch(() => {
+        if (ativo) setRodadas([])
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [oportunidadeId, idDaAtual, acatadasDaAtual])
+
+  const verRodada = async (rodada) => {
+    try {
+      setRodadaAberta(await obterPreAnaliseDaRodada(oportunidadeId, rodada.id_pre_analise))
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível abrir esta pré-análise.', 'error')
+    }
+  }
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!silencioso) setCarregando(true)
@@ -650,7 +815,13 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           {data ? ` · executada em ${data}` : ''}
           {analise.executada_por ? ` por ${analise.executada_por}` : ''}
         </p>
+
+        <HistoricoDePreAnalises rodadas={rodadas} aoVer={verRodada} />
       </div>
+
+      {rodadaAberta ? (
+        <RodadaAnterior analise={rodadaAberta} onFechar={() => setRodadaAberta(null)} />
+      ) : null}
 
       <AdminToast toast={toast} />
     </section>

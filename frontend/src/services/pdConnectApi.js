@@ -384,6 +384,14 @@ export function executarPreAnalise(codigo) {
   return apiRequest(`/oportunidades/${codigo}/pre-analise/`, { method: 'POST' })
 }
 
+export function listarPreAnalises(codigo) {
+  return apiRequest(`/oportunidades/${codigo}/pre-analises/`)
+}
+
+export function obterPreAnaliseDaRodada(codigo, id) {
+  return apiRequest(`/oportunidades/${codigo}/pre-analises/${id}/`)
+}
+
 export function acatarRecomendacao(codigo, id, acatada) {
   return apiRequest(`/oportunidades/${codigo}/recomendacoes/${id}/`, {
     method: 'PATCH',

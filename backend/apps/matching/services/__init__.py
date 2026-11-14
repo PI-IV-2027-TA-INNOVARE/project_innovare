@@ -6,6 +6,7 @@ from apps.matching.services.matching import (
     candidatos_da_rede,
     equipe_atual_de,
     membro_da_equipe,
+    oportunidades_com_a_pessoa_na_equipe,
 )
 from apps.matching.services.motor import (
     Avaliacao,
@@ -29,5 +30,6 @@ __all__ = [
     'cosseno',
     'equipe_atual_de',
     'membro_da_equipe',
+    'oportunidades_com_a_pessoa_na_equipe',
     'termos',
 ]

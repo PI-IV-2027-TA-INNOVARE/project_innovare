@@ -28,9 +28,13 @@ const api = vi.hoisted(() => ({
   acatarRecomendacao: null,
   obterEquipePotencial: null,
   obterProposta: null,
+  listarPreAnalises: null,
+  obterPreAnaliseDaRodada: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
+  listarPreAnalises: (...args) => api.listarPreAnalises(...args),
+  obterPreAnaliseDaRodada: (...args) => api.obterPreAnaliseDaRodada(...args),
   obterPreAnalise: (...args) => api.obterPreAnalise(...args),
   executarPreAnalise: (...args) => api.executarPreAnalise(...args),
   acatarRecomendacao: (...args) => api.acatarRecomendacao(...args),
@@ -93,6 +97,8 @@ describe('AbaPreAnalise', () => {
       problema_pesquisa: 'Contaminação resiste à pasteurização.',
       revisada_por_humano: true,
     })
+    api.listarPreAnalises = vi.fn().mockResolvedValue([])
+    api.obterPreAnaliseDaRodada = vi.fn()
   })
 
   it('apresenta o aviso de que o resultado é orientativo', async () => {
@@ -158,6 +164,78 @@ describe('AbaPreAnalise', () => {
     expect(within(bloco).getByText('Recuou')).toBeInTheDocument()
     expect(within(bloco).getByText(/3 lacunas antes, 1 agora/i)).toBeInTheDocument()
     expect(within(bloco).queryByText(/critérios mudaram/i)).not.toBeInTheDocument()
+  })
+
+  /**
+   * PB98 e PB100: a comparacao inclui as recomendacoes e mostra quais da
+   * analise anterior o Supervisor acatou.
+   */
+  it('na comparação, identifica as recomendações acatadas da análise anterior', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      comparacao: {
+        anterior: { id_pre_analise: 'pa-0', executada_em: '2026-10-01T12:00:00Z', versao_proposta: 1, versao_criterios: 'V2' },
+        mesmos_criterios: true,
+        dimensoes: [],
+        lacunas: { anterior: 3, atual: 1 },
+        recomendacoes: {
+          anterior: 4,
+          atual: 1,
+          acatadas_na_anterior: [{ id_recomendacao: 11, texto: 'Descrever o laboratório.' }],
+        },
+      },
+    })
+
+    renderizar()
+
+    const bloco = (await screen.findByText(/em relação à análise anterior/i)).closest('div')
+    expect(within(bloco).getByText(/4 recomendações antes, 1 agora/i)).toBeInTheDocument()
+    expect(within(bloco).getByText(/acatadas na análise anterior/i)).toBeInTheDocument()
+    expect(within(bloco).getByText('Descrever o laboratório.')).toBeInTheDocument()
+  })
+
+  it('lista todas as pré-análises e abre uma rodada antiga', async () => {
+    api.listarPreAnalises = vi.fn().mockResolvedValue([
+      { id_pre_analise: 'pa-1', executada_em: '2026-10-15T12:00:00Z', versao_proposta: 2, versao_criterios: 'V2', status: 'ok', status_rotulo: 'Concluída', lacunas: 1, recomendacoes: 1, recomendacoes_acatadas: 0, atual: true },
+      { id_pre_analise: 'pa-0', executada_em: '2026-10-01T12:00:00Z', versao_proposta: 1, versao_criterios: 'V2', status: 'ok', status_rotulo: 'Concluída', lacunas: 3, recomendacoes: 4, recomendacoes_acatadas: 2, atual: false },
+    ])
+    api.obterPreAnaliseDaRodada = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      id_pre_analise: 'pa-0',
+      executada_em: '2026-10-01T12:00:00Z',
+      sintese: 'Rodada antiga, ainda frágil.',
+      comparacao: null,
+    })
+    const user = userEvent.setup()
+
+    renderizar()
+
+    await user.click(await screen.findByRole('button', { name: /todas as pré-análises \(2\)/i }))
+
+    const lista = screen.getByRole('list', { name: /pré-análises desta oportunidade/i })
+    const atual = within(lista).getAllByRole('listitem')[0]
+    expect(atual).toHaveTextContent('Atual')
+    expect(within(atual).queryByRole('button', { name: /ver/i })).not.toBeInTheDocument()
+
+    const antiga = within(lista).getAllByRole('listitem')[1]
+    expect(antiga).toHaveTextContent('3 lacunas · 2 de 4 recomendações acatadas')
+    await user.click(within(antiga).getByRole('button', { name: /ver a pré-análise de/i }))
+
+    expect(api.obterPreAnaliseDaRodada).toHaveBeenCalledWith('OP-2026-001', 'pa-0')
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText('Rodada antiga, ainda frágil.')).toBeInTheDocument()
+    expect(within(dialogo).queryByRole('button', { name: /marcar como acatada/i })).not.toBeInTheDocument()
+  })
+
+  it('com uma pré-análise só, não oferece o histórico', async () => {
+    api.listarPreAnalises = vi.fn().mockResolvedValue([
+      { id_pre_analise: 'pa-1', executada_em: '2026-10-15T12:00:00Z', versao_proposta: 1, versao_criterios: 'V2', status: 'ok', status_rotulo: 'Concluída', lacunas: 1, recomendacoes: 1, recomendacoes_acatadas: 0, atual: true },
+    ])
+
+    renderizar()
+    await screen.findByText(/em resumo/i)
+
+    expect(screen.queryByRole('button', { name: /todas as pré-análises/i })).not.toBeInTheDocument()
   })
 
   it('avisa quando as duas rodadas usaram critérios diferentes', async () => {
@@ -463,6 +541,31 @@ describe('AbaPreAnalise', () => {
 
     expect(screen.getByText('Outras recomendações')).toBeInTheDocument()
     expect(screen.getByText(/1 de 3 acatadas/)).toBeInTheDocument()
+  })
+
+  /**
+   * PB97: a lacuna que veio sem recomendacao e sinalizada, em vez de aparecer
+   * sozinha como se nao faltasse nada.
+   */
+  it('sinaliza a lacuna que veio sem recomendação', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      lacunas: [
+        { id_lacuna: 8, campo_afetado: 'plano_pesquisa', descricao: 'Falta o controle negativo.', criterio_codigo: 'A3' },
+        { id_lacuna: 9, campo_afetado: 'viabilidade', descricao: 'Não há prazo.', criterio_codigo: null },
+      ],
+      recomendacoes: [
+        { id_recomendacao: 20, id_lacuna: 8, texto: 'Defina o controle negativo.', acatada: false },
+      ],
+    })
+
+    renderizar()
+
+    const semRecomendacao = (await screen.findByText('Não há prazo.')).closest('li')
+    expect(semRecomendacao).toHaveTextContent('A pré-análise não trouxe recomendação para esta lacuna.')
+
+    const comRecomendacao = screen.getByText('Falta o controle negativo.').closest('li')
+    expect(comRecomendacao).not.toHaveTextContent('não trouxe recomendação')
   })
 
   it('avisa que falta a equipe antes de executar sem ela', async () => {

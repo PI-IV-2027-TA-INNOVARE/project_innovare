@@ -52,6 +52,8 @@ vi.mock('../../../services/pdConnectApi', () => ({
   validarEquipe: vi.fn(),
   executarPreAnalise: vi.fn(),
   acatarRecomendacao: vi.fn(),
+  listarPreAnalises: vi.fn(() => Promise.resolve([])),
+  obterPreAnaliseDaRodada: vi.fn(),
   listarRede: vi.fn(() => Promise.resolve({ results: [] })),
 }))
 

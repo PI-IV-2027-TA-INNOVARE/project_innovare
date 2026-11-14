@@ -401,16 +401,37 @@ function SecaoMaturidade({ dados }) {
   )
 }
 
-function ComoAsRodadasCorreram({ matching, maturidade }) {
-  if (!matching.houve_rodada && !maturidade.houve_execucao) return null
+const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
+
+function UsoDaIA({ matching, maturidade, uso }) {
+  const houveChamada = Boolean(uso?.houve_chamada)
+
+  if (!matching.houve_rodada && !maturidade.houve_execucao && !houveChamada) return null
 
   return (
     <VerDetalhes
-      rotulo="Como as rodadas correram"
-      rotuloAberto="Ocultar como as rodadas correram"
+      rotulo="Uso da IA"
+      rotuloAberto="Ocultar o uso da IA"
       className="indicadores-diagnostico"
     >
       <div className="indicadores-diagnostico__corpo">
+        {houveChamada ? (
+          <Estatisticas
+            titulo="Chamadas à IA por fluxo"
+            itens={[
+              numero('Chamadas à IA', uso.chamadas, { destaque: true }),
+              numero('Falharam ou seguiram sem IA', uso.falhas),
+              ...uso.por_fluxo.map((fluxo) =>
+                numero(
+                  fluxo.rotulo,
+                  `${plural(fluxo.chamadas, 'chamada', 'chamadas')} · ${plural(fluxo.falhas, 'falha', 'falhas')}`,
+                  { texto: true },
+                ),
+              ),
+            ]}
+          />
+        ) : null}
+
         {matching.houve_rodada ? (
           <Estatisticas
             titulo="Rodadas de matching"
@@ -622,7 +643,7 @@ export default function IndicadoresPage() {
             </p>
           ) : null}
 
-          {ia ? <ComoAsRodadasCorreram matching={ia.matching} maturidade={ia.maturidade} /> : null}
+          {ia ? <UsoDaIA matching={ia.matching} maturidade={ia.maturidade} uso={ia.uso} /> : null}
         </div>
       )}
     </div>

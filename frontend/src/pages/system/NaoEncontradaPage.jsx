@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Icone, appIcons } from '../../lib/icons'
 import { ROLES } from '../../lib/roles'
-import { rotaInicialDe } from '../../lib/rotas'
+import { rotaInicialDe, rotuloDoInicio } from '../../lib/rotas'
 import './SystemPages.scss'
 
 const DESTINOS_POR_PAPEL = {
@@ -47,8 +47,6 @@ export default function NaoEncontradaPage({ titulo = 'Página não encontrada', 
   const location = useLocation()
 
   const inicio = rotaInicialDe(user?.role)
-  const rotuloDoInicio =
-    user?.role === ROLES.ADMINISTRADOR ? 'Ir para a administração' : 'Ir para o painel'
   const volta = voltar || voltaPelaSecao(location.pathname, DESTINOS_POR_PAPEL[user?.role] || [])
   const temVolta = Boolean(volta) && volta.to !== inicio
 
@@ -72,7 +70,7 @@ export default function NaoEncontradaPage({ titulo = 'Página não encontrada', 
               className={temVolta ? 'admin-btn admin-btn--outline' : 'admin-btn'}
               to={inicio}
             >
-              {rotuloDoInicio}
+              {rotuloDoInicio(user?.role)}
             </Link>
           </div>
         ) : (

@@ -26,6 +26,7 @@ import {
   PAPEIS_REDE,
   SITUACOES,
   disponibilidadeLabel,
+  formacoesPorExtenso,
   membroDaApi,
   papelLabel,
   situacaoLabel,
@@ -46,6 +47,41 @@ const COLUNAS = [
 const ESPERA_DA_BUSCA_MS = 300
 
 const RESUMO_VAZIO = { total: 0, ativos: 0, titulados: 0, sem_competencia: 0 }
+
+function EquipesAfetadas({ nome, oportunidades, onFechar }) {
+  const quantas =
+    oportunidades.length === 1 ? '1 oportunidade' : `${oportunidades.length} oportunidades`
+
+  return (
+    <section
+      className="admin-callout admin-callout--alerta rede-page__equipes-afetadas"
+      aria-label={`Equipes com ${nome}`}
+    >
+      <Icone icon={appIcons.warning} className="admin-callout__icon" />
+      <p className="admin-callout__text">
+        {nome} está na equipe potencial de {quantas} em andamento. A inativação não
+        tira ninguém da equipe: abra cada oportunidade e decida o ajuste na etapa Equipe.
+      </p>
+      <button
+        type="button"
+        className="admin-btn admin-btn--sm admin-btn--outline"
+        onClick={onFechar}
+        aria-label="Fechar o aviso"
+      >
+        <Icone icon={appIcons.clear} />
+      </button>
+      <ul className="admin-callout__detail rede-page__equipes-afetadas-lista">
+        {oportunidades.map((oportunidade) => (
+          <li key={oportunidade.codigo}>
+            <Link to={`/oportunidades/${oportunidade.codigo}`}>
+              {oportunidade.codigo} · {oportunidade.titulo}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
 
 export default function RedePage() {
   const navigate = useNavigate()
@@ -69,6 +105,7 @@ export default function RedePage() {
   const [pagina, setPagina] = useState(1)
   const [porPagina, setPorPagina] = useLinhasPorPagina('rede', 25)
   const [detalhe, setDetalhe] = useState(null)
+  const [equipesAfetadas, setEquipesAfetadas] = useState(null)
   const [liberando, setLiberando] = useState(() => new Set())
   const [popoverAberto, setPopoverAberto] = useState(null)
 
@@ -291,10 +328,16 @@ export default function RedePage() {
 
     try {
       const acao = inativar ? inativarMembro : reativarMembro
-      const atualizado = membroDaApi(await acao(pessoa.id))
+      const resposta = await acao(pessoa.id)
+      const atualizado = membroDaApi(resposta)
 
       setPessoas((atual) =>
         atual.map((item) => (item.id === pessoa.id ? atualizado : item))
+      )
+      setEquipesAfetadas(
+        inativar && resposta.equipes_afetadas?.length
+          ? { nome: pessoa.nome, oportunidades: resposta.equipes_afetadas }
+          : null,
       )
       carregarResumo()
       showToast(
@@ -382,6 +425,10 @@ export default function RedePage() {
           </div>
         </article>
       </div>
+
+      {equipesAfetadas ? (
+        <EquipesAfetadas {...equipesAfetadas} onFechar={() => setEquipesAfetadas(null)} />
+      ) : null}
 
       <div className="admin-toolbar">
         <div className="admin-search">
@@ -770,6 +817,7 @@ export default function RedePage() {
               ),
             },
             { rotulo: 'Instituição', valor: detalhe.instituicao },
+            { rotulo: 'Formação', valor: formacoesPorExtenso(detalhe.formacoes) },
             { rotulo: 'Disponibilidade', valor: disponibilidadeLabel(detalhe.disponibilidade) },
             { rotulo: 'Competências', valor: detalhe.competencias.join(' · ') || '—' },
             { rotulo: 'Técnicas', valor: detalhe.tecnicas.join(' · ') || '—' },

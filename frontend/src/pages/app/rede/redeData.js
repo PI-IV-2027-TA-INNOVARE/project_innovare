@@ -107,6 +107,18 @@ const rotulo = (lista, id) => lista.find((item) => item.id === id)?.label || id
 
 export const papelLabel = (id) => rotulo(PAPEIS_REDE, id)
 export const titulacaoLabel = (id) => rotulo(TITULACOES, id)
+
+export function formacoesPorExtenso(formacoes = []) {
+  if (formacoes.length === 0) return 'Não informada'
+
+  return formacoes
+    .map((formacao) =>
+      [formacao.curso, formacao.titulacao && titulacaoLabel(formacao.titulacao), formacao.instituicao, formacao.ano]
+        .filter(Boolean)
+        .join(', '),
+    )
+    .join('; ')
+}
 export const situacaoLabel = (id) => rotulo(SITUACOES, id)
 export const disponibilidadeLabel = (id) => rotulo(DISPONIBILIDADES, id)
 

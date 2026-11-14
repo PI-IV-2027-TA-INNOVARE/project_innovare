@@ -52,6 +52,27 @@
   color: var(--text-muted);
 }
 
+.rede-page__equipes-afetadas {
+  margin-top: var(--admin-pad);
+}
+
+.rede-page__equipes-afetadas-lista {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+
+  a {
+    font-weight: 600;
+    color: var(--accent-primary-text);
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
 .competencia-lista {
   display: flex;
   gap: 6px;

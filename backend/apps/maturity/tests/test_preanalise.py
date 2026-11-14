@@ -776,3 +776,91 @@ class ComparacaoComAAnteriorTests(PreAnaliseBaseTests):
         self.rodada({'inovacao': 'fragil'})
 
         self.assertTrue(self.comparacao()['mesmos_criterios'])
+
+    def test_identifica_as_recomendacoes_acatadas_na_anterior(self):
+        """PB100: na comparacao, as recomendacoes acatadas aparecem identificadas."""
+        anterior = self.rodada({'inovacao': 'fragil'}, lacunas=2)
+        acatada = anterior.recomendacoes.order_by('id_recomendacao').first()
+        acatada.acatada = True
+        acatada.save(update_fields=['acatada'])
+        self.rodada({'inovacao': 'consolidada'}, lacunas=1)
+
+        recomendacoes = self.comparacao()['recomendacoes']
+
+        self.assertEqual(recomendacoes['anterior'], 2)
+        self.assertEqual(recomendacoes['atual'], 1)
+        self.assertEqual(
+            recomendacoes['acatadas_na_anterior'],
+            [{'id_recomendacao': acatada.id_recomendacao, 'texto': acatada.texto}],
+        )
+
+
+class TodasAsPreAnalisesTests(PreAnaliseBaseTests):
+    """
+    PB98: o historico de pre-analises fica todo acessivel, e nao so a ultima.
+    Cada rodada abre com a comparacao dela com a que veio antes.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.importar_criterios()
+
+    def rodada(self, niveis, lacunas=1):
+        return self.analisar(
+            provedor=ProvedorFake(preanalise=_preanalise_com(niveis, lacunas))
+        )
+
+    def test_lista_todas_as_rodadas_da_mais_nova_para_a_mais_antiga(self):
+        primeira = self.rodada({'inovacao': 'fragil'}, lacunas=2)
+        segunda = self.rodada({'inovacao': 'em_desenvolvimento'})
+        terceira = self.rodada({'inovacao': 'consolidada'})
+
+        resposta = self.client.get(self.url('pre-analises'))
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item['id_pre_analise'] for item in resposta.data],
+            [str(terceira.id_pre_analise), str(segunda.id_pre_analise), str(primeira.id_pre_analise)],
+        )
+        self.assertEqual([item['atual'] for item in resposta.data], [True, False, False])
+        self.assertEqual(resposta.data[2]['lacunas'], 2)
+        self.assertEqual(resposta.data[2]['recomendacoes'], 2)
+        self.assertEqual(resposta.data[2]['recomendacoes_acatadas'], 0)
+
+    def test_abre_uma_rodada_antiga_com_a_comparacao_dela(self):
+        primeira = self.rodada({'inovacao': 'fragil'})
+        segunda = self.rodada({'inovacao': 'em_desenvolvimento'})
+        self.rodada({'inovacao': 'consolidada'})
+
+        resposta = self.client.get(
+            self.url('pre-analise-rodada', str(segunda.id_pre_analise))
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(resposta.data['id_pre_analise'], str(segunda.id_pre_analise))
+        self.assertEqual(
+            resposta.data['comparacao']['anterior']['id_pre_analise'],
+            str(primeira.id_pre_analise),
+        )
+
+    def test_rodada_de_outra_oportunidade_responde_404(self):
+        self.rodada({'inovacao': 'fragil'})
+        outra = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        alheia = PreAnalise.objects.create(
+            proposta=PropostaEstruturada.objects.create(oportunidade=outra, **PROPOSTA),
+            versao_criterio=PreAnalise.objects.first().versao_criterio,
+            versao_proposta=1,
+        )
+
+        resposta = self.client.get(self.url('pre-analise-rodada', str(alheia.id_pre_analise)))
+
+        self.assertEqual(resposta.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_demandante_nao_le_o_historico(self):
+        self.rodada({'inovacao': 'fragil'})
+        self.como(self.demandante)
+
+        self.assertEqual(
+            self.client.get(self.url('pre-analises')).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )

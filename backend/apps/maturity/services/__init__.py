@@ -7,6 +7,8 @@ from apps.maturity.services.preanalise import (
     criterios_vigentes,
     interrompida,
     preanalise_atual_de,
+    preanalise_da_rodada,
+    preanalises_de,
     recomendacao_de,
     situacao_da_base,
     versao_vigente,
@@ -21,6 +23,8 @@ __all__ = [
     'criterios_vigentes',
     'interrompida',
     'preanalise_atual_de',
+    'preanalise_da_rodada',
+    'preanalises_de',
     'recomendacao_de',
     'versao_vigente',
 ]

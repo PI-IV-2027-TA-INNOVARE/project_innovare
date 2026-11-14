@@ -239,3 +239,9 @@
 .relatorio-lacuna__texto {
   display: block;
 }
+
+.relatorio-lacuna__sem-recomendacao {
+  display: block;
+  font-style: italic;
+  color: var(--text-muted);
+}

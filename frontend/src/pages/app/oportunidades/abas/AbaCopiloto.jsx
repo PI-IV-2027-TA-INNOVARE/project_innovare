@@ -13,20 +13,10 @@ import {
   obterEstadoCopiloto,
   responderCopiloto,
 } from '../../../../services/pdConnectApi'
+import { ROTULOS_DOS_ELEMENTOS } from '../oportunidadesData'
 import EsperaIA from './EsperaIA'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
-
-const ROTULOS_DOS_ELEMENTOS = {
-  problema_pesquisa: 'Problema de pesquisa',
-  hipotese: 'Hipótese',
-  objetivo_geral: 'Objetivo geral',
-  objetivos_especificos: 'Objetivos específicos',
-  metodologia: 'Metodologia',
-  resultados_esperados: 'Resultados esperados',
-  caracterizacao_inovacao: 'Caracterização da inovação',
-  infraestrutura_recursos: 'Infraestrutura e recursos',
-}
 
 const TOTAL_DE_ELEMENTOS = Object.keys(ROTULOS_DOS_ELEMENTOS).length
 
@@ -158,9 +148,37 @@ function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoSalvar }) {
         <p className="copiloto__resumo-texto">{sessao.sintese}</p>
       ) : (
         <p className="copiloto__nota">
-          Ainda não há resumo. {podeConduzir ? 'Se quiser, escreva o problema, o contexto e o que falta.' : ''}
+          Ainda não há resumo.{' '}
+          {podeConduzir
+            ? 'Escreva o problema, o contexto e o que falta: é do resumo que o Copiloto parte.'
+            : ''}
         </p>
       )}
+
+      {podeConduzir && !editando && sessao.sintese ? (
+        sessao.sintese_conferida ? (
+          <p className="copiloto__nota">
+            <Icone icon={appIcons.done} /> Resumo conferido. É dele que o Copiloto parte ao estruturar.
+          </p>
+        ) : (
+          <div className="admin-callout admin-callout--alerta copiloto__conferir" role="status">
+            <Icone icon={appIcons.warning} className="admin-callout__icon" />
+            <p className="admin-callout__text">
+              Confira o resumo antes de estruturar: o Copiloto só parte de um resumo que
+              você aceitou ou corrigiu.
+            </p>
+            <button
+              type="button"
+              className="admin-btn admin-btn--sm"
+              onClick={() => aoSalvar(sessao.sintese)}
+              disabled={ocupado}
+            >
+              <Icone icon={appIcons.done} />
+              Usar este resumo
+            </button>
+          </div>
+        )
+      ) : null}
     </div>
   )
 }
@@ -502,6 +520,21 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
       return
     }
 
+    let atual = null
+
+    try {
+      atual = await obterEstadoCopiloto(oportunidadeId)
+      setEstado(atual)
+    } catch {
+      atual = null
+    }
+
+    if (!atual?.sessao?.sintese_conferida) {
+      showToast('Resposta registrada. Confira o resumo da entrada para o Copiloto estruturar.')
+      setEmAcao('')
+      return
+    }
+
     await estruturar()
   }
 
@@ -570,6 +603,7 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
   const preenchidos = TOTAL_DE_ELEMENTOS - pendentes.length
   const completa = pendentes.length === 0
   const ocupado = Boolean(emAcao)
+  const resumoConferido = Boolean(estado?.sessao?.sintese_conferida)
 
   let rotuloDeEstruturar = 'Estruturar o que falta'
   if (emAcao === 'estruturar') rotuloDeEstruturar = 'Estruturando...'
@@ -594,11 +628,13 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
             type="button"
             className="admin-btn"
             onClick={estruturar}
-            disabled={ocupado}
+            disabled={ocupado || !resumoConferido}
             title={
-              completa
-                ? 'O Copiloto avalia os oito elementos e sugere mudanças, sem sobrescrever.'
-                : undefined
+              !resumoConferido
+                ? 'Confira o resumo da entrada antes de estruturar.'
+                : completa
+                  ? 'O Copiloto avalia os oito elementos e sugere mudanças, sem sobrescrever.'
+                  : undefined
             }
           >
             <Icone icon={appIcons.flow} />

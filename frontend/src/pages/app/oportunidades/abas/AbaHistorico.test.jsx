@@ -193,3 +193,34 @@ describe('AbaHistorico — pedido de complementação (PB26)', () => {
     expect(screen.queryByLabelText(/registrar observação/i)).not.toBeInTheDocument()
   })
 })
+
+describe('AbaHistorico — versão anterior da proposta (PB88)', () => {
+  it('deixa consultar o texto que o elemento tinha antes', async () => {
+    const usuario = userEvent.setup({ delay: null })
+    renderizar({
+      historico: [
+        {
+          id: 'e2',
+          em: Date.parse('2026-11-12T10:00:00.000Z'),
+          categoria: 'copiloto',
+          ator: 'Rafael Antunes',
+          texto: 'Sugestão do Copiloto aceita na proposta.',
+          anterior: [{ elemento: 'metodologia', rotulo: 'Metodologia', texto: 'PCR em tempo real.' }],
+        },
+      ],
+    })
+
+    expect(screen.getByText('PCR em tempo real.')).not.toBeVisible()
+
+    await usuario.click(screen.getByRole('button', { name: /ver a versão anterior/i }))
+
+    expect(screen.getByText('PCR em tempo real.')).toBeVisible()
+    expect(screen.getByText('Metodologia')).toBeVisible()
+  })
+
+  it('evento sem versão anterior não oferece consulta', () => {
+    renderizar()
+
+    expect(screen.queryByRole('button', { name: /ver a versão anterior/i })).not.toBeInTheDocument()
+  })
+})

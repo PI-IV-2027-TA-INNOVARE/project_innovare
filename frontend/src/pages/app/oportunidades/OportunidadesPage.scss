@@ -441,6 +441,33 @@
   color: var(--text-primary);
 }
 
+.trilha__anterior-lista {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
+
+  dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
 .trilha__meta {
   display: flex;
   align-items: center;
@@ -894,6 +921,15 @@
   font-size: 0.9375rem;
   line-height: 1.55;
   color: var(--text-primary);
+}
+
+.preanalise__sem-recomendacao {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--admin-card-border);
+  border-radius: 8px;
 }
 
 @media (max-width: 640px) {
@@ -1471,6 +1507,62 @@
 .preanalise__versoes {
   padding-top: 12px;
   border-top: 1px solid var(--admin-card-border);
+}
+
+.preanalise__acatadas-anterior ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+  }
+
+  svg {
+    flex-shrink: 0;
+    color: var(--accent-primary-text);
+  }
+}
+
+.preanalise__rodadas {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preanalise__rodada {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--admin-radius-sm);
+}
+
+.preanalise__rodada-texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.preanalise__rodada-data {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preanalise__rodada-detalhe {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
 
 @media (max-width: 640px) {
