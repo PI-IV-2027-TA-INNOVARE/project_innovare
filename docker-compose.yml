@@ -20,6 +20,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # A imagem sobe com o gunicorn, que e o servidor de producao. Aqui, no
+    # desenvolvimento, vale o servidor que recarrega o codigo ao salvar.
+    command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "127.0.0.1:8000:8000"
     volumes:

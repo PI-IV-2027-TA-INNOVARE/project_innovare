@@ -61,6 +61,7 @@ from apps.accounts.services.contas import (
 )
 from apps.organizations.services.empresas import buscar_empresa_demandante
 from core.permissions import EhAdministrador
+from core.segundo_plano import em_segundo_plano
 
 
 def _exigir_origem_confiavel(request) -> None:
@@ -84,6 +85,7 @@ class LoginView(TokenObtainPairView):
     parser_classes = [JSONParser]
     serializer_class = LoginSerializer
     throttle_scope = 'login'
+    limite_por_conta = 'entrada'
 
     def post(self, request, *args, **kwargs):
         _exigir_origem_confiavel(request)
@@ -225,17 +227,22 @@ class EsqueciSenhaView(views.APIView):
     `POST /api/auth/forgot-password/`.
 
     Responde 200 exista ou nao a conta - ver `SolicitarRecuperacaoSenhaService`.
+    O envio sai fora do pedido, para a resposta levar o mesmo tempo nos dois
+    casos (`core/segundo_plano.py`).
     """
 
     permission_classes = [permissions.AllowAny]
     throttle_scope = 'recuperacao'
+    limite_por_conta = 'recuperacao'
 
     @extend_schema(request=EsqueciSenhaSerializer, responses={200: None})
     def post(self, request):
         serializer = EsqueciSenhaSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        SolicitarRecuperacaoSenhaService().execute(serializer.validated_data['email'])
+        em_segundo_plano(
+            SolicitarRecuperacaoSenhaService().execute, serializer.validated_data['email']
+        )
 
         return Response(
             {

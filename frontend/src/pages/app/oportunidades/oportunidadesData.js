@@ -252,6 +252,12 @@ function textoComDetalhe(tipo, detalhe) {
   return ''
 }
 
+function textoDoRotulo(evento) {
+  const rotulo = evento.tipo_rotulo
+
+  return rotulo && rotulo !== evento.tipo ? `${rotulo}.` : ''
+}
+
 export function eventoDaApi(evento, indice) {
   const detalhe = evento.detalhe || {}
 
@@ -264,6 +270,7 @@ export function eventoDaApi(evento, indice) {
       detalhe.texto ||
       textoComDetalhe(evento.tipo, detalhe) ||
       TEXTO_DO_EVENTO[evento.tipo] ||
+      textoDoRotulo(evento) ||
       String(evento.tipo || '').replace(/[._]/g, ' '),
     anterior: versaoAnterior(detalhe.anterior),
   }

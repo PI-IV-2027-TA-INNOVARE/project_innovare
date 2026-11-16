@@ -8,7 +8,9 @@ import {
   criarProposta,
   obterProposta,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
+import EtapaEncerrada from './EtapaEncerrada'
 import '../OportunidadesPage.scss'
 
 const SECOES = [
@@ -158,11 +160,12 @@ function quandoFoiSalva(instante) {
   return `Salvo em ${dia} às ${hora}.`
 }
 
-export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
+export default function AbaProposta({ oportunidadeId, situacao, irPara, aoAlterar }) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeEditar = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeEditar = user?.role === ROLES.SUPERVISOR && !encerrada
 
   const [proposta, setProposta] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -299,17 +302,23 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           <div>
             <h2 className="perfil-card__title">Proposta estruturada</h2>
             <p className="perfil-card__description">
-              Esta oportunidade ainda não tem proposta.
+              {encerrada
+                ? 'Esta oportunidade não tem proposta.'
+                : 'Esta oportunidade ainda não tem proposta.'}
             </p>
           </div>
         </header>
 
         <div className="perfil-card__body">
-          <p className="oportunidade-page__vazio">
-            {podeEditar
-              ? 'O caminho mais rápido é pedir uma primeira versão ao Copiloto. Se preferir, comece a escrever aqui.'
-              : 'O Supervisor ainda não começou a proposta desta oportunidade.'}
-          </p>
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
+          {encerrada ? null : (
+            <p className="oportunidade-page__vazio">
+              {podeEditar
+                ? 'O caminho mais rápido é pedir uma primeira versão ao Copiloto. Se preferir, comece a escrever aqui.'
+                : 'O Supervisor ainda não começou a proposta desta oportunidade.'}
+            </p>
+          )}
 
           {podeEditar ? (
             <div className="proposta__inicio">
@@ -348,8 +357,9 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
         <div>
           <h2 className="perfil-card__title">Proposta estruturada</h2>
           <p className="perfil-card__description">
-            Os oito elementos que descrevem a pesquisa. Revise o texto, ajuste o
-            que precisar e salve: salvar registra a sua revisão.
+            {podeEditar
+              ? 'Os oito elementos que descrevem a pesquisa. Revise o texto, ajuste o que precisar e salve: salvar registra a sua revisão.'
+              : 'Os oito elementos que descrevem a pesquisa.'}
           </p>
         </div>
 
@@ -363,18 +373,23 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
         ) : temConteudo ? (
           <span className="proposta__selo proposta__selo--pendente">
             <Icone icon={appIcons.warning} />
-            Aguardando revisão
+            {encerrada ? 'Não revisada' : 'Aguardando revisão'}
           </span>
         ) : null}
       </header>
 
       <div className="perfil-card__body proposta__corpo">
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
         {!revisada && temConteudo ? (
           <div className="admin-callout admin-callout--alerta" role="note">
             <Icone icon={appIcons.warning} className="admin-callout__icon" />
             <p className="admin-callout__text">
-              O texto pode conter sugestões do Copiloto que ainda não foram
-              revisadas. Leia cada elemento, ajuste o que precisar e salve.
+              {podeEditar
+                ? 'O texto pode conter sugestões do Copiloto que ainda não foram revisadas. Leia cada elemento, ajuste o que precisar e salve.'
+                : encerrada
+                  ? 'O texto pode conter sugestões do Copiloto que não foram revisadas antes da decisão.'
+                  : 'O texto pode conter sugestões do Copiloto que ainda não foram revisadas pelo Supervisor.'}
             </p>
           </div>
         ) : null}
@@ -450,7 +465,10 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
             </BarraDeAcoes>
           ) : (
             <p className="proposta__legenda">
-              <Icone icon={appIcons.view} /> Somente leitura: apenas o Supervisor edita a proposta.
+              <Icone icon={appIcons.view} />{' '}
+              {encerrada
+                ? 'Somente leitura: a proposta fica como estava na decisão.'
+                : 'Somente leitura: apenas o Supervisor edita a proposta.'}
             </p>
           )}
         </form>

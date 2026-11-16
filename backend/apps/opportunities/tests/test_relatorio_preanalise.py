@@ -243,3 +243,38 @@ class ComoLerTests(RelatorioPreAnaliseBaseTests):
         texto = ' '.join(self.client.get(self.url()).data['como_ler'])
 
         self.assertIn(analise.versao_criterio.versao, texto)
+
+
+class RelatorioDaOportunidadeTrazAPreAnaliseInteiraTests(RelatorioPreAnaliseBaseTests):
+    """
+    O relatorio da oportunidade (PB76) e o documento que sai da tela. A
+    pre-analise entra nele inteira, com a leitura dos niveis e os criterios da
+    versao citada, sem depender de abrir o relatorio da pre-analise.
+    """
+
+    def consolidado(self):
+        return self.client.get(
+            reverse('oportunidade-relatorio', args=[self.oportunidade.codigo])
+        ).data
+
+    def test_leva_como_ler_e_os_criterios_da_versao_citada(self):
+        self.importar()
+        self.analisar()
+
+        consolidado = self.consolidado()
+        proprio = self.client.get(self.url()).data
+
+        self.assertEqual(consolidado['como_ler'], proprio['como_ler'])
+        self.assertEqual(
+            [criterio['codigo'] for criterio in consolidado['criterios']],
+            [criterio['codigo'] for criterio in proprio['criterios']],
+        )
+        self.assertEqual(len(consolidado['pre_analise']['recomendacoes']), 1)
+
+    def test_diz_quem_executou_pelo_nome_e_nao_pelo_e_mail(self):
+        self.importar()
+        self.analisar()
+
+        analise = self.consolidado()['pre_analise']
+
+        self.assertEqual(analise['executada_por_nome'], self.supervisor.nome)

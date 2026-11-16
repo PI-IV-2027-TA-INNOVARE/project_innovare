@@ -65,6 +65,14 @@ export function explicarMotivoSemIa(motivo) {
   return MOTIVOS_SEM_IA[motivo] || MOTIVOS_SEM_IA.ia_indisponivel
 }
 
+export const ESTRATEGIAS_DO_MATCHING = Object.freeze({
+  hibrido_v1: 'Quatro parcelas combinadas, versão 1',
+})
+
+export function rotuloDaEstrategia(estrategia) {
+  return ESTRATEGIAS_DO_MATCHING[estrategia] || estrategia
+}
+
 export const TERMOS = Object.freeze({
   revisaoDaIa: 'Revisão da IA',
   notaMinima: 'nota mínima',

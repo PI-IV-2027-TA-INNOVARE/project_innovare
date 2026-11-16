@@ -277,6 +277,28 @@ describe('AbaEquipe', () => {
   })
 
   /**
+   * Com a equipe gerada, o aviso só aparecia ao Supervisor. O Pesquisador
+   * está nessa equipe e lê a oportunidade: sem a indicação, tomava por
+   * definitivo um texto que ninguém revisou.
+   */
+  it('o Pesquisador vê que a proposta não foi revisada, sem pedido de revisão (RN-IA01)', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar({ irPara: vi.fn() })
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
    * Rodar de novo cria outra equipe e a tela passa a mostrar a nova: quem foi
    * tirado, incluído à mão ou validado na anterior se perde. Um clique sem
    * aviso apagava esse trabalho.
@@ -307,5 +329,36 @@ describe('AbaEquipe', () => {
     const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
     await userEvent.click(within(barra).getByRole('button', { name: /continuar para pré-análise/i }))
     expect(irPara).toHaveBeenCalledWith('pre-analise')
+  })
+
+  /**
+   * PB66: Continuar conclui o fluxo, e Continuar e Arquivada não têm saída. O
+   * sistema já recusa rodar, ajustar e validar; a tela oferecia os botões e o
+   * Supervisor só descobria pela mensagem de erro.
+   */
+  it('depois de Continuar, não oferece rodar, ajustar nem validar, e diz por quê (PB66)', async () => {
+    const irPara = vi.fn()
+
+    renderizar({ situacao: 'continuar', irPara })
+
+    expect(await screen.findByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /rodar de novo/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /tirar da equipe/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validar equipe/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/incluir alguém da rede/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /gerar relatório/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /ver a decisão/i }))
+    expect(irPara).toHaveBeenCalledWith('decisao')
+  })
+
+  it('arquivada sem equipe, não oferece rodar o matching', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+
+    renderizar({ situacao: 'arquivada' })
+
+    expect(await screen.findByText(/foi arquivada/i)).toBeInTheDocument()
+    expect(screen.getByText(/nenhum matching foi rodado antes da decisão/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /rodar matching/i })).not.toBeInTheDocument()
   })
 })

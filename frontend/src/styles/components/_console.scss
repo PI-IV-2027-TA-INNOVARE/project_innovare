@@ -553,6 +553,18 @@
   opacity: 0.9;
 }
 
+.stat-grid:has(.stat-card__nota) .stat-card {
+  align-items: flex-start;
+}
+
+.stat-grid:has(.stat-card__nota) .stat-card__icon {
+  margin-top: 1px;
+}
+
+.stat-grid:has(.stat-card__nota) .stat-card__seta {
+  align-self: center;
+}
+
 .stat-card__label {
   font-size: 0.8125rem;
   color: var(--text-muted);
@@ -1714,37 +1726,21 @@
 }
 
 .back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  margin-bottom: 4px;
-  margin-left: -10px;
-  padding: 0 10px;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border-radius: 10px;
-  transition: color var(--admin-motion), background var(--admin-motion);
+  align-self: flex-start;
+  justify-self: start;
+  width: fit-content;
 
   svg {
-    font-size: 0.75rem;
     transition: transform var(--admin-motion);
   }
 
-  &:hover {
-    color: var(--accent-primary-text);
-    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
-
-    svg {
-      transform: translateX(-2px);
-    }
+  &:hover svg {
+    transform: translateX(-2px);
   }
+}
 
-  &:focus-visible {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 2px;
-  }
+.back-link + :is(p, h1) {
+  margin-top: 12px;
 }
 
 @media (max-width: 860px) {

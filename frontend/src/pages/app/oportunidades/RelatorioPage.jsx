@@ -1,8 +1,15 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
-import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
+import ConteudoDaEquipe from '../../../components/relatorio/ConteudoDaEquipe'
+import ConteudoDaPreAnalise from '../../../components/relatorio/ConteudoDaPreAnalise'
+import LayoutDoRelatorio, {
+  SecaoDoRelatorio,
+  SubsecaoDoRelatorio,
+} from '../../../components/relatorio/LayoutDoRelatorio'
+import { Campo, formatarData } from '../../../components/relatorio/partesDoRelatorio'
 import { obterRelatorioOportunidade } from '../../../services/pdConnectApi'
+import { eventoDaApi } from './oportunidadesData'
 import './RelatorioPage.scss'
 
 const ROTULOS_DAS_SECOES = {
@@ -22,22 +29,6 @@ const ELEMENTOS_DA_PROPOSTA = [
   ['infraestrutura_recursos', 'Infraestrutura e recursos'],
 ]
 
-function formatarData(valor) {
-  if (!valor) return '—'
-
-  const data = new Date(valor)
-
-  return Number.isNaN(data.getTime())
-    ? '—'
-    : data.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
-
 function formatarTamanho(bytes) {
   if (!bytes) return '—'
   if (bytes < 1024) return `${bytes} B`
@@ -48,13 +39,14 @@ function formatarTamanho(bytes) {
 
 const Secao = SecaoDoRelatorio
 
-function Campo({ rotulo, children }) {
-  return (
-    <div className="relatorio-campo">
-      <dt className="relatorio-campo__rotulo">{rotulo}</dt>
-      <dd className="relatorio-campo__valor">{children || '—'}</dd>
-    </div>
-  )
+function notaDaRevisao(proposta) {
+  if (!proposta.revisada_por_humano) {
+    return `Ainda sem revisão humana registrada — versão ${proposta.versao}.`
+  }
+
+  return proposta.revisor_nome
+    ? `Revisada por ${proposta.revisor_nome} — versão ${proposta.versao}.`
+    : `Revisada por uma pessoa — versão ${proposta.versao}.`
 }
 
 export default function RelatorioPage() {
@@ -108,7 +100,18 @@ export default function RelatorioPage() {
     )
   }
 
-  const { oportunidade, anexos, historico, decisao, proposta, pendentes } = relatorio
+  const {
+    oportunidade,
+    anexos,
+    historico,
+    decisao,
+    proposta,
+    competencias = [],
+    equipe = null,
+    pre_analise: analise = null,
+    pendentes,
+  } = relatorio
+  const eventos = historico.map(eventoDaApi).sort((a, b) => a.em - b.em)
   const identificacao = [
     { rotulo: 'Código', valor: oportunidade.codigo },
     { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
@@ -176,11 +179,48 @@ export default function RelatorioPage() {
               ))}
             </dl>
 
+            <p className="relatorio-nota">{notaDaRevisao(proposta)}</p>
+          </Secao>
+        ) : null}
+
+        {competencias.length > 0 ? (
+          <Secao titulo="Competências necessárias">
+            <ul className="relatorio-lista">
+              {competencias.map((competencia) => (
+                <li key={competencia.id_competencia_necessaria}>
+                  {competencia.descricao} · {competencia.nivel_rotulo} ·{' '}
+                  {competencia.derivada_rotulo}
+                </li>
+              ))}
+            </ul>
+          </Secao>
+        ) : null}
+
+        {equipe ? (
+          <Secao titulo="Equipe potencial">
             <p className="relatorio-nota">
-              {proposta.revisada_por_humano
-                ? `Revisada por uma pessoa — versão ${proposta.versao}.`
-                : `Ainda sem revisão humana registrada — versão ${proposta.versao}.`}
+              Composição sugerida para validação do Supervisor. Não é convocação:
+              não há convite, aceite nem recusa.
             </p>
+
+            <ConteudoDaEquipe
+              equipe={equipe}
+              comoFoiCalculado={relatorio.como_foi_calculado || []}
+              Bloco={SubsecaoDoRelatorio}
+            />
+          </Secao>
+        ) : null}
+
+        {analise ? (
+          <Secao titulo="Pré-análise de maturidade">
+            <p className="relatorio-nota">{analise.aviso}</p>
+
+            <ConteudoDaPreAnalise
+              analise={analise}
+              comoLer={relatorio.como_ler || []}
+              criterios={relatorio.criterios || []}
+              Bloco={SubsecaoDoRelatorio}
+            />
           </Secao>
         ) : null}
 
@@ -221,17 +261,13 @@ export default function RelatorioPage() {
         </Secao>
 
         <Secao titulo="Histórico">
-          {historico.length > 0 ? (
+          {eventos.length > 0 ? (
             <ol className="relatorio-trilha">
-              {historico.map((evento, indice) => (
-                <li key={`${evento.tipo}-${evento.ocorrido_em}-${indice}`}>
-                  <span className="relatorio-trilha__quando">
-                    {formatarData(evento.ocorrido_em)}
-                  </span>
-                  <span className="relatorio-trilha__o-que">{evento.tipo}</span>
-                  <span className="relatorio-trilha__quem">
-                    {evento.ator_nome || evento.ator}
-                  </span>
+              {eventos.map((evento) => (
+                <li key={evento.id}>
+                  <span className="relatorio-trilha__quando">{formatarData(evento.em)}</span>
+                  <span className="relatorio-trilha__o-que">{evento.texto}</span>
+                  <span className="relatorio-trilha__quem">{evento.ator}</span>
                 </li>
               ))}
             </ol>

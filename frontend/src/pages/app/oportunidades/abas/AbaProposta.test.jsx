@@ -186,6 +186,18 @@ describe('AbaProposta — somente leitura', () => {
     expect(campo).toHaveClass('proposta__texto--recolhido')
   })
 
+  it('avisa quem só lê que o texto não foi revisado, sem pedir que salve (RN-IA01)', async () => {
+    api.obterProposta = vi
+      .fn()
+      .mockResolvedValue({ ...PREENCHIDA, revisada_por_humano: false, revisor_nome: null })
+
+    renderAba()
+
+    const aviso = await screen.findByText(/ainda não foram revisadas pelo supervisor/i)
+
+    expect(aviso).not.toHaveTextContent(/salve/i)
+  })
+
   it('quem só lê também abre o texto inteiro clicando nele', async () => {
     const user = userEvent.setup()
     renderAba()
@@ -265,5 +277,45 @@ describe('AbaProposta — revisão do que o Copiloto escreveu', () => {
     await userEvent.click(await screen.findByRole('button', { name: /ir para o copiloto/i }))
 
     expect(irPara).toHaveBeenCalledWith('copiloto')
+  })
+})
+
+/**
+ * PB66: depois de Continuar ou Arquivar, salvar a proposta é recusado. O
+ * Supervisor via o formulário editável, salvava e recebia o erro.
+ */
+describe('AbaProposta — oportunidade encerrada', () => {
+  it('depois de Continuar, o Supervisor só lê a proposta (PB66)', async () => {
+    render(<AbaProposta oportunidadeId="OP-2026-001" situacao="continuar" />)
+
+    expect(await screen.findByLabelText(/problema de pesquisa/i)).toHaveAttribute('readonly')
+    expect(screen.getByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /salvar/i })).toBeNull()
+    expect(screen.queryByText(/ajuste o que precisar e salve/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/fica como estava na decisão/i)).toBeInTheDocument()
+  })
+
+  it('arquivada sem proposta, não oferece começar', async () => {
+    api.obterProposta = vi.fn().mockRejectedValue(naoIniciada())
+
+    render(<AbaProposta oportunidadeId="OP-2026-001" situacao="arquivada" irPara={vi.fn()} />)
+
+    expect(await screen.findByText(/foi arquivada/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /ir para o copiloto/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /iniciar proposta/i })).toBeNull()
+  })
+
+  it('com o texto sem revisão, diz que a decisão saiu sem ela', async () => {
+    api.obterProposta = vi
+      .fn()
+      .mockResolvedValue({ ...PREENCHIDA, revisada_por_humano: false, revisor_nome: null })
+
+    render(<AbaProposta oportunidadeId="OP-2026-001" situacao="continuar" />)
+
+    expect(
+      await screen.findByText(/não foram revisadas antes da decisão/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Não revisada')).toBeInTheDocument()
+    expect(screen.queryByText('Aguardando revisão')).not.toBeInTheDocument()
   })
 })

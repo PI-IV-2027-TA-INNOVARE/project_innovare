@@ -8,6 +8,8 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import Papel
+from apps.audit.rotulos import rotulo_do_tipo
+from apps.audit.services.registro import ATOR_SISTEMA
 from apps.competencies.serializers import CompetenciaNecessariaSerializer
 from apps.copilot.serializers import PropostaEstruturadaSerializer
 from apps.decisions.models import TipoDecisao
@@ -307,11 +309,15 @@ class EventoHistoricoSerializer(serializers.Serializer):
     `ator_nome` vem do contexto `nomes` (`nomes_de_quem_agiu`), montado uma vez
     para a pagina inteira. Na trilha do Demandante, quem agiu fora da empresa
     dele sai como a AC2, sem e-mail (`contexto_do_historico`).
+
+    `tipo_rotulo` e o mesmo nome legivel que a Auditoria mostra
+    (`apps.audit.rotulos`): o `tipo` cru e identificador, nao texto de tela.
     """
 
     ocorrido_em = serializers.DateTimeField(read_only=True)
     categoria = serializers.CharField(read_only=True)
     tipo = serializers.CharField(read_only=True)
+    tipo_rotulo = serializers.SerializerMethodField()
     ator = serializers.SerializerMethodField()
     ator_nome = serializers.SerializerMethodField()
     status = serializers.CharField(read_only=True)
@@ -331,12 +337,18 @@ class EventoHistoricoSerializer(serializers.Serializer):
             or conta.organizacao_id != organizacao
         )
 
+    def get_tipo_rotulo(self, evento) -> str:
+        return rotulo_do_tipo(evento.tipo, evento.entidade)
+
     def get_ator(self, evento) -> str:
         return '' if self._pela_ac2(evento) else evento.ator
 
     def get_ator_nome(self, evento) -> str | None:
         if self._pela_ac2(evento):
             return self.context['quem_agiu_pela_ac2']
+
+        if evento.ator == ATOR_SISTEMA:
+            return 'Sistema'
 
         return self.context.get('nomes', {}).get(evento.ator)
 
@@ -373,6 +385,11 @@ class RelatorioOportunidadeSerializer(serializers.Serializer):
     pre_analise = PreAnaliseSerializer(read_only=True, allow_null=True)
     pendentes = SecaoPendenteSerializer(many=True, read_only=True)
     gerado_em = serializers.DateTimeField(read_only=True)
+    como_foi_calculado = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
+    como_ler = serializers.ListField(child=serializers.CharField(), read_only=True)
+    criterios = CriterioPreAnaliseSerializer(many=True, read_only=True)
 
 
 class RelatorioPreAnaliseSerializer(serializers.Serializer):

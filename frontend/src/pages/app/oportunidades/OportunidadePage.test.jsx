@@ -64,6 +64,13 @@ const OPORTUNIDADE = {
   atualizada_em: '2026-09-16T10:00:00.000Z',
 }
 
+function propostaNaoIniciada() {
+  const erro = new Error('Esta oportunidade ainda não tem proposta estruturada.')
+  erro.status = 404
+  erro.data = { detail: erro.message, codigo: 'proposta_inexistente' }
+  return erro
+}
+
 function renderPagina(rota = '/oportunidades/OP-2026-014') {
   return render(
     <MemoryRouter initialEntries={[rota]}>
@@ -79,7 +86,7 @@ beforeEach(() => {
   api.listarHistorico = vi.fn().mockResolvedValue({ results: [] })
   api.registrarDecisao = vi.fn().mockResolvedValue(OPORTUNIDADE)
   api.listarAnexos = vi.fn().mockResolvedValue([])
-  api.obterProposta = vi.fn().mockResolvedValue(null)
+  api.obterProposta = vi.fn().mockRejectedValue(propostaNaoIniciada())
   api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
     sessao: {
       id_sessao: 'abc',
@@ -366,10 +373,47 @@ describe('OportunidadePage — abre onde a oportunidade está', () => {
       await waitFor(() => expect(rolagens.map((item) => item.alvo)).toContain(decisao))
       expect(rolagens.find((item) => item.alvo === decisao).opcoes).toEqual({
         block: 'nearest',
-        inline: 'nearest',
+        inline: 'center',
       })
     } finally {
       Element.prototype.scrollIntoView = original
     }
+  })
+
+  /**
+   * No celular a barra cortava uma aba no meio ("ipe potencial") e deixava
+   * Anexos e Histórico fora da tela, sem nenhum sinal de que havia mais etapas.
+   */
+  it('quando a barra de etapas não cabe, mostra que há mais etapas e rola até elas', async () => {
+    renderPagina()
+
+    const barra = await screen.findByRole('navigation', { name: 'Etapas da oportunidade' })
+    const rolar = vi.fn()
+    Object.defineProperties(barra, {
+      scrollWidth: { configurable: true, value: 1200 },
+      clientWidth: { configurable: true, value: 360 },
+      scrollLeft: { configurable: true, value: 0, writable: true },
+    })
+    barra.scrollBy = rolar
+
+    barra.dispatchEvent(new Event('scroll'))
+
+    const mais = await screen.findByLabelText('Ver mais etapas')
+    expect(screen.queryByLabelText('Ver etapas anteriores')).not.toBeInTheDocument()
+
+    await userEvent.click(mais)
+    expect(rolar).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
+    expect(rolar.mock.calls[0][0].left).toBeGreaterThan(0)
+  })
+
+  it('a volta para a lista é um botão, não um link apagado', async () => {
+    renderPagina()
+
+    await screen.findByRole('navigation', { name: 'Etapas da oportunidade' })
+
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toHaveClass(
+      'admin-btn',
+      'admin-btn--outline',
+    )
   })
 })

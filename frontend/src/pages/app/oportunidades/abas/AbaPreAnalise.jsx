@@ -21,8 +21,10 @@ import {
   obterPreAnalise,
   obterPreAnaliseDaRodada,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
+import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -418,11 +420,13 @@ function AvisoSemEquipe({ irPara }) {
   )
 }
 
-export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
+export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPara }) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeExecutar = user?.role === ROLES.SUPERVISOR
+  const ehSupervisor = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeExecutar = ehSupervisor && !encerrada
 
   const [analise, setAnalise] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -617,8 +621,11 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
           <p className="oportunidade-page__vazio">
-            Esta oportunidade ainda não tem proposta estruturada.
+            {encerrada
+              ? 'A proposta estruturada não foi iniciada antes da decisão.'
+              : 'Esta oportunidade ainda não tem proposta estruturada.'}
           </p>
           {podeExecutar ? (
             <ProximoPasso
@@ -661,6 +668,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body preanalise__corpo">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
           {espera}
           {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 
@@ -668,11 +676,15 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
             oportunidadeId={oportunidadeId}
             irPara={irPara}
             aoVerificar={setPropostaPendente}
+            podeRevisar={podeExecutar}
+            encerrada={encerrada}
           />
           <p className="oportunidade-page__vazio">
             {podeExecutar
               ? 'Nenhuma pré-análise foi executada ainda.'
-              : 'O Supervisor ainda não executou a pré-análise desta oportunidade.'}
+              : encerrada
+                ? 'Nenhuma pré-análise foi executada antes da decisão.'
+                : 'O Supervisor ainda não executou a pré-análise desta oportunidade.'}
           </p>
         </div>
 
@@ -687,6 +699,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   const lacunas = analise.lacunas || []
   const recomendacoes = analise.recomendacoes || []
   const data = formatarData(analise.executada_em)
+  const executor = analise.executada_por_nome || analise.executada_por
 
   return (
     <section className="perfil-card preanalise">
@@ -698,7 +711,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           </p>
         </div>
 
-        {podeExecutar ? (
+        {podeExecutar || (ehSupervisor && concluida) ? (
           <div className="preanalise__acoes">
             {concluida ? (
               <Link
@@ -710,22 +723,28 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               </Link>
             ) : null}
 
-            <button
-              type="button"
-              className="admin-btn"
-              onClick={executar}
-              disabled={
-                Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
-              }
-            >
-              <Icone icon={appIcons.reset} />
-              {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
-            </button>
+            {podeExecutar ? (
+              <button
+                type="button"
+                className="admin-btn"
+                onClick={executar}
+                disabled={
+                  Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
+                }
+              >
+                <Icone icon={appIcons.reset} />
+                {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span
             className="perfil-card__lock"
-            title="Executar a pré-análise é do Supervisor."
+            title={
+              encerrada
+                ? 'A oportunidade foi encerrada: a pré-análise fica como estava na decisão.'
+                : 'Executar a pré-análise é do Supervisor.'
+            }
           >
             <Icone icon={appIcons.view} />
             Somente leitura
@@ -734,6 +753,8 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
       </header>
 
       <div className="perfil-card__body preanalise__corpo">
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
         <div className="admin-callout" role="note">
           <Icone icon={appIcons.info} className="admin-callout__icon" />
           <p className="admin-callout__text">{analise.aviso}</p>
@@ -744,13 +765,13 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
 
         {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 
-        {podeExecutar ? (
-          <AvisoPropostaNaoRevisada
-            oportunidadeId={oportunidadeId}
-            irPara={irPara}
-            aoVerificar={setPropostaPendente}
-          />
-        ) : null}
+        <AvisoPropostaNaoRevisada
+          oportunidadeId={oportunidadeId}
+          irPara={irPara}
+          aoVerificar={setPropostaPendente}
+          podeRevisar={podeExecutar}
+          encerrada={encerrada}
+        />
 
         {falhou ? (
           <div className="admin-callout admin-callout--alerta" role="alert">
@@ -760,7 +781,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
               {MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]
                 ? `: ${MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]}`
                 : ''}.
-              {proximoPasso(analise.erro)}
+              {encerrada ? '' : proximoPasso(analise.erro)}
             </p>
           </div>
         ) : null}
@@ -813,7 +834,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         <p className="preanalise__versoes">
           Critérios {analise.versao_criterios} · proposta na versão {analise.versao_proposta}
           {data ? ` · executada em ${data}` : ''}
-          {analise.executada_por ? ` por ${analise.executada_por}` : ''}
+          {executor ? ` por ${executor}` : ''}
         </p>
 
         <HistoricoDePreAnalises rodadas={rodadas} aoVer={verRodada} />

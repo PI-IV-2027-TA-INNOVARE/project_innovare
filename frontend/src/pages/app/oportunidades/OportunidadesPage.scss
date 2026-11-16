@@ -164,13 +164,74 @@
   border-radius: 999px;
 }
 
+.oportunidade-abas-trilho {
+  position: relative;
+  margin-bottom: var(--admin-pad);
+}
+
 .oportunidade-abas {
   display: flex;
   gap: 4px;
   overflow-x: auto;
-  margin-bottom: var(--admin-pad);
   padding-bottom: 2px;
   border-bottom: 1px solid var(--admin-card-border);
+}
+
+.ha-depois > .oportunidade-abas {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent);
+}
+
+.ha-antes > .oportunidade-abas {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 64px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 64px), transparent);
+}
+
+.ha-antes.ha-depois > .oportunidade-abas {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 64px,
+    #000 calc(100% - 64px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 64px,
+    #000 calc(100% - 64px),
+    transparent
+  );
+}
+
+.oportunidade-abas__rolar {
+  position: absolute;
+  top: 6px;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--admin-card-border);
+  border-radius: 50%;
+  box-shadow: var(--admin-glow-soft);
+  cursor: pointer;
+
+  &--antes {
+    left: 0;
+  }
+
+  &--depois {
+    right: 0;
+  }
+
+  &:hover {
+    border-color: var(--admin-card-border-hover);
+  }
 }
 
 .oportunidade-aba {
@@ -226,6 +287,16 @@
   justify-content: space-between;
   gap: var(--admin-gap);
   flex-wrap: wrap;
+}
+
+@media (max-width: 420px) {
+  .oportunidade-page__topo {
+    gap: 8px;
+  }
+
+  .oportunidade-page__topo .admin-btn {
+    padding: 0 12px;
+  }
 }
 
 .oportunidade-grid {
@@ -373,6 +444,10 @@
     color: var(--accent-error);
     background: var(--bg-danger-soft);
   }
+}
+
+.oportunidade-decisao {
+  min-height: 0;
 }
 
 .oportunidade-justificativa {
@@ -1013,7 +1088,8 @@
 .proposta__corpo .admin-callout,
 .preanalise__corpo .admin-callout,
 .competencias__corpo .admin-callout,
-.equipe__corpo .admin-callout {
+.equipe__corpo .admin-callout,
+.oportunidade-decisao .admin-callout {
   margin-bottom: 0;
 }
 

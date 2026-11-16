@@ -33,6 +33,7 @@ const RELATORIO = {
       usou_rerank: false,
       fallback_usado: true,
       executado_por: 'supervisor@ac2microbiologia.com.br',
+      executado_por_nome: 'Rafael Antunes',
       status: 'ok',
     },
     membros: [
@@ -130,12 +131,27 @@ describe('RelatorioEquipePage (PB77)', () => {
     expect(screen.queryByText(/bruno dias/i)).not.toBeInTheDocument()
   })
 
+  /**
+   * O documento mostrava o código da rodada ("hibrido_v1"), o e-mail de quem
+   * rodou, o peso em fração e "no vocabulário da rede": nomes de sistema, não
+   * texto de leitura.
+   */
+  it('não mostra código, e-mail nem jargão da rede', async () => {
+    renderizar()
+
+    expect(await screen.findByText('Rafael Antunes')).toBeInTheDocument()
+    expect(screen.queryByText('hibrido_v1')).not.toBeInTheDocument()
+    expect(screen.queryByText(/supervisor@ac2microbiologia/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/vocabulário/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/já cadastrada na rede interna/i).length).toBeGreaterThan(0)
+  })
+
   it('leva os pesos da rodada, que são a régua da aderência', async () => {
     renderizar()
 
-    expect(await screen.findByText('hibrido_v1')).toBeInTheDocument()
+    expect(await screen.findByText('Quatro parcelas combinadas, versão 1')).toBeInTheDocument()
     expect(screen.getByText(/indisponível na rodada/i)).toBeInTheDocument()
-    expect(screen.getByText('peso 0.45')).toBeInTheDocument()
+    expect(screen.getByText('peso 45%')).toBeInTheDocument()
     expect(screen.getAllByText(/afinidade com o tema/i).length).toBe(2)
   })
 

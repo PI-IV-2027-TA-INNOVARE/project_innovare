@@ -20,6 +20,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Papel, Usuario
+from apps.audit.models import CategoriaEvento
+from apps.audit.services import registrar_evento
 from apps.network.models import MembroRede, PapelNaRede, SituacaoMembro
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
 from apps.organizations.models import Organizacao, TipoOrganizacao
@@ -151,6 +153,53 @@ class ConteudoDoRelatorioTests(RelatorioBaseTests):
 
         self.assertGreaterEqual(len(historico), 1)
         self.assertIn('tipo', historico[0])
+
+    def test_sem_equipe_nem_pre_analise_as_explicacoes_vem_vazias(self):
+        """O documento nao inventa explicacao de uma etapa que nao rodou."""
+        self.como(self.supervisor)
+
+        dados = self.relatorio().data
+
+        self.assertEqual(dados['como_foi_calculado'], [])
+        self.assertEqual(dados['como_ler'], [])
+        self.assertEqual(dados['criterios'], [])
+
+    def test_cada_evento_da_trilha_traz_o_nome_legivel(self):
+        """
+        PB76 pede documento apto para consulta ou apresentacao. O `tipo` cru
+        (`oportunidade_cadastrada`) e identificador; quem le o relatorio
+        precisa do mesmo nome que a Auditoria mostra.
+        """
+        self.como(self.supervisor)
+
+        historico = self.relatorio().data['historico']
+        cadastro = next(
+            item for item in historico if item['tipo'] == 'oportunidade_cadastrada'
+        )
+
+        self.assertEqual(cadastro['tipo_rotulo'], 'Oportunidade cadastrada')
+
+    def test_o_que_rodou_sem_pessoa_sai_como_sistema(self):
+        """`__sistema__` e marcador interno: no documento ele vira "Sistema"."""
+        registrar_evento(
+            categoria=CategoriaEvento.OPORTUNIDADE,
+            tipo='situacao_atualizada',
+            entidade='oportunidade',
+            entidade_id=self.codigo,
+            oportunidade=Oportunidade.objects.get(codigo=self.codigo),
+            detalhe={'de': 'entrada', 'para': 'estruturacao', 'conferencia': True},
+        )
+        self.como(self.supervisor)
+
+        historico = self.relatorio().data['historico']
+        conferencia = next(
+            item for item in historico if item['tipo'] == 'situacao_atualizada'
+        )
+
+        self.assertEqual(conferencia['ator_nome'], 'Sistema')
+        self.assertEqual(
+            conferencia['tipo_rotulo'], 'Situação da oportunidade atualizada'
+        )
 
     def test_traz_os_anexos_mesmo_quando_nao_ha_nenhum(self):
         """Secao vazia e informacao: diz que nao houve documento, nao some."""

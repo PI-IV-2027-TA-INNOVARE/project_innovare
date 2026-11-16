@@ -15,6 +15,7 @@ from decouple import Config, RepositoryEnv, config as env_config
 from core.configuracao import (
     AMBIENTE_PRODUCAO,
     ambiente_declarado,
+    cache_da_aplicacao,
     caminho_do_admin,
     chave_de_assinatura,
     exigir_ambiente_coerente,
@@ -94,6 +95,8 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'core.middleware.LimiteDeCorpo',
+    'core.middleware.TravaDoAdmin',
     'core.middleware.MedidorDeDesempenho',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -208,6 +211,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
         'rest_framework.throttling.ScopedRateThrottle',
         'core.limites.LimiteDaIA',
+        'core.limites.LimiteDeEnvioDeAnexo',
+        'core.limites.LimitePorConta',
     ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': config('THROTTLE_ANON', default='60/min'),
@@ -225,11 +230,47 @@ LIMITE_DA_IA = config('THROTTLE_IA', default='') or '30/hour'
 Pedidos que chamam a IA, por pessoa, somados entre as rotas (`core/limites.py`).
 """
 
+LIMITE_DE_ANEXOS = config('THROTTLE_ANEXO', default='') or '30/hour'
+"""
+Envios de anexo, por pessoa (`core/limites.py`). A cota de cada oportunidade e
+o `ANEXO_LIMITE_POR_OPORTUNIDADE`.
+"""
+
+LIMITES_POR_CONTA = {
+    'entrada': config('THROTTLE_LOGIN_CONTA', default='') or '30/hour',
+    'recuperacao': config('THROTTLE_RECUPERACAO_CONTA', default='') or '5/hour',
+}
+"""
+Tentativas de entrada e pedidos de recuperacao de senha contados pelo e-mail
+digitado, somando todos os enderecos de origem (`core/limites.py`).
+"""
+
+LIMITE_DE_ENTRADA_NO_ADMIN = config('THROTTLE_ADMIN', default='') or '10/min'
+"""
+Tentativas de senha no `/admin/` do Django, por endereco (`core/middleware.py`).
+"""
+
+CACHES = cache_da_aplicacao(
+    config('CACHE_URL', default=''), rodando_testes=RUNNING_TESTS
+)
+"""
+Onde vivem os contadores dos limites acima. Sem `CACHE_URL` e a memoria de cada
+processo; com mais de um processo, o limite real se multiplica.
+"""
+
+SEGUNDO_PLANO_IMEDIATO = RUNNING_TESTS
+"""
+Na suite, o que sairia do pedido (`core/segundo_plano.py`) roda na hora.
+"""
+
 if RUNNING_TESTS:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = dict.fromkeys(
         REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
     )
     LIMITE_DA_IA = None
+    LIMITE_DE_ANEXOS = None
+    LIMITES_POR_CONTA = {}
+    LIMITE_DE_ENTRADA_NO_ADMIN = None
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 SIMPLE_JWT = {
@@ -284,6 +325,13 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+CORPO_MAXIMO_KB = config('CORPO_MAXIMO_KB', default=1024, cast=int)
+"""
+Tamanho maximo do corpo de um pedido, fora o envio de anexo, que segue o
+`ANEXO_TAMANHO_MAXIMO_MB` (`core/middleware.py`).
+"""
 ANEXO_TAMANHO_MAXIMO_MB = config('ANEXO_TAMANHO_MAXIMO_MB', default=10, cast=int)
 ANEXO_TIPOS_ACEITOS = tuple(
     config(
@@ -294,6 +342,10 @@ ANEXO_TIPOS_ACEITOS = tuple(
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         ),
     ).split(',')
+)
+
+ANEXO_LIMITE_POR_OPORTUNIDADE = config(
+    'ANEXO_LIMITE_POR_OPORTUNIDADE', default=30, cast=int
 )
 
 RETENCAO_EVENTOS_CONTA_MESES = config(
@@ -411,6 +463,10 @@ CELERY_BEAT_SCHEDULE = {
     'aplicar-retencao-lgpd': {
         'task': 'audit.aplicar_retencao',
         'schedule': crontab(hour=3, minute=0),
+    },
+    'limpar-sessoes-vencidas': {
+        'task': 'accounts.limpar_sessoes_vencidas',
+        'schedule': crontab(hour=3, minute=30),
     },
 }
 

@@ -503,4 +503,29 @@ describe('AbaCopiloto', () => {
       screen.queryByRole('button', { name: /estruturar com o copiloto/i }),
     ).not.toBeInTheDocument()
   })
+
+  /**
+   * PB66: depois de Continuar, ler a entrada, responder, estruturar, aceitar
+   * sugestão e encerrar a conversa deixam de ser oferecidos. O sistema recusa
+   * as etapas, e encerrar a conversa avisava que a proposta "continua
+   * editável", o que deixou de ser verdade.
+   */
+  it('depois de Continuar, não oferece conduzir o Copiloto (PB66)', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" situacao="continuar" />)
+
+    expect(await screen.findByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.getByText(/somente leitura/i)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /estruturar o que falta/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /responder e atualizar/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /encerrar conversa/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/lotes perdidos por contaminação/i)).toBeInTheDocument()
+  })
 })

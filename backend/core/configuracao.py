@@ -289,3 +289,47 @@ def caminho_do_admin(valor, ambiente=AMBIENTE_LOCAL):
         )
 
     return f'{caminho}/'
+
+
+CACHE_EM_MEMORIA = 'django.core.cache.backends.locmem.LocMemCache'
+CACHE_COMPARTILHADO = 'core.cache.RedisTolerante'
+ESPERA_PELO_CACHE_S = 2
+
+
+def cache_da_aplicacao(valor=None, rodando_testes=False):
+    """
+    O `CACHES` do Django: memoria do processo, ou Redis quando ha `CACHE_URL`.
+
+    Os contadores dos limites de pedidos vivem no cache. Em memoria, cada
+    processo do servidor conta o seu, e o limite real vira o configurado vezes
+    o numero de processos; no Redis o contador e um so para todos.
+
+    A espera pelo Redis e curta: ele fica no caminho de todo pedido, e um cache
+    lento nao pode virar API lenta. Fora do ar, o limite deixa de contar e o
+    pedido segue (`core/cache.py`).
+
+    Na suite e sempre memoria: teste nao toca servico compartilhado
+    (AGENTS.md 0.1).
+    """
+    endereco = (valor or '').strip()
+
+    if rodando_testes or not endereco:
+        return {'default': {'BACKEND': CACHE_EM_MEMORIA}}
+
+    if not endereco.startswith(('redis://', 'rediss://')):
+        raise ImproperlyConfigured(
+            f'CACHE_URL={valor!r} nao e um endereco de Redis. Use redis:// ou '
+            'rediss://, ou deixe a chave ausente para o cache em memoria.'
+        )
+
+    return {
+        'default': {
+            'BACKEND': CACHE_COMPARTILHADO,
+            'LOCATION': endereco,
+            'KEY_PREFIX': 'pdconnect',
+            'OPTIONS': {
+                'socket_connect_timeout': ESPERA_PELO_CACHE_S,
+                'socket_timeout': ESPERA_PELO_CACHE_S,
+            },
+        }
+    }

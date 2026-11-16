@@ -8,6 +8,7 @@ esquecer que a analise e orientativa (AGENTS.md 0.2).
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.accounts.services.nomes import nome_de_quem_executou
 from apps.ai.models import StatusExecucao
 from apps.copilot.serializers import LacunaSerializer
 from apps.maturity.models import (
@@ -234,6 +235,7 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
     )
     aviso = serializers.SerializerMethodField()
     comparacao = serializers.SerializerMethodField()
+    executada_por_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = PreAnalise
@@ -244,6 +246,7 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
             'sintese',
             'executada_em',
             'executada_por',
+            'executada_por_nome',
             'status',
             'status_rotulo',
             'erro',
@@ -258,6 +261,9 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
 
     def get_aviso(self, instancia) -> str:
         return AVISO_ORIENTATIVO
+
+    def get_executada_por_nome(self, instancia) -> str | None:
+        return nome_de_quem_executou(instancia.executada_por)
 
     def to_representation(self, instancia):
         """A execucao que passou do teto sai como erro, sem gravar (ver `interrompida`)."""

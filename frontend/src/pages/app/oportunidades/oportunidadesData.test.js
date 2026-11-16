@@ -132,3 +132,48 @@ describe('eventoDaApi — versão anterior da proposta (PB88)', () => {
     expect(evento.anterior).toEqual([])
   })
 })
+
+/**
+ * O histórico mostrava o `tipo` gravado (`competencia_adicionada`) para os
+ * eventos sem texto próprio na tela. A API passou a mandar o mesmo nome que a
+ * Auditoria usa, e é ele que aparece.
+ */
+describe('eventoDaApi — nome legível do evento', () => {
+  it('usa o nome que a API manda quando a tela não tem texto próprio', () => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-11-10T12:00:00Z',
+      categoria: 'competencias',
+      tipo: 'competencia_adicionada',
+      tipo_rotulo: 'Competência adicionada',
+      ator_nome: 'Rafael Antunes',
+      detalhe: { descricao: 'Microbiologia de alimentos' },
+    }, 0)
+
+    expect(evento.texto).toBe('Competência adicionada.')
+  })
+
+  it('sem nome legível, não repete o código como se fosse texto', () => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-11-10T12:00:00Z',
+      categoria: 'ia',
+      tipo: 'evento_novo',
+      tipo_rotulo: 'evento_novo',
+      detalhe: {},
+    }, 0)
+
+    expect(evento.texto).toBe('evento novo')
+  })
+
+  it('o que rodou sem pessoa sai como Sistema', () => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-11-10T12:00:00Z',
+      categoria: 'oportunidade',
+      tipo: 'situacao_atualizada',
+      ator: '__sistema__',
+      ator_nome: 'Sistema',
+      detalhe: { de: 'entrada', para: 'estruturacao', conferencia: true },
+    }, 0)
+
+    expect(evento.ator).toBe('Sistema')
+  })
+})

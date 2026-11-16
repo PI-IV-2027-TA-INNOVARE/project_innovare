@@ -181,6 +181,16 @@
   color: var(--text-muted);
 }
 
+.relatorio-subsecao {
+  margin-top: calc(var(--admin-gap) * 1.5);
+}
+
+.relatorio-subsecao__titulo {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .relatorio-documento__rodape {
   margin-top: var(--admin-section-gap);
   padding-top: var(--admin-gap);

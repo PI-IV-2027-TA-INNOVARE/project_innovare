@@ -52,6 +52,7 @@ const ANALISE = {
   sintese: 'Proposta consistente, com lacuna de infraestrutura.',
   executada_em: '2026-10-15T12:00:00Z',
   executada_por: 'supervisor@ac2microbiologia.com.br',
+  executada_por_nome: 'Rafael Antunes',
   status: 'ok',
   status_rotulo: 'Concluída',
   erro: '',
@@ -263,6 +264,29 @@ describe('AbaPreAnalise', () => {
     renderizar()
 
     expect(await screen.findByText(/Critérios V2/)).toBeInTheDocument()
+  })
+
+  /**
+   * A linha da execução terminava em "por supervisor@ac2microbiologia.com.br":
+   * o e-mail é identificador da conta, não o nome de quem executou.
+   */
+  it('diz quem executou pelo nome, não pelo e-mail', async () => {
+    renderizar()
+
+    expect(await screen.findByText(/por Rafael Antunes/)).toBeInTheDocument()
+    expect(screen.queryByText(/supervisor@ac2microbiologia/)).not.toBeInTheDocument()
+  })
+
+  it('sem conta para o e-mail gravado, mostra o que foi gravado', async () => {
+    api.obterPreAnalise = vi
+      .fn()
+      .mockResolvedValue({ ...ANALISE, executada_por_nome: null })
+
+    renderizar()
+
+    expect(
+      await screen.findByText(/por supervisor@ac2microbiologia\.com\.br/),
+    ).toBeInTheDocument()
   })
 
   it('reavalia pelo botão do Supervisor', async () => {
@@ -695,6 +719,61 @@ describe('AbaPreAnalise', () => {
     expect(await screen.findByText(/somente leitura/i)).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /reavaliar/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * Com a pré-análise feita, o aviso só aparecia ao Supervisor; o Pesquisador
+   * lia o resultado sem saber que a proposta por trás dele não foi revisada.
+   */
+  it('o Pesquisador vê que a proposta não foi revisada, sem pedido de revisão (RN-IA01)', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar({ irPara: vi.fn() })
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * PB66: depois de Continuar o sistema recusa nova pré-análise. Acatar
+   * recomendação serve para a próxima rodada ler o progresso; sem rodada
+   * possível, a tela também deixa de oferecer. O relatório continua.
+   */
+  it('depois de Continuar, não oferece reavaliar nem acatar, e mantém o relatório (PB66)', async () => {
+    renderizar({ situacao: 'continuar' })
+
+    expect(await screen.findByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.getByText('Descrever a infraestrutura disponível.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reavaliar/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /marcar como acatada/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/próximo passo/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /gerar relatório/i })).toBeInTheDocument()
+  })
+
+  it('arquivada sem pré-análise, não oferece executar', async () => {
+    api.obterPreAnalise = vi
+      .fn()
+      .mockRejectedValue({ data: { codigo: 'preanalise_inexistente' }, message: 'sem' })
+
+    renderizar({ situacao: 'arquivada' })
+
+    expect(await screen.findByText(/foi arquivada/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/nenhuma pré-análise foi executada antes da decisão/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /executar pré-análise/i }),
     ).not.toBeInTheDocument()
   })
 })

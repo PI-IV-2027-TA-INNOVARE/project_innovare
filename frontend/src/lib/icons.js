@@ -32,6 +32,7 @@ import {
   Moon,
   Palette,
   Pencil,
+  Printer,
   RefreshCw,
   RotateCcw,
   Save,
@@ -73,6 +74,7 @@ export const appIcons = {
 
   addUser: UserPlus,
   export: Download,
+  print: Printer,
   external: ExternalLink,
   filter: Filter,
   info: Info,

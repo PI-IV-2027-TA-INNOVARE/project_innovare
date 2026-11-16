@@ -14,6 +14,13 @@ psycopg[binary,pool]==3.3.6
 psycopg-pool==3.3.3
 python-decouple==3.8
 
+# --- Servidor de producao -----------------------------------------------------
+#
+# O `runserver` e de desenvolvimento. Em producao quem atende e o gunicorn, com
+# a configuracao de `gunicorn.conf.py`. Nao roda no Windows: la, siga com o
+# `runserver`. Aprovado em 15/11/2026.
+gunicorn==27.0.1; sys_platform != "win32"
+
 # --- Seguranca ----------------------------------------------------------------
 #
 # Cifra dos backups do banco (scripts/backup_cifrado.py). Ja vinha instalada

@@ -13,8 +13,10 @@ import {
   obterEstadoCopiloto,
   responderCopiloto,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import { ROTULOS_DOS_ELEMENTOS } from '../oportunidadesData'
 import EsperaIA from './EsperaIA'
+import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -400,11 +402,18 @@ function Resultado({ resultado, irPara }) {
   )
 }
 
-export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, irPara }) {
+export default function AbaCopiloto({
+  oportunidadeId,
+  situacao,
+  aoEstruturar,
+  aoOcupar,
+  irPara,
+}) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeConduzir = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeConduzir = user?.role === ROLES.SUPERVISOR && !encerrada
 
   const [estado, setEstado] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -643,7 +652,11 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
         ) : (
           <span
             className="perfil-card__lock"
-            title="Conduzir a estruturação é do Supervisor."
+            title={
+              encerrada
+                ? 'A oportunidade foi encerrada: o Copiloto não roda mais nesta oportunidade.'
+                : 'Conduzir a estruturação é do Supervisor.'
+            }
           >
             <Icone icon={appIcons.view} />
             Somente leitura
@@ -652,6 +665,8 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
       </header>
 
       <div className="perfil-card__body copiloto__corpo">
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
         <div className="admin-callout" role="note">
           <Icone icon={appIcons.info} className="admin-callout__icon" />
           <p className="admin-callout__text">
@@ -678,7 +693,7 @@ export default function AbaCopiloto({ oportunidadeId, aoEstruturar, aoOcupar, ir
           aoRecusar={recusar}
         />
 
-        {completa && !resultado ? (
+        {completa && !resultado && !encerrada ? (
           <ProximoPasso
             etapa="proposta"
             irPara={irPara}

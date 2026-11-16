@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
@@ -29,9 +30,21 @@ def encerrar_sessoes(usuario: Usuario) -> None:
 
     O SimpleJWT troca o token a cada renovacao e o novo nasce com prazo novo:
     sem isto, um cookie copiado seguiria valendo depois da troca de senha.
+
+    So entram as sessoes que ainda valem e ainda nao foram barradas, numa
+    gravacao so: cada renovacao deixa uma linha, e percorrer todas, uma a uma,
+    custava mais a cada dia de uso.
     """
-    for pendente in OutstandingToken.objects.filter(user=usuario):
-        BlacklistedToken.objects.get_or_create(token=pendente)
+    abertas = OutstandingToken.objects.filter(
+        user=usuario,
+        expires_at__gt=timezone.now(),
+        blacklistedtoken__isnull=True,
+    )
+
+    BlacklistedToken.objects.bulk_create(
+        [BlacklistedToken(token=sessao) for sessao in abertas],
+        ignore_conflicts=True,
+    )
 
 
 class SolicitarRecuperacaoSenhaService:

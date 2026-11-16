@@ -719,6 +719,9 @@ class AnexarDocumentoService:
 
     O tipo gravado e o conferido pelo conteudo do arquivo, nao o que o
     navegador declarou (`tipo_do_anexo`).
+
+    A cota por oportunidade (N2) e conferida com a oportunidade travada: dois
+    envios ao mesmo tempo nao passam os dois pela ultima vaga.
     """
 
     @transaction.atomic
@@ -732,6 +735,17 @@ class AnexarDocumentoService:
                 f'Arquivo acima de {settings.ANEXO_TAMANHO_MAXIMO_MB} MB.',
                 codigo='anexo_grande_demais',
             )
+
+        cota = settings.ANEXO_LIMITE_POR_OPORTUNIDADE
+
+        if cota:
+            Oportunidade.objects.select_for_update().filter(pk=oportunidade.pk).first()
+
+            if oportunidade.anexos.count() >= cota:
+                raise ErroDeDominio(
+                    f'Esta oportunidade já atingiu o máximo de {cota} documentos.',
+                    codigo='anexo_cota_atingida',
+                )
 
         mime = tipo_conferido(arquivo, arquivo.name)
 

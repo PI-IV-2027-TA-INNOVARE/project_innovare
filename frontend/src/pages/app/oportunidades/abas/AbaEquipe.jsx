@@ -16,9 +16,11 @@ import {
   obterEquipePotencial,
   validarEquipe,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
+import EtapaEncerrada from './EtapaEncerrada'
 import '../OportunidadesPage.scss'
 
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
@@ -129,11 +131,13 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
   )
 }
 
-export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
+export default function AbaEquipe({ oportunidadeId, situacao, aoOcupar, irPara }) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeConduzir = user?.role === ROLES.SUPERVISOR
+  const ehSupervisor = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeConduzir = ehSupervisor && !encerrada
 
   const [equipe, setEquipe] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -304,10 +308,14 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body equipe__corpo">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
           <AvisoPropostaNaoRevisada
             oportunidadeId={oportunidadeId}
             irPara={irPara}
             aoVerificar={setPropostaPendente}
+            podeRevisar={podeConduzir}
+            encerrada={encerrada}
           />
 
           {rodando ? (
@@ -319,7 +327,9 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
           <p className="oportunidade-page__vazio">
             {podeConduzir
               ? 'Nenhum matching foi rodado nesta oportunidade. O matching compara as competências necessárias com os perfis da rede interna.'
-              : 'O Supervisor ainda não rodou o matching desta oportunidade.'}
+              : encerrada
+                ? 'Nenhum matching foi rodado antes da decisão.'
+                : 'O Supervisor ainda não rodou o matching desta oportunidade.'}
           </p>
         </div>
 
@@ -346,7 +356,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
           ) : null}
         </div>
 
-        {podeConduzir ? (
+        {ehSupervisor ? (
           <div className="equipe__acoes">
             <Link
               className="admin-btn admin-btn--outline"
@@ -356,15 +366,17 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               Gerar relatório
             </Link>
 
-            <button
-              type="button"
-              className="admin-btn admin-btn--outline"
-              onClick={() => setConfirmarRodada(true)}
-              disabled={ocupado || propostaPendente}
-            >
-              <Icone icon={appIcons.reset} />
-              {rodando ? 'Rodando...' : 'Rodar de novo'}
-            </button>
+            {podeConduzir ? (
+              <button
+                type="button"
+                className="admin-btn admin-btn--outline"
+                onClick={() => setConfirmarRodada(true)}
+                disabled={ocupado || propostaPendente}
+              >
+                <Icone icon={appIcons.reset} />
+                {rodando ? 'Rodando...' : 'Rodar de novo'}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span
@@ -378,13 +390,15 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
       </header>
 
       <div className="perfil-card__body equipe__corpo">
-        {podeConduzir ? (
-          <AvisoPropostaNaoRevisada
-            oportunidadeId={oportunidadeId}
-            irPara={irPara}
-            aoVerificar={setPropostaPendente}
-          />
-        ) : null}
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
+        <AvisoPropostaNaoRevisada
+          oportunidadeId={oportunidadeId}
+          irPara={irPara}
+          aoVerificar={setPropostaPendente}
+          podeRevisar={podeConduzir}
+          encerrada={encerrada}
+        />
 
         {rodando ? (
           <EsperaIA

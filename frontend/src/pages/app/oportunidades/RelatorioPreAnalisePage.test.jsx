@@ -33,6 +33,7 @@ const RELATORIO = {
     sintese: 'Proposta consistente, com lacuna de infraestrutura.',
     executada_em: '2026-10-15T12:00:00Z',
     executada_por: 'supervisor@ac2microbiologia.com.br',
+    executada_por_nome: 'Rafael Antunes',
     status: 'ok',
     status_rotulo: 'Concluída',
     erro: '',
@@ -103,13 +104,28 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue(RELATORIO)
   })
 
+  /**
+   * "Executada por" mostrava o e-mail e "Execução de IA" um código solto. O
+   * código fica, porque a saída de IA precisa ser rastreável, mas com o que
+   * ele é e para que serve.
+   */
+  it('diz quem executou pelo nome e explica o código da execução da IA', async () => {
+    renderizar()
+
+    expect(await screen.findByText('Rafael Antunes')).toBeInTheDocument()
+    expect(screen.queryByText(/supervisor@ac2microbiologia/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/código desta execução da IA, para localizar a análise na auditoria: run-9/i),
+    ).toBeInTheDocument()
+  })
+
   it('consolida resultado por dimensão, lacunas e recomendações', async () => {
     renderizar()
 
     expect(
       await screen.findByRole('heading', { name: /detecção rápida de contaminação/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/desafio tecnologico · consolidada/i)).toBeInTheDocument()
+    expect(screen.getByText(/desafio tecnológico · consolidada/i)).toBeInTheDocument()
     expect(screen.getByText('Não há descrição do laboratório.')).toBeInTheDocument()
     expect(
       screen.getByText('Descrever a infraestrutura disponível.'),
@@ -247,7 +263,7 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     expect(
       await screen.findByText(/não produziu resultado/i),
     ).toBeInTheDocument()
-    expect(screen.queryByText(/desafio tecnologico/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/desafio tecnológico/i)).not.toBeInTheDocument()
   })
 
   /**

@@ -111,6 +111,7 @@ export default function OportunidadePage() {
   const [abaOcupada, setAbaOcupada] = useState(false)
   const [rascunhoPendente, setRascunhoPendente] = useState(false)
   const [naoEncontrada, setNaoEncontrada] = useState(false)
+  const [bordas, setBordas] = useState({ antes: false, depois: false })
   const barraDeEtapas = useRef(null)
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
@@ -156,8 +157,42 @@ export default function OportunidadePage() {
 
     barraDeEtapas.current
       ?.querySelector('[aria-current="step"]')
-      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [carregando])
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'center' })
+  }, [carregando, abaAtiva])
+
+  const medirBordas = useCallback(() => {
+    const barra = barraDeEtapas.current
+
+    if (!barra) return
+
+    const antes = barra.scrollLeft > 1
+    const depois = barra.scrollLeft + barra.clientWidth < barra.scrollWidth - 1
+
+    setBordas((atual) =>
+      atual.antes === antes && atual.depois === depois ? atual : { antes, depois },
+    )
+  }, [])
+
+  useEffect(() => {
+    const barra = barraDeEtapas.current
+
+    if (carregando || !barra) return undefined
+
+    medirBordas()
+    barra.addEventListener('scroll', medirBordas, { passive: true })
+    window.addEventListener('resize', medirBordas)
+
+    return () => {
+      barra.removeEventListener('scroll', medirBordas)
+      window.removeEventListener('resize', medirBordas)
+    }
+  }, [carregando, medirBordas])
+
+  const rolarEtapas = (sentido) => {
+    const barra = barraDeEtapas.current
+
+    barra?.scrollBy?.({ left: sentido * barra.clientWidth * 0.7, behavior: 'smooth' })
+  }
 
   const atualizarEmSegundoPlano = useCallback(
     () => carregar({ silencioso: true }),
@@ -307,6 +342,26 @@ export default function OportunidadePage() {
         </div>
       </header>
 
+      <div
+        className={[
+          'oportunidade-abas-trilho',
+          bordas.antes ? 'ha-antes' : '',
+          bordas.depois ? 'ha-depois' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        {bordas.antes ? (
+          <button
+            type="button"
+            className="oportunidade-abas__rolar oportunidade-abas__rolar--antes"
+            aria-label="Ver etapas anteriores"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => rolarEtapas(-1)}
+          >
+            <Icone icon={appIcons.previous} />
+          </button>
+        ) : null}
+
       <nav className="oportunidade-abas" aria-label="Etapas da oportunidade" ref={barraDeEtapas}>
         <ol className="oportunidade-abas__etapas">
           {ETAPAS.map((item) => (
@@ -336,6 +391,20 @@ export default function OportunidadePage() {
         </ul>
       </nav>
 
+        {bordas.depois ? (
+          <button
+            type="button"
+            className="oportunidade-abas__rolar oportunidade-abas__rolar--depois"
+            aria-label="Ver mais etapas"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => rolarEtapas(1)}
+          >
+            <Icone icon={appIcons.next} />
+          </button>
+        ) : null}
+      </div>
+
       {etapaAtiva ? (
         <p className="oportunidade-abas__posicao">{posicaoDa(etapaAtiva, andamento)}</p>
       ) : null}
@@ -358,6 +427,7 @@ export default function OportunidadePage() {
         {abaAtiva === 'copiloto' ? (
           <AbaCopiloto
             oportunidadeId={id}
+            situacao={registro.situacao}
             aoEstruturar={atualizarEmSegundoPlano}
             aoOcupar={setAbaOcupada}
             irPara={irPara}
@@ -367,25 +437,42 @@ export default function OportunidadePage() {
         {abaAtiva === 'proposta' ? (
           <AbaProposta
             oportunidadeId={id}
+            situacao={registro.situacao}
             irPara={irPara}
             aoAlterar={setRascunhoPendente}
           />
         ) : null}
 
         {abaAtiva === 'competencias' ? (
-          <AbaCompetencias oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+          <AbaCompetencias
+            oportunidadeId={id}
+            situacao={registro.situacao}
+            aoOcupar={setAbaOcupada}
+            irPara={irPara}
+          />
         ) : null}
 
         {abaAtiva === 'equipe' ? (
-          <AbaEquipe oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+          <AbaEquipe
+            oportunidadeId={id}
+            situacao={registro.situacao}
+            aoOcupar={setAbaOcupada}
+            irPara={irPara}
+          />
         ) : null}
 
         {abaAtiva === 'pre-analise' ? (
-          <AbaPreAnalise oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+          <AbaPreAnalise
+            oportunidadeId={id}
+            situacao={registro.situacao}
+            aoOcupar={setAbaOcupada}
+            irPara={irPara}
+          />
         ) : null}
 
         {abaAtiva === 'decisao' ? (
           <AbaDecisao
+            oportunidadeId={id}
             decisao={decisao}
             situacao={registro.situacao}
             podeDecidir={ehSupervisor}

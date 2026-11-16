@@ -3,6 +3,17 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaDecisao from './AbaDecisao'
 
+const api = vi.hoisted(() => ({ obterProposta: null }))
+
+vi.mock('../../../../services/pdConnectApi', () => ({
+  obterProposta: (...args) => api.obterProposta(...args),
+}))
+
+const PROPOSTA_REVISADA = {
+  problema_pesquisa: 'Contaminação resiste à pasteurização.',
+  revisada_por_humano: true,
+}
+
 const DECISAO_REGISTRADA = {
   tipo: 'continuar',
   justificativa: 'Proposta madura e equipe potencial validada pelo Núcleo.',
@@ -14,11 +25,13 @@ let onRegistrar
 
 beforeEach(() => {
   onRegistrar = vi.fn()
+  api.obterProposta = vi.fn().mockResolvedValue(PROPOSTA_REVISADA)
 })
 
 function renderizar(props = {}) {
   return render(
     <AbaDecisao
+      oportunidadeId="OP-2026-001"
       podeDecidir
       situacao="aguardando_decisao"
       onRegistrar={onRegistrar}
@@ -243,5 +256,60 @@ describe('AbaDecisao — quem nao decide', () => {
 
     expect(screen.getByText(/aguardando decisão/i)).toBeInTheDocument()
     expect(screen.getByText(/registrado pelo Supervisor/i)).toBeInTheDocument()
+  })
+})
+
+/**
+ * PB90 pede a indicação de revisão pendente também na Decisão, e a aba não
+ * tinha nenhuma. O Copiloto pode voltar a escrever depois da pré-análise, e a
+ * proposta volta a não revisada sem a situação recuar.
+ */
+describe('AbaDecisao — proposta não revisada', () => {
+  beforeEach(() => {
+    api.obterProposta = vi.fn().mockResolvedValue({
+      ...PROPOSTA_REVISADA,
+      revisada_por_humano: false,
+    })
+  })
+
+  it('avisa o Supervisor e leva a revisar, sem travar a decisão (PB90)', async () => {
+    const irPara = vi.fn()
+    renderizar({ irPara })
+
+    expect(await screen.findByText(/só vale como definitivo/i)).toBeInTheDocument()
+    expect(screen.queryByText(/fica liberada/i)).not.toBeInTheDocument()
+    expect(api.obterProposta).toHaveBeenCalledWith('OP-2026-001')
+    screen.getAllByRole('radio').forEach((opcao) => expect(opcao).toBeEnabled())
+
+    await userEvent.click(screen.getByRole('button', { name: /revisar a proposta/i }))
+    expect(irPara).toHaveBeenCalledWith('proposta')
+  })
+
+  it('avisa quem acompanha, sem pedir revisão (RN-IA01)', async () => {
+    renderizar({ podeDecidir: false, irPara: vi.fn() })
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * Depois de Continuar ou Arquivar a proposta não pode mais ser salva. O
+   * texto do Copiloto segue sem valer como definitivo (RN-IA01), mas "revise e
+   * salve" pediria o impossível: o aviso só registra que a decisão saiu sem a
+   * revisão.
+   */
+  it('depois de Continuar, registra que a decisão saiu sem revisão, sem pedir revisão (RN-IA01)', async () => {
+    renderizar({ decisao: DECISAO_REGISTRADA, situacao: 'continuar', irPara: vi.fn() })
+
+    expect(await screen.findByText(/não foi revisada antes da decisão/i)).toBeInTheDocument()
+    expect(screen.getByText(DECISAO_REGISTRADA.justificativa)).toBeInTheDocument()
+    expect(screen.queryByText(/você revisa/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
   })
 })
