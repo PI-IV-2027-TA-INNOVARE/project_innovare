@@ -6,7 +6,13 @@ import {
   rotuloDoCriterio,
   separarDescricao,
 } from '../../lib/lacunas'
-import { Campo, formatarData } from './partesDoRelatorio'
+import {
+  Campo,
+  SeloDeMaturidade,
+  TextoFormatado,
+  formatarData,
+  porGravidade,
+} from './partesDoRelatorio'
 
 const ELEMENTOS_DA_PROPOSTA = [
   ['problema_pesquisa', 'Problema de pesquisa'],
@@ -19,10 +25,14 @@ const ELEMENTOS_DA_PROPOSTA = [
 const rotuloDaDimensao = (item) => ROTULOS_DAS_DIMENSOES[item.dimensao] || item.dimensao_rotulo
 
 function Recomendacao({ recomendacao }) {
+  const estado = recomendacao.acatada ? 'acatada' : 'pendente'
+
   return (
-    <li>
-      {recomendacao.texto}
-      {recomendacao.acatada ? ' (acatada)' : ''}
+    <li className="relatorio-recomendacao">
+      <span>{recomendacao.texto}</span>{' '}
+      <span className={`relatorio-estado relatorio-estado--${estado}`}>
+        {recomendacao.acatada ? 'Acatada' : 'Pendente'}
+      </span>
     </li>
   )
 }
@@ -40,6 +50,7 @@ export default function ConteudoDaPreAnalise({
   criterios = [],
   proposta = null,
   equipe = null,
+  mostrarSintese = true,
   Bloco,
 }) {
   const emAndamento = ['pendente', 'executando'].includes(analise.status)
@@ -81,8 +92,8 @@ export default function ConteudoDaPreAnalise({
           </p>
         ) : null}
 
-        {analise.sintese ? (
-          <p className="relatorio-campo__valor">{analise.sintese}</p>
+        {mostrarSintese && analise.sintese ? (
+          <TextoFormatado texto={analise.sintese} className="relatorio-campo__valor" />
         ) : null}
 
         {analise.ai_run_id ? (
@@ -96,12 +107,10 @@ export default function ConteudoDaPreAnalise({
       {analise.dimensoes.length > 0 ? (
         <Bloco titulo="Resultado por dimensão">
           <dl className="relatorio-campos relatorio-campos--coluna">
-            {analise.dimensoes.map((dimensao) => (
-              <Campo
-                key={dimensao.id_dimensao}
-                rotulo={`${rotuloDaDimensao(dimensao)} · ${dimensao.nivel_rotulo}`}
-              >
-                {dimensao.avaliacao}
+            {porGravidade(analise.dimensoes).map((dimensao) => (
+              <Campo key={dimensao.id_dimensao} rotulo={rotuloDaDimensao(dimensao)}>
+                <SeloDeMaturidade nivel={dimensao.nivel} rotulo={dimensao.nivel_rotulo} />
+                <TextoFormatado texto={dimensao.avaliacao} />
                 {dimensao.evidencias?.length > 0 ? (
                   <ul className="relatorio-lista">
                     {dimensao.evidencias.map((evidencia, indice) => (
@@ -155,7 +164,9 @@ export default function ConteudoDaPreAnalise({
         <Bloco titulo="Proposta avaliada">
           <dl className="relatorio-campos relatorio-campos--coluna">
             {ELEMENTOS_DA_PROPOSTA.map(([campo, rotulo]) => (
-              <Campo key={campo} rotulo={rotulo}>{proposta[campo]}</Campo>
+              <Campo key={campo} rotulo={rotulo}>
+                {proposta[campo] ? <TextoFormatado texto={proposta[campo]} /> : null}
+              </Campo>
             ))}
           </dl>
         </Bloco>

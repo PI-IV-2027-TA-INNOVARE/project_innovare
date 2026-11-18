@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Icone, appIcons } from '../../../../lib/icons'
 
 const AVISO_DE_DEMORA_S = 30
 
@@ -11,12 +12,11 @@ export default function EsperaIA({ titulo, detalhe, desde }) {
     return () => clearInterval(relogio)
   }, [])
 
-  const segundos = Math.max(0, Math.floor((agora - inicio) / 1000))
-  const demorando = segundos >= AVISO_DE_DEMORA_S
+  const demorando = (agora - inicio) / 1000 >= AVISO_DE_DEMORA_S
 
   return (
     <div className="espera-ia" role="status" aria-live="polite">
-      <span className="espera-ia__indicador" aria-hidden="true" />
+      <Icone icon={appIcons.sync} className="espera-ia__icone" />
       <div>
         <p className="espera-ia__titulo">{titulo}</p>
         <p className="espera-ia__detalhe">
@@ -25,7 +25,6 @@ export default function EsperaIA({ titulo, detalhe, desde }) {
             : detalhe || 'Isso costuma levar de 10 a 30 segundos. Não feche esta aba.'}
         </p>
       </div>
-      <span className="espera-ia__tempo">{segundos}s</span>
     </div>
   )
 }

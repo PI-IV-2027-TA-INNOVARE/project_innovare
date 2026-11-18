@@ -32,6 +32,7 @@ from apps.accounts.models import Usuario
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.ai.services.custo import explicar_motivo
 from apps.ai.services.protocolos import ProvedorDeIA
+from apps.ai.services.sem_ia import sem_resposta_da_ia
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.copilot.models import (
@@ -365,9 +366,9 @@ class ComProvedor:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.registro import provedor_principal
+        from apps.ai.services.registro import provedor_com_reserva
 
-        return provedor_principal()
+        return provedor_com_reserva()
 
 
 class IniciarSessaoService(ComProvedor):
@@ -398,7 +399,7 @@ class IniciarSessaoService(ComProvedor):
             executado_por=ator.email,
         )
 
-        fallback_usado = bool(resultado.get('fallback_usado'))
+        fallback_usado = sem_resposta_da_ia(resultado)
         lida = SinteseIASerializer(data=resultado.get('dados') or {})
         sintese = ''
 
@@ -599,7 +600,7 @@ class EstruturarPropostaService(ComProvedor):
         )
 
         execucao_ia = resultado.get('execucao_ia')
-        fallback_usado = bool(resultado.get('fallback_usado'))
+        fallback_usado = sem_resposta_da_ia(resultado)
         motivo_fallback = resultado.get('motivo_fallback') if fallback_usado else None
         saida = SaidaCopilotoSerializer(data=resultado.get('dados') or {})
         aceita = saida.is_valid()

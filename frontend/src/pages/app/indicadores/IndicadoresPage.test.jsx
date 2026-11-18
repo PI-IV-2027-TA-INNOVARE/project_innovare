@@ -212,6 +212,85 @@ describe('Indicadores essenciais', () => {
     expect(await screen.findByText(/nenhuma oportunidade/i)).toBeInTheDocument()
   })
 
+  describe('sem oportunidade no acompanhamento', () => {
+    const VAZIO = {
+      oportunidades: { total: 0, por_situacao: [], por_origem: [] },
+      decisoes: { total: 0, por_tipo: [] },
+      rede: null,
+    }
+
+    const vazio = () =>
+      screen.findByRole('region', { name: /nenhuma oportunidade no seu acompanhamento/i })
+
+    beforeEach(() => {
+      api.obterIndicadores = vi.fn().mockResolvedValue(VAZIO)
+    })
+
+    it('o Pesquisador lê como a oportunidade chega e vai para o perfil', async () => {
+      auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+
+      renderizar()
+      const regiao = await vazio()
+
+      expect(regiao).toHaveTextContent(/quando o matching sugere seu nome numa equipe/i)
+      expect(within(regiao).getByRole('link', { name: /completar meu perfil/i })).toHaveAttribute(
+        'href',
+        '/perfil',
+      )
+      expect(regiao).toHaveTextContent(/em que etapa elas estão e as decisões registradas/i)
+    })
+
+    it('o Demandante vai cadastrar o primeiro problema', async () => {
+      auth.user = { role: ROLES.DEMANDANTE, name: 'Vale Verde' }
+
+      renderizar()
+      const regiao = await vazio()
+
+      expect(within(regiao).getByRole('link', { name: /cadastrar problema/i })).toHaveAttribute(
+        'href',
+        '/problemas/novo',
+      )
+    })
+
+    it('o Supervisor vai registrar uma ideia interna e lê o que mais aparece para ele', async () => {
+      renderizar()
+      const regiao = await vazio()
+
+      expect(within(regiao).getByRole('link', { name: /nova ideia interna/i })).toHaveAttribute(
+        'href',
+        '/oportunidades/nova',
+      )
+      expect(regiao).toHaveTextContent(/rede interna, o matching, a maturidade das propostas e o uso da IA/i)
+    })
+
+    it('não mostra a hora de atualização de números que não existem', async () => {
+      renderizar()
+      await vazio()
+
+      expect(screen.queryByText(/atualizado às/i)).not.toBeInTheDocument()
+    })
+  })
+
+  it('com erro, oferece tentar de novo e mostra os números quando voltam', async () => {
+    api.obterIndicadores = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('fora do ar'))
+      .mockResolvedValue(DADOS)
+
+    renderizar()
+    await screen.findByRole('alert')
+    await userEvent.click(screen.getByRole('button', { name: /tentar de novo/i }))
+
+    expect(await screen.findByRole('region', { name: /oportunidades/i })).toBeInTheDocument()
+  })
+
+  it('pessoas indicadas e lacunas dizem que contam só a rodada mais recente', async () => {
+    renderizar()
+
+    expect(await screen.findByText(/da equipe mais recente de cada oportunidade/i)).toBeInTheDocument()
+    expect(screen.getByText(/da pré-análise mais recente de cada proposta/i)).toBeInTheDocument()
+  })
+
   it('avisa quando os números não carregam', async () => {
     api.obterIndicadores = vi.fn().mockRejectedValue(new Error('fora do ar'))
     renderizar()

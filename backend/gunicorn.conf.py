@@ -43,3 +43,10 @@ limit_request_field_size = 8190
 
 accesslog = '-'
 errorlog = '-'
+
+
+def post_worker_init(worker):
+    """Cada processo aquece o modelo de comparacao de textos ao iniciar."""
+    from apps.ai.services.embedding import aquecer_em_segundo_plano
+
+    aquecer_em_segundo_plano()

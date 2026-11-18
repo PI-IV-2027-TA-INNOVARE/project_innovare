@@ -27,7 +27,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from apps.accounts.models import Usuario
@@ -153,6 +153,20 @@ def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
         )
 
     return analise
+
+
+def preanalise_mais_recente(proposta: OuterRef) -> Subquery:
+    """
+    A pre-analise atual de cada proposta, como subconsulta.
+
+    E a regra de `preanalise_atual_de` - a ultima executada - para quem conta
+    varias propostas numa consulta so.
+    """
+    return Subquery(
+        PreAnalise.objects.filter(proposta=proposta)
+        .order_by('-executada_em', '-pk')
+        .values('pk')[:1]
+    )
 
 
 def preanalises_de(oportunidade: Oportunidade) -> QuerySet[PreAnalise]:

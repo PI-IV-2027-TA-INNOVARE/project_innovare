@@ -1,7 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaProposta from './AbaProposta'
+
+const estilos = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'OportunidadesPage.scss'),
+  'utf8',
+)
 import { ROLES } from '../../../../lib/roles'
 
 const auth = { user: null, isAuthenticated: true }
@@ -14,12 +22,14 @@ const api = vi.hoisted(() => ({
   obterProposta: null,
   criarProposta: null,
   atualizarProposta: null,
+  obterEstadoCopiloto: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
   obterProposta: (...args) => api.obterProposta(...args),
   criarProposta: (...args) => api.criarProposta(...args),
   atualizarProposta: (...args) => api.atualizarProposta(...args),
+  obterEstadoCopiloto: (...args) => api.obterEstadoCopiloto(...args),
 }))
 
 const VAZIA = {
@@ -70,6 +80,136 @@ beforeEach(() => {
   api.atualizarProposta = vi.fn().mockImplementation((_codigo, payload) =>
     Promise.resolve({ ...PREENCHIDA, ...payload })
   )
+  api.obterEstadoCopiloto = vi.fn().mockResolvedValue({ lacunas: [] })
+})
+
+const PONTO_NA_METODOLOGIA = {
+  id_lacuna: 9,
+  campo_afetado: 'metodologia',
+  natureza: 'pouco_desenvolvido',
+  natureza_rotulo: 'Pouco desenvolvido',
+  descricao: 'Faltam os controles.',
+  recomendacao: 'Descreva o controle positivo e o negativo.',
+  severidade: 'media',
+  severidade_rotulo: 'Média',
+}
+
+describe('AbaProposta — o que o Copiloto apontou', () => {
+  /**
+   * A aba mostrava os oito elementos iguais, e o que o Copiloto apontou só
+   * aparecia na aba dele. Quem revisa precisa ver o ponto ao lado do texto.
+   */
+  it('mostra no elemento o ponto que o Copiloto deixou aberto', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({ lacunas: [PONTO_NA_METODOLOGIA] })
+
+    renderAba()
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+
+    await waitFor(() => expect(campo).toHaveAccessibleDescription(/faltam os controles/i))
+    expect(screen.getByText('Descreva o controle positivo e o negativo.')).toBeInTheDocument()
+    expect(screen.getByText(/pouco desenvolvido/i)).toBeInTheDocument()
+
+    const aviso = screen.getByText('Faltam os controles.').closest('[role="note"]')
+
+    expect(aviso).toHaveClass('admin-callout')
+    expect(aviso.querySelector('.admin-callout__icon')).not.toBeNull()
+    expect(screen.getByLabelText(/problema de pesquisa/i)).not.toHaveAccessibleDescription(
+      /copiloto/i,
+    )
+  })
+
+  it('a falha ao ler os pontos do Copiloto não impede a proposta de abrir', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockRejectedValue(new Error('fora do ar'))
+
+    renderAba()
+
+    expect(await screen.findByLabelText(/metodologia/i)).toHaveValue('Cultivo seletivo e PCR.')
+    expect(screen.queryByText(/fora do ar/i)).toBeNull()
+  })
+
+  it('quem chega por um ponto do Copiloto cai no elemento indicado', async () => {
+    const aoFocarCampo = vi.fn()
+
+    render(
+      <AbaProposta
+        oportunidadeId="OP-2026-001"
+        campoEmFoco="metodologia"
+        aoFocarCampo={aoFocarCampo}
+      />,
+    )
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+
+    await waitFor(() => expect(campo).toHaveFocus())
+    expect(campo).not.toHaveClass('proposta__texto--recolhido')
+    expect(aoFocarCampo).toHaveBeenCalled()
+  })
+})
+
+describe('AbaProposta — texto longo recolhido', () => {
+  const originais = {}
+
+  beforeEach(() => {
+    for (const [medida, valor] of [['scrollHeight', 200], ['clientHeight', 48]]) {
+      originais[medida] = Object.getOwnPropertyDescriptor(HTMLElement.prototype, medida)
+      Object.defineProperty(HTMLElement.prototype, medida, {
+        configurable: true,
+        get: () => valor,
+      })
+    }
+  })
+
+  afterEach(() => {
+    for (const medida of ['scrollHeight', 'clientHeight']) {
+      if (originais[medida]) {
+        Object.defineProperty(HTMLElement.prototype, medida, originais[medida])
+      } else {
+        delete HTMLElement.prototype[medida]
+      }
+    }
+  })
+
+  /**
+   * Ver o texto inteiro dependia de descobrir que era preciso clicar nele, e
+   * o clique já abria a edição. Agora o texto que não cabe nas duas linhas
+   * tem um botão para ler tudo, separado de editar.
+   */
+  it('o texto que não cabe oferece ver tudo sem entrar na edição, e recolher', async () => {
+    const user = userEvent.setup()
+    renderAba()
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+    const ver = screen.getByRole('button', { name: /ver texto completo de metodologia/i })
+
+    expect(ver).toHaveAttribute('aria-expanded', 'false')
+    expect(ver).toHaveAttribute('aria-controls', 'metodologia')
+    expect(campo.parentElement).toHaveClass('proposta__caixa--cortada')
+
+    await user.click(ver)
+
+    expect(campo).not.toHaveClass('proposta__texto--recolhido')
+    expect(campo.parentElement).not.toHaveClass('proposta__caixa--cortada')
+    expect(campo).not.toHaveFocus()
+
+    const recolher = screen.getByRole('button', { name: /recolher metodologia/i })
+    expect(recolher).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(recolher)
+
+    expect(campo).toHaveClass('proposta__texto--recolhido')
+  })
+
+  it('quem só lê também vê o texto inteiro pelo botão', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria Ferreira' }
+    const user = userEvent.setup()
+    renderAba()
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+    await user.click(screen.getByRole('button', { name: /ver texto completo de metodologia/i }))
+
+    expect(campo).not.toHaveClass('proposta__texto--recolhido')
+  })
 })
 
 describe('AbaProposta — proposta ainda não iniciada', () => {
@@ -177,13 +317,31 @@ describe('AbaProposta — somente leitura', () => {
     expect(screen.queryByRole('button', { name: /salvar/i })).toBeNull()
   })
 
-  it('mostra cada elemento preenchido recolhido nas duas primeiras linhas', async () => {
+  /**
+   * O campo recolhido tinha a altura mínima das caixas de texto, que não é
+   * múltiplo da linha: o texto saía cortado ao meio, como em "Validar a
+   * metodologia…". Agora a altura vem do número de linhas, sem mínimo.
+   */
+  it('mostra cada elemento preenchido recolhido em três linhas inteiras', async () => {
     renderAba()
 
     const campo = await screen.findByLabelText(/problema de pesquisa/i)
 
-    expect(campo).toHaveAttribute('rows', '2')
+    expect(campo).toHaveAttribute('rows', '3')
     expect(campo).toHaveClass('proposta__texto--recolhido')
+
+    const inicio = estilos.indexOf('\n.proposta__texto--recolhido {')
+    const bloco = estilos.slice(inicio, estilos.indexOf('\n}', inicio))
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).toMatch(/min-height:\s*0/)
+  })
+
+  it('o texto que cabe nas duas linhas não oferece ver tudo', async () => {
+    renderAba()
+
+    await screen.findByLabelText(/problema de pesquisa/i)
+    expect(screen.queryByRole('button', { name: /ver texto completo/i })).toBeNull()
   })
 
   it('avisa quem só lê que o texto não foi revisado, sem pedir que salve (RN-IA01)', async () => {

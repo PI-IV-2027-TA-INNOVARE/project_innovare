@@ -75,7 +75,7 @@ export default function AbaContexto({ oportunidade, podeConduzir = false, irPara
             </div>
             <div className="detail-list__row">
               <dt>Responsável</dt>
-              <dd>{oportunidade.responsavel}</dd>
+              <dd>{oportunidade.responsavel || 'Não definido'}</dd>
             </div>
             <div className="detail-list__row">
               <dt>Cadastrada</dt>

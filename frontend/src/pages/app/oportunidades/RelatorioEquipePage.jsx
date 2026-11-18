@@ -115,6 +115,7 @@ export default function RelatorioEquipePage() {
           comoFoiCalculado={relatorio.como_foi_calculado || []}
           competencias={competencias}
           Bloco={SecaoDoRelatorio}
+          nivelDosGrupos="h3"
         />
 
         <footer className="relatorio-documento__rodape">

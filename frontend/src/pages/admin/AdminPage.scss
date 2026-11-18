@@ -825,6 +825,107 @@
   margin-top: 10px;
 }
 
+.saude__provedor .saude__medidor {
+  margin-top: 10px;
+}
+
+/* --- Saude: ordem de atendimento (principal e fila de reservas) ----------- */
+.saude__fila {
+  margin: 12px 0 16px;
+}
+
+.saude__fila-titulo {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.saude__fila-passos {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saude__fila-passo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-secondary);
+}
+
+.saude__fila-seta {
+  position: absolute;
+  top: 50%;
+  left: -23px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+}
+
+.saude__fila-numero {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--bg-card);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.saude__fila-passo:first-child .saude__fila-numero {
+  border-color: var(--accent-secondary);
+}
+
+.saude__fila-texto {
+  display: grid;
+  min-width: 0;
+}
+
+.saude__fila-nome {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.saude__fila-modelo {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.saude__fila-regra {
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .saude__fila-passos {
+    grid-auto-flow: row;
+    gap: 22px;
+  }
+
+  .saude__fila-seta {
+    top: -20px;
+    left: 15px;
+    transform: rotate(90deg);
+  }
+}
+
 .saude__gasto {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

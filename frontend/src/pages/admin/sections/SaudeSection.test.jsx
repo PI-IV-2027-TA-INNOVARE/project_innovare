@@ -342,6 +342,41 @@ describe('SaudeSection — consumo de IA', () => {
     expect(screen.queryByText(/a tabela de preço da ia está vazia/i)).not.toBeInTheDocument()
   })
 
+  it('provedor gratuito não pede preço e aparece como gratuito nos detalhes', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comProvedores(
+        { ...PRINCIPAL, preco_entrada_brl_por_milhao: 1.62, preco_saida_brl_por_milhao: 13.5 },
+        { ...RESERVA, nome: 'openrouter', rotulo: 'OpenRouter', modelo: 'gratuito', gratuito: true },
+      ),
+    )
+
+    render(<SaudeSection />)
+
+    await provedores()
+
+    expect(screen.queryByText(/falta o preço/i)).not.toBeInTheDocument()
+
+    await abrirDetalhes()
+
+    const precos = screen.getByRole('region', { name: /preço de cada provedor/i })
+
+    expect(precos).toHaveTextContent(/OpenRouter · gratuito\s*gratuito, sem custo/i)
+  })
+
+  it('com dois provedores sem preço, o aviso fala dos dois no plural', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comProvedores(
+        { ...PRINCIPAL, preco_entrada_brl_por_milhao: 1.62, preco_saida_brl_por_milhao: 13.5 },
+        RESERVA,
+        { ...RESERVA, nome: 'groq', rotulo: 'Groq', modelo: 'llama' },
+      ),
+    )
+
+    render(<SaudeSection />)
+
+    expect(await screen.findByText(/os usos deles não têm custo calculado/i)).toBeInTheDocument()
+  })
+
   it('mostra onde o gasto do mês foi, não só o total', async () => {
     api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
       comConsumo({
@@ -414,9 +449,102 @@ describe('SaudeSection — consumo de IA', () => {
 
     expect(principal).toHaveTextContent(/gemini-2\.5-flash/)
     expect(reserva).toHaveTextContent(/gemini-2\.5-pro/)
+    expect(screen.getByText(/só é chamado quando o anterior falha/i)).toBeInTheDocument()
+  })
+
+  it('com mais de uma reserva, cada cartão diz a vez dela na fila', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comProvedores(
+        PRINCIPAL,
+        { ...RESERVA, nome: 'groq', rotulo: 'Groq', modelo: 'llama-3.3-70b-versatile' },
+        { ...RESERVA, nome: 'openrouter', rotulo: 'OpenRouter', modelo: 'modelo-gratuito' },
+      ),
+    )
+
+    render(<SaudeSection />)
+
+    const [principal, primeira, segunda] = within(await provedores()).getAllByRole('listitem')
+
+    expect(principal).toHaveTextContent('Principal')
+    expect(primeira).toHaveTextContent(/Groq.*1ª reserva/)
+    expect(segunda).toHaveTextContent(/OpenRouter.*2ª reserva/)
+  })
+
+  it('a ordem de atendimento mostra quem é chamado primeiro e quando o próximo entra', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comProvedores(
+        PRINCIPAL,
+        { ...RESERVA, nome: 'groq', rotulo: 'Groq', modelo: 'llama' },
+        { ...RESERVA, nome: 'openrouter', rotulo: 'OpenRouter', modelo: 'gratuito' },
+        { ...PRINCIPAL, papel: 'fora_de_uso', modelo: 'gemini-1.5-flash', chamadas: 2 },
+      ),
+    )
+
+    render(<SaudeSection />)
+
+    const fila = await screen.findByRole('list', { name: /ordem de atendimento da ia/i })
+    const passos = within(fila).getAllByRole('listitem')
+
+    expect(passos).toHaveLength(3)
+    expect(passos[0]).toHaveTextContent(/1\s*Google Gemini\s*gemini-2\.5-flash/)
+    expect(passos[1]).toHaveTextContent(/2\s*Groq/)
+    expect(passos[2]).toHaveTextContent(/3\s*OpenRouter/)
+    expect(screen.getByText(/só é chamado quando o anterior falha/i)).toHaveTextContent(
+      /com o limite de gasto atingido, nenhum é chamado/i,
+    )
+  })
+
+  it('sem reserva não há ordem de atendimento a mostrar', async () => {
+    render(<SaudeSection />)
+
+    await provedores()
+
     expect(
-      screen.getByText(/a reserva só responde quando o principal falha/i),
-    ).toBeInTheDocument()
+      screen.queryByRole('list', { name: /ordem de atendimento da ia/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/o principal responde a todos os pedidos/i)).toBeInTheDocument()
+  })
+
+  it('cada provedor mostra a parte dele nos usos do mês, e a falha em percentual', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comProvedores(
+        { ...PRINCIPAL, chamadas: 7, falhas: 2 },
+        { ...RESERVA, nome: 'groq', rotulo: 'Groq', modelo: 'llama', chamadas: 3, falhas: 0 },
+      ),
+    )
+
+    render(<SaudeSection />)
+
+    const [principal, reserva] = within(await provedores()).getAllByRole('listitem')
+
+    expect(principal).toHaveTextContent(/Falhas\s*2 · 29%/)
+    expect(reserva).toHaveTextContent(/Falhas\s*0(?!\s*·)/)
+    expect(
+      within(principal).getByRole('meter', { name: /participação nos usos do mês/i }),
+    ).toHaveAttribute('aria-valuenow', '7')
+    expect(principal).toHaveTextContent(/Participação nos usos do mês\s*70%/)
+    expect(reserva).toHaveTextContent(/Participação nos usos do mês\s*30%/)
+    expect(screen.getByText(/cada tentativa conta como um uso/i)).toBeInTheDocument()
+  })
+
+  it('com um provedor só, a participação de 100% não ocupa o cartão', async () => {
+    render(<SaudeSection />)
+
+    const [gemini] = within(await provedores()).getAllByRole('listitem')
+
+    expect(within(gemini).queryByRole('meter')).not.toBeInTheDocument()
+  })
+
+  it('com fila de reservas, a falha do principal diz que elas tentam uma de cada vez', async () => {
+    api.obterSaudeDaPlataforma = vi.fn().mockResolvedValue(
+      comProvedores(PRINCIPAL, RESERVA, { ...RESERVA, nome: 'groq', modelo: 'llama' }),
+    )
+
+    render(<SaudeSection />)
+
+    const ia = await cartao(/a ia está disponível/i)
+
+    expect(ia).toHaveTextContent(/as reservas tentam responder, uma de cada vez; se todas falharem/i)
   })
 
   it('reserva sem uso no mês diz isso em vez de uma fileira de zeros', async () => {
@@ -930,6 +1058,18 @@ describe('SaudeSection — revisão humana à vista, com o porquê', () => {
     })
 
     expect(revisao).toHaveTextContent(/desde o começo do uso da plataforma, e não só neste mês/i)
+  })
+
+  it('diz que indicações e recomendações contam só a rodada mais recente', async () => {
+    render(<SaudeSection />)
+
+    const revisao = await screen.findByRole('region', {
+      name: /as sugestões da plataforma estão passando por pessoas/i,
+    })
+
+    expect(revisao).toHaveTextContent(
+      /indicações e recomendações contam só a equipe e a pré-análise mais recentes de cada oportunidade/i,
+    )
   })
 
   it('cada razão ganha medidor com a proporção', async () => {

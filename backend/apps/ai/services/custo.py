@@ -16,6 +16,9 @@ avisar o repositorio, e numero magico em codigo vira fatura errada
 (AGENTS.md 2.4). Enquanto `AI_CUSTO_*_BRL_POR_MILHAO` estiver em zero, a
 apuracao devolve `None` - "ninguem mediu" - e nao R$ 0,00, que afirmaria um
 gasto conferido. A tela ja sabe pintar essa diferenca (`sem_apuracao`).
+
+O modelo gratuito e o caso em que zero e o preco conferido: o provedor do
+catalogo marcado com `AI_<NOME>_GRATUITO` tem o custo apurado em R$ 0,00.
 """
 from __future__ import annotations
 
@@ -95,6 +98,12 @@ def custo_da_chamada(
     """
     if tokens_entrada is None and tokens_saida is None:
         return None
+
+    if provedor:
+        from apps.ai.services.registro import provedor_gratuito
+
+        if provedor_gratuito(provedor):
+            return 0.0
 
     if not ha_tabela_de_preco(provedor):
         return None

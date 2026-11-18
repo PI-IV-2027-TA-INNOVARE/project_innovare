@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from celery.schedules import crontab
-from decouple import Config, RepositoryEnv, config as env_config
+from decouple import Config, Csv, RepositoryEnv, config as env_config
 
 from core.configuracao import (
     AMBIENTE_PRODUCAO,
@@ -412,6 +412,36 @@ AI_MATCH_GEMINI_MODEL = config('AI_MATCH_GEMINI_MODEL', default='gemini-2.5-flas
 AI_PROVEDOR_PRINCIPAL = config('AI_PROVEDOR_PRINCIPAL', default='google')
 AI_PROVEDOR_RESERVA = config('AI_PROVEDOR_RESERVA', default='')
 AI_MODELO_RESERVA = config('AI_MODELO_RESERVA', default='')
+
+# Catalogo de provedores compativeis com a API da OpenAI (SPEC-23). Cada nome
+# le as proprias settings pelo prefixo: groq -> GROQ_API_KEY, AI_GROQ_URL,
+# AI_GROQ_MODELO, AI_GROQ_ROTULO, AI_GROQ_CUSTO_*_BRL_POR_MILHAO e
+# AI_GROQ_GRATUITO.
+AI_PROVEDORES_COMPATIVEIS = config('AI_PROVEDORES_COMPATIVEIS', default='', cast=Csv())
+_do_catalogo = {}
+
+for _nome in AI_PROVEDORES_COMPATIVEIS:
+    _prefixo = _nome.upper()
+    _do_catalogo.update(
+        {
+            f'{_prefixo}_API_KEY': config(f'{_prefixo}_API_KEY', default=''),
+            f'AI_{_prefixo}_URL': config(f'AI_{_prefixo}_URL', default=''),
+            f'AI_{_prefixo}_MODELO': config(f'AI_{_prefixo}_MODELO', default=''),
+            f'AI_{_prefixo}_ROTULO': config(f'AI_{_prefixo}_ROTULO', default=''),
+            f'AI_{_prefixo}_CUSTO_ENTRADA_BRL_POR_MILHAO': config(
+                f'AI_{_prefixo}_CUSTO_ENTRADA_BRL_POR_MILHAO', default=0.0, cast=float
+            ),
+            f'AI_{_prefixo}_CUSTO_SAIDA_BRL_POR_MILHAO': config(
+                f'AI_{_prefixo}_CUSTO_SAIDA_BRL_POR_MILHAO', default=0.0, cast=float
+            ),
+            f'AI_{_prefixo}_GRATUITO': config(
+                f'AI_{_prefixo}_GRATUITO', default=False, cast=bool
+            ),
+        }
+    )
+
+globals().update(_do_catalogo)
+
 AI_GEMINI_TEMPERATURA = config('AI_GEMINI_TEMPERATURA', default=0.3, cast=float)
 AI_GEMINI_MAX_TOKENS_SAIDA = config(
     'AI_GEMINI_MAX_TOKENS_SAIDA', default=8192, cast=int
@@ -443,9 +473,10 @@ AI_CUSTO_SAIDA_BRL_POR_MILHAO = config(
 # Fila assincrona (SPEC-14). A pre-analise continua sincrona por padrao; so
 # liga no worker quando o ambiente tiver Redis e um worker rodando.
 PREANALISE_ASSINCRONA = config('PREANALISE_ASSINCRONA', default=False, cast=bool)
+_reservas = [nome for nome in AI_PROVEDOR_RESERVA.split(',') if nome.strip()]
 PREANALISE_TEMPO_MAXIMO_S = config(
     'PREANALISE_TEMPO_MAXIMO_S',
-    default=(2 if AI_PROVEDOR_RESERVA or AI_MODELO_RESERVA else 1)
+    default=(1 + (len(_reservas) or (1 if AI_MODELO_RESERVA else 0)))
     * (
         AI_GEMINI_TENTATIVAS * AI_GEMINI_TIMEOUT_S
         + AI_GEMINI_ESPERA_INICIAL_S * (2 ** (AI_GEMINI_TENTATIVAS - 1) - 1)
@@ -487,7 +518,13 @@ BASE_CONHECIMENTO_PIPE = Path(
 )
 
 if RUNNING_TESTS:
-    GEMINI_API_KEY = ''
+    for _nome in _do_catalogo:
+        del globals()[_nome]
+    globals().update({nome: '' for nome in list(globals()) if nome.endswith('_API_KEY')})
+    AI_PROVEDOR_PRINCIPAL = 'google'
+    AI_PROVEDOR_RESERVA = ''
+    AI_MODELO_RESERVA = ''
+    AI_PROVEDORES_COMPATIVEIS = []
     AI_MATCH_RERANK_ENABLED = False
     SEARCH_EMBEDDING_ENABLED = False
     PREANALISE_ASSINCRONA = False

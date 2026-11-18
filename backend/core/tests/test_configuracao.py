@@ -81,6 +81,26 @@ class IsolamentoDuranteOsTestesTests(SimpleTestCase):
         self.assertEqual(settings.GEMINI_API_KEY, '')
         self.assertFalse(settings.AI_MATCH_RERANK_ENABLED)
 
+    def test_nenhuma_chave_de_provedor_chega_a_suite(self):
+        chaves = [nome for nome in dir(settings) if nome.endswith('_API_KEY')]
+
+        self.assertIn('GEMINI_API_KEY', chaves)
+        self.assertEqual({nome: getattr(settings, nome) for nome in chaves if getattr(settings, nome)}, {})
+
+    def test_o_catalogo_e_a_fila_de_reservas_do_env_ficam_de_fora(self):
+        """Sem isso, o endereco, o modelo e o rotulo do `.env` mudavam o resultado da suite."""
+        do_catalogo = [
+            nome
+            for nome in dir(settings)
+            if nome.startswith('AI_') and nome.endswith(('_URL', '_ROTULO'))
+        ]
+
+        self.assertEqual(do_catalogo, [])
+        self.assertEqual(list(settings.AI_PROVEDORES_COMPATIVEIS), [])
+        self.assertEqual(settings.AI_PROVEDOR_PRINCIPAL, 'google')
+        self.assertEqual(settings.AI_PROVEDOR_RESERVA, '')
+        self.assertEqual(settings.AI_MODELO_RESERVA, '')
+
     def test_o_banco_em_uso_nao_e_remoto(self):
         host = settings.DATABASES['default'].get('HOST', '')
         self.assertIn(host.strip().lower(), settings.LOCAL_DB_HOSTS)

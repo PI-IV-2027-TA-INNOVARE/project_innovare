@@ -307,6 +307,71 @@ describe('selos de estado na Saúde — WCAG 2.2 AA', () => {
   }
 })
 
+/**
+ * A severidade alta usava o laranja da marca, o mesmo dos botões e da aba
+ * aberta, e média e baixa saíam iguais. Agora segue os selos da Saúde: alta é
+ * Erro cheio, média é tinta de Alerta e baixa fica no selo neutro.
+ */
+describe('selos de severidade do Copiloto — WCAG 2.2 AA', () => {
+  const telaOportunidade = fonte('../pages/app/oportunidades/OportunidadesPage.scss')
+  const inicio = telaOportunidade.indexOf('\n.copiloto__selo {')
+  const selo = telaOportunidade.slice(inicio, telaOportunidade.indexOf('\n}', inicio))
+  const media = selo.match(
+    /&--media\s*\{[^}]*color:\s*var\(--accent-warning\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/
+  )
+
+  it('alta é Erro cheio, média é tinta de Alerta e baixa fica no selo neutro', () => {
+    expect(inicio).toBeGreaterThan(-1)
+    expect(selo).toMatch(/&--alta\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-error\)/)
+    expect(media).not.toBeNull()
+    expect(selo).not.toMatch(/&--baixa/)
+    expect(selo).not.toMatch(/--accent-primary/)
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos selos alta e média entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundoMedia = sobre(paleta.accentWarning, paleta.bgCard, Number(media[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundoMedia)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentError))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
+/**
+ * O nível de maturidade no relatório virou selo: Frágil segue o Erro cheio e
+ * Em desenvolvimento, a tinta de Alerta, como os selos da Saúde. O relatório
+ * também é impresso, então o selo força a impressão do fundo.
+ */
+describe('selos de maturidade no relatório — WCAG 2.2 AA', () => {
+  const relatorio = fonte('../pages/app/oportunidades/RelatorioPage.scss')
+  const inicio = relatorio.indexOf('\n.relatorio-selo {')
+  const selo = relatorio.slice(inicio, relatorio.indexOf('\n}', inicio))
+  const emDesenvolvimento = selo.match(
+    /&--em_desenvolvimento\s*\{[^}]*color:\s*var\(--accent-warning\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/
+  )
+
+  it('frágil é Erro cheio, em desenvolvimento é tinta de Alerta, e o fundo sai na impressão', () => {
+    expect(inicio).toBeGreaterThan(-1)
+    expect(selo).toMatch(/&--fragil\s*\{[^}]*color:\s*var\(--text-on-accent\)[^}]*background:\s*var\(--accent-error\)/)
+    expect(emDesenvolvimento).not.toBeNull()
+    expect(selo).toMatch(/print-color-adjust:\s*exact/)
+  })
+
+  for (const [tema, textoSobreCor] of [['light', 'color-text-inverse'], ['dark', 'color-text-inverse-dark']]) {
+    it(`o texto dos selos frágil e em desenvolvimento entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundo = sobre(paleta.accentWarning, paleta.bgCard, Number(emDesenvolvimento[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundo)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+      expect(contraste(valorDeVariavel(cores, textoSobreCor), paleta.accentError))
+        .toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
 describe('selos de situação na Auditoria — WCAG 2.2 AA', () => {
   const inicio = console_.indexOf('\n.status-badge {')
   const selo = console_.slice(inicio, console_.indexOf('\n}', inicio))

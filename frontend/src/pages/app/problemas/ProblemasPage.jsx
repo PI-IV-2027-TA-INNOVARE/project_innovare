@@ -5,14 +5,17 @@ import {
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
+import RodapeDePaginacao from '../../../components/console/RodapeDePaginacao'
 import { useAuth } from '../../../context/AuthContext'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
+import { paginar, useLinhasPorPagina } from '../../../lib/linhasPorPagina'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { todasAsPaginas } from '../../../lib/paginas'
 import { listOportunidades } from '../../../services/pdConnectApi'
 import { SITUACOES, daApi, situacaoLabel } from '../oportunidades/oportunidadesData'
 import { precisaComplementacao, resumoDoDemandante } from './problemasData'
+import '../oportunidades/OportunidadesPage.scss'
 import './ProblemasPage.scss'
 
 const COLUNAS = [
@@ -45,6 +48,8 @@ export default function ProblemasPage() {
     () => parametros.get('situacao') || 'todas'
   )
   const [ordem, setOrdem] = useState({ campo: 'atualizadaEm', direcao: 'desc' })
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useLinhasPorPagina('problemas', 10)
 
   const trocarSituacao = (valor) => {
     setSituacaoFiltro(valor)
@@ -91,6 +96,16 @@ export default function ProblemasPage() {
     const fator = ordem.direcao === 'asc' ? 1 : -1
     return [...filtrados].sort((a, b) => comparar(a, b, ordem.campo) * fator)
   }, [filtrados, ordem])
+
+  useEffect(() => {
+    setPagina(1)
+  }, [busca, situacaoFiltro, ordem, porPagina])
+
+  const { visiveis, paginaAtual, totalPaginas, inicio, fim } = paginar(
+    ordenados,
+    pagina,
+    porPagina
+  )
 
   const temFiltro = Boolean(busca) || situacaoFiltro !== 'todas'
 
@@ -244,7 +259,7 @@ export default function ProblemasPage() {
           <tbody>
             {carregando ? <SkeletonRows colunas={COLUNAS.length} /> : null}
 
-            {!carregando && ordenados.map((item) => (
+            {!carregando && visiveis.map((item) => (
               <tr key={item.id}>
                 <td data-label="Problema">
                   <Link className="oportunidade-link" to={`/problemas/${item.id}`}>
@@ -308,6 +323,20 @@ export default function ProblemasPage() {
           </tbody>
         </table>
       </div>
+
+      {!carregando ? (
+        <RodapeDePaginacao
+          rotulo="Paginação de meus problemas"
+          total={ordenados.length}
+          inicio={inicio}
+          fim={fim}
+          pagina={paginaAtual}
+          totalPaginas={totalPaginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={setPorPagina}
+        />
+      ) : null}
     </div>
   )
 }

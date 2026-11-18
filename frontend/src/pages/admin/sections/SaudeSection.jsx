@@ -49,7 +49,6 @@ const PAPEIS_DOS_PROVEDORES = {
 
 const EXPLICACAO_DOS_PAPEIS = {
   principal: 'o principal responde a todos os pedidos',
-  reserva: 'a reserva só responde quando o principal falha',
   fora_de_uso: 'fora de uso é quem respondeu neste mês, mas deixou de ser usado',
 }
 
@@ -114,6 +113,7 @@ function emUso(provedor) {
 
 function temPreco(provedor) {
   return (
+    Boolean(provedor.gratuito) ||
     (provedor.preco_entrada_brl_por_milhao || 0) > 0 ||
     (provedor.preco_saida_brl_por_milhao || 0) > 0
   )
@@ -296,8 +296,18 @@ function Dados({ banco, erro }) {
   )
 }
 
+function reservasDe(provedores) {
+  return (provedores || []).filter((provedor) => provedor.papel === 'reserva')
+}
+
 function consequenciaDaFalha(provedores) {
-  if (provedores?.some((provedor) => provedor.papel === 'reserva')) {
+  const reservas = reservasDe(provedores).length
+
+  if (reservas > 1) {
+    return '. Nesses casos as reservas tentam responder, uma de cada vez; se todas falharem, a tela segue sem a sugestão da IA.'
+  }
+
+  if (reservas) {
     return '. Nesses casos a reserva tenta responder; se também falhar, a tela segue sem a sugestão da IA.'
   }
 
@@ -519,16 +529,19 @@ function Metrica({ rotulo, ajuda, children }) {
   )
 }
 
-function papelDoProvedor(provedor) {
+function papelDoProvedor(provedor, vezNaFila) {
   if (provedor.papel === 'sem_uso') {
     return provedor.configurado ? 'Disponível' : 'Não configurado'
   }
 
+  if (vezNaFila) return `${vezNaFila}ª reserva`
+
   return PAPEIS_DOS_PROVEDORES[provedor.papel] || provedor.papel
 }
 
-function explicacaoDosPapeis(provedores) {
+function explicacaoDosPapeis(provedores, comFila) {
   const frases = Object.keys(EXPLICACAO_DOS_PAPEIS)
+    .filter((papel) => !(comFila && papel === 'principal'))
     .filter((papel) => provedores.some((provedor) => provedor.papel === papel))
     .map((papel) => EXPLICACAO_DOS_PAPEIS[papel])
     .join('; ')
@@ -540,6 +553,14 @@ function custoDoProvedor(provedor) {
   return provedor.custo_apurado ? reais(provedor.custo_estimado_brl) : 'não calculado'
 }
 
+function falhasDoProvedor(provedor) {
+  const falhas = provedor.falhas || 0
+
+  if (!falhas) return contagem(0)
+
+  return `${contagem(falhas)} · ${proporcao(falhas, provedor.chamadas)}%`
+}
+
 function Numero({ rotulo, children }) {
   return (
     <div className="saude__provedor-numero">
@@ -549,7 +570,7 @@ function Numero({ rotulo, children }) {
   )
 }
 
-function Provedor({ provedor }) {
+function Provedor({ provedor, vezNaFila = 0, totalDeUsos = 0 }) {
   return (
     <li className="saude__provedor">
       <div className="saude__provedor-cabeca">
@@ -561,7 +582,7 @@ function Provedor({ provedor }) {
         </p>
 
         <span className={`saude__papel saude__papel--${provedor.papel}`}>
-          {papelDoProvedor(provedor)}
+          {papelDoProvedor(provedor, vezNaFila)}
         </span>
 
         {emUso(provedor) && !provedor.configurado ? (
@@ -570,12 +591,24 @@ function Provedor({ provedor }) {
       </div>
 
       {provedor.chamadas ? (
-        <dl className="saude__provedor-numeros">
-          <Numero rotulo="Usos">{contagem(provedor.chamadas)}</Numero>
-          <Numero rotulo="Falhas">{contagem(provedor.falhas || 0)}</Numero>
-          <Numero rotulo="Custo">{custoDoProvedor(provedor)}</Numero>
-          <Numero rotulo="Tempo médio">{segundos(provedor.latencia_media_ms)}</Numero>
-        </dl>
+        <>
+          <dl className="saude__provedor-numeros">
+            <Numero rotulo="Usos">{contagem(provedor.chamadas)}</Numero>
+            <Numero rotulo="Falhas">{falhasDoProvedor(provedor)}</Numero>
+            <Numero rotulo="Custo">{custoDoProvedor(provedor)}</Numero>
+            <Numero rotulo="Tempo médio">{segundos(provedor.latencia_media_ms)}</Numero>
+          </dl>
+
+          {totalDeUsos ? (
+            <Medidor
+              rotulo="Participação nos usos do mês"
+              valor={provedor.chamadas}
+              maximo={totalDeUsos}
+            >
+              {proporcao(provedor.chamadas, totalDeUsos)}%
+            </Medidor>
+          ) : null}
+        </>
       ) : (
         <p className="saude__nota saude__provedor-vazio">Sem uso neste mês.</p>
       )}
@@ -584,8 +617,55 @@ function Provedor({ provedor }) {
 }
 
 /**
+ * A ordem em que a plataforma chama as IAs: o principal e a fila de reservas.
+ *
+ * So aparece com reserva, porque um passo so nao e fila. A regra embaixo diz o
+ * que faz o proximo entrar e o que nao faz: o limite de gasto vale para todos,
+ * e atingido nao passa para a reserva.
+ */
+function OrdemDeAtendimento({ provedores }) {
+  const fila = provedores.filter(emUso)
+
+  if (fila.length < 2) return null
+
+  return (
+    <div className="saude__fila">
+      <p className="saude__fila-titulo">Ordem de atendimento</p>
+
+      <ol className="saude__fila-passos" aria-label="Ordem de atendimento da IA">
+        {fila.map((provedor, indice) => (
+          <li className="saude__fila-passo" key={`${provedor.nome}:${provedor.modelo}`}>
+            {indice ? (
+              <Icone icon={appIcons.next} className="saude__fila-seta" aria-hidden="true" />
+            ) : null}
+            <span className="saude__fila-numero">{indice + 1}</span>
+            <span className="saude__fila-texto">
+              <span className="saude__fila-nome">{provedor.rotulo}</span>
+              <span className="saude__fila-modelo">
+                {provedor.modelo || 'modelo não informado'}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <p className="saude__nota saude__fila-regra">
+        O primeiro atende todos os pedidos. Cada um dos outros só é chamado quando
+        o anterior falha: fora do ar, sem configuração, recusou o pedido, demorou
+        demais mesmo tentando de novo ou respondeu algo que a plataforma não
+        conseguiu ler. Com o limite de gasto atingido, nenhum é chamado.
+      </p>
+    </div>
+  )
+}
+
+/**
  * Um cartao por provedor e modelo, na ordem que a API manda: principal,
- * reserva, fora de uso.
+ * reservas na ordem da fila, fora de uso. Com mais de uma reserva, cada
+ * cartao diz a vez dela.
+ *
+ * Com mais de um cartao, cada um mostra a parte dele nos usos do mes. Com um
+ * so, seriam 100% que nao dizem nada.
  *
  * Os registrados sem papel nem uso nao ajudam a ler o mes e ficam a um
  * clique. O preco de cada um fica nos detalhes para o suporte tecnico.
@@ -595,18 +675,37 @@ function Provedores({ provedores }) {
 
   const visiveis = provedores.filter((provedor) => provedor.papel !== 'sem_uso')
   const semUso = provedores.filter((provedor) => provedor.papel === 'sem_uso')
+  const reservas = reservasDe(visiveis)
+  const comFila = reservas.length > 0
+  const vezNaFila = (provedor) =>
+    reservas.length > 1 ? reservas.indexOf(provedor) + 1 : 0
+  const totalDeUsos =
+    visiveis.length > 1
+      ? provedores.reduce((soma, provedor) => soma + (provedor.chamadas || 0), 0)
+      : 0
 
   return (
     <div className="saude__provedores">
       <h4 className="saude__subtitulo">Provedores de IA neste mês</h4>
       <p className="saude__nota">
         Cada provedor e modelo aparece com o próprio consumo: quem respondeu,
-        quem falhou e quanto custou. {explicacaoDosPapeis(visiveis)}
+        quem falhou e quanto custou. Cada tentativa conta como um uso
+        {comFila
+          ? ', então o pedido que o principal não atendeu aparece nele e na reserva que respondeu.'
+          : '.'}{' '}
+        {explicacaoDosPapeis(visiveis, comFila)}
       </p>
+
+      <OrdemDeAtendimento provedores={visiveis} />
 
       <ul className="saude__provedores-lista" aria-label="Consumo do mês por provedor de IA">
         {visiveis.map((provedor) => (
-          <Provedor key={`${provedor.nome}:${provedor.modelo}`} provedor={provedor} />
+          <Provedor
+            key={`${provedor.nome}:${provedor.modelo}`}
+            provedor={provedor}
+            vezNaFila={vezNaFila(provedor)}
+            totalDeUsos={totalDeUsos}
+          />
         ))}
       </ul>
 
@@ -636,7 +735,7 @@ function AvisoDePreco({ provedores }) {
   const texto =
     semPreco.length === ativos.length
       ? 'A tabela de preço da IA está vazia. Sem ela o custo de cada uso não é calculado, e os limites de gasto, do mês e por oportunidade, não bloqueiam nada. Peça a quem mantém o servidor para preencher o preço do provedor.'
-      : `Falta o preço de ${semPreco.map(nomeDoProvedor).join(' e ')}. Os usos dele não têm custo calculado e não contam para os limites de gasto, do mês e por oportunidade. Peça a quem mantém o servidor para preencher o preço.`
+      : `Falta o preço de ${semPreco.map(nomeDoProvedor).join(' e ')}. Os usos ${semPreco.length > 1 ? 'deles' : 'dele'} não têm custo calculado e não contam para os limites de gasto, do mês e por oportunidade. Peça a quem mantém o servidor para preencher o preço.`
 
   return (
     <div className="admin-callout admin-callout--alerta">
@@ -812,7 +911,10 @@ function RevisaoHumana({ revisao }) {
         A plataforma só sugere — quem decide é a equipe. Cada barra mostra quanto
         do que ela sugeriu já foi conferido por alguém, com ou sem a IA, desde o
         começo do uso da plataforma, e não só neste mês. Por isso as barras
-        podem ter números mesmo num mês em que a IA não foi usada.
+        podem ter números mesmo num mês em que a IA não foi usada. Indicações e
+        recomendações contam só a equipe e a pré-análise mais recentes de cada
+        oportunidade: ficam de fora as rodadas substituídas e quem foi tirado da
+        equipe.
       </p>
 
       {linhas.length ? (
@@ -953,6 +1055,8 @@ function DetalhesDaIA({ ia, erro }) {
  * milissegundo, do token e da versao do prompt.
  */
 function precoDoProvedor(provedor) {
+  if (provedor.gratuito) return 'gratuito, sem custo'
+
   if (!temPreco(provedor)) return 'sem preço configurado'
 
   return `${reais(provedor.preco_entrada_brl_por_milhao)} enviados · ${reais(

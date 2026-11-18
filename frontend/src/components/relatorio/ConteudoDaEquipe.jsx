@@ -1,85 +1,143 @@
+import { useId } from 'react'
 import { PARCELAS_DA_NOTA, TERMOS, rotuloDaEstrategia } from '../../lib/glossario'
 import { Campo, porcentagem } from './partesDoRelatorio'
 
+const COLUNAS = ['Pessoa', 'Titulação', 'Dedicação', 'Compatibilidade', PARCELAS_DA_NOTA.semantico]
+
+function gruposDaComposicao(membros) {
+  return [
+    { rotulo: 'Supervisão', membros: membros.filter((membro) => membro.papel === 'supervisor') },
+    { rotulo: 'Pesquisa', membros: membros.filter((membro) => membro.papel !== 'supervisor') },
+  ].filter((grupo) => grupo.membros.length > 0)
+}
+
+function afinidadeDe(membro) {
+  if (!membro.score_features) return '—'
+
+  const valor = membro.score_features.semantico
+
+  return valor === null || valor === undefined ? 'indisponível' : porcentagem(valor)
+}
+
+function motivosQueNaoEstaoNaTabela(membro) {
+  const repetidos = new Set([
+    `Titulação: ${membro.titulacao}.`,
+    `Disponibilidade declarada: ${membro.disponibilidade}.`,
+    'Integra a rede como Supervisor.',
+  ])
+
+  return (membro.match_reasons || []).filter(
+    (motivo) => !repetidos.has(motivo) && !motivo.startsWith(PARCELAS_DA_NOTA.semantico),
+  )
+}
+
+function TabelaDaComposicao({ rotulo, membros, NivelDoTitulo }) {
+  const id = useId()
+
+  return (
+    <div className="relatorio-tabela-bloco">
+      <NivelDoTitulo id={id} className="relatorio-tabela__titulo">{rotulo}</NivelDoTitulo>
+
+      <div className="relatorio-tabela-rolagem">
+        <table className="relatorio-tabela" aria-labelledby={id}>
+          <thead>
+            <tr>
+              {COLUNAS.map((coluna) => (
+                <th key={coluna} scope="col">{coluna}</th>
+              ))}
+            </tr>
+          </thead>
+
+          {membros.map((membro) => {
+            const motivos = motivosQueNaoEstaoNaTabela(membro)
+            const detalhe = [
+              membro.papel_rotulo,
+              membro.origem_rotulo,
+              membro.validada ? 'validada' : null,
+            ].filter(Boolean).join(' · ')
+
+            return (
+              <tbody key={membro.id_membro_equipe}>
+                <tr>
+                  <th scope="row">
+                    <span className="relatorio-tabela__nome">{membro.nome}</span>
+                    {detalhe ? (
+                      <span className="relatorio-tabela__detalhe">{detalhe}</span>
+                    ) : null}
+                  </th>
+                  <td>{membro.titulacao || '—'}</td>
+                  <td>{membro.disponibilidade || '—'}</td>
+                  <td className="relatorio-tabela__numero">
+                    {porcentagem(membro.score_compatibilidade)}
+                  </td>
+                  <td className="relatorio-tabela__numero">{afinidadeDe(membro)}</td>
+                </tr>
+                {motivos.length > 0 ? (
+                  <tr className="relatorio-tabela__motivos">
+                    <td colSpan={COLUNAS.length}>{motivos.join(' ')}</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            )
+          })}
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /**
- * O resultado do matching como documento: a explicação da nota, a rodada, a
- * composição e as lacunas. O relatório da equipe e o da oportunidade mostram
- * o mesmo conteúdo; `Bloco` decide se cada parte vira seção do sumário ou
- * subtítulo dentro de uma seção.
+ * O resultado do matching como documento: as lacunas primeiro, a composição
+ * em tabela, as competências comparadas e, por fim, como a nota foi
+ * calculada. O relatório da equipe e o da oportunidade mostram o mesmo
+ * conteúdo; `Bloco` decide se cada parte vira seção do sumário ou subtítulo
+ * dentro de uma seção.
  */
 export default function ConteudoDaEquipe({
   equipe,
   comoFoiCalculado = [],
   competencias = null,
   Bloco,
+  nivelDosGrupos = 'h4',
 }) {
   const execucao = equipe.execucao
   const incluidos = equipe.membros.filter((membro) => membro.incluido)
+  const mostrarPesos = comoFoiCalculado.length === 0 && Boolean(execucao?.pesos?.componentes)
+  const afinidadeNaRodada = execucao?.fallback_usado
+    ? 'indisponível nesta rodada'
+    : 'aplicada nesta rodada'
 
   return (
     <>
-      {comoFoiCalculado.length > 0 ? (
-        <Bloco titulo="Como foi calculado">
-          {comoFoiCalculado.map((paragrafo) => (
-            <p key={paragrafo} className="relatorio-texto">{paragrafo}</p>
-          ))}
-        </Bloco>
-      ) : null}
-
-      {execucao ? (
-        <Bloco titulo="Rodada do matching">
-          <dl className="relatorio-campos">
-            <Campo rotulo="Cálculo da nota">{rotuloDaEstrategia(execucao.estrategia)}</Campo>
-            <Campo rotulo={TERMOS.revisaoDaIa}>{execucao.usou_rerank ? 'sim' : 'não'}</Campo>
-            <Campo rotulo={PARCELAS_DA_NOTA.semantico}>
-              {execucao.fallback_usado ? 'indisponível na rodada' : 'aplicada'}
-            </Campo>
-            <Campo rotulo="Executada por">
-              {execucao.executado_por_nome || execucao.executado_por}
-            </Campo>
-          </dl>
-
-          {execucao.pesos?.componentes ? (
-            <dl className="relatorio-campos">
-              {Object.entries(execucao.pesos.componentes).map(([nome, peso]) => (
-                <Campo key={nome} rotulo={PARCELAS_DA_NOTA[nome] || nome}>
-                  peso {porcentagem(peso)}
-                </Campo>
-              ))}
-            </dl>
-          ) : null}
+      {equipe.lacunas.length > 0 ? (
+        <Bloco titulo="Lacunas da composição">
+          <ul className="relatorio-lista relatorio-lista--destaque">
+            {equipe.lacunas.map((lacuna) => (
+              <li key={lacuna.id_lacuna_equipe}>{lacuna.descricao}</li>
+            ))}
+          </ul>
         </Bloco>
       ) : null}
 
       <Bloco titulo="Composição sugerida">
         {incluidos.length > 0 ? (
-          <dl className="relatorio-campos relatorio-campos--coluna">
-            {incluidos.map((membro) => (
-              <Campo
-                key={membro.id_membro_equipe}
-                rotulo={`${membro.nome} · ${membro.papel_rotulo} · aderência ${porcentagem(
-                  membro.score_compatibilidade,
-                )}`}
-              >
-                <span>
-                  {membro.titulacao ? `${membro.titulacao} · ` : ''}
-                  {membro.disponibilidade} · {membro.origem_rotulo}
-                  {membro.validada ? ' · validada' : ''}
-                </span>
-
-                {membro.match_reasons?.length > 0 ? (
-                  <ul className="relatorio-lista">
-                    {membro.match_reasons.map((motivo, indice) => (
-                      <li key={`${membro.id_membro_equipe}-${indice}`}>{motivo}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </Campo>
+          <>
+            <p className="relatorio-nota">
+              Compatibilidade é a nota do matching. {PARCELAS_DA_NOTA.semantico} é uma
+              das quatro parcelas dessa nota.
+            </p>
+            {gruposDaComposicao(incluidos).map((grupo) => (
+              <TabelaDaComposicao
+                key={grupo.rotulo}
+                rotulo={grupo.rotulo}
+                membros={grupo.membros}
+                NivelDoTitulo={nivelDosGrupos}
+              />
             ))}
-          </dl>
+          </>
         ) : (
           <p className="relatorio-vazio">
-            Nenhuma pessoa na composição atual. As lacunas abaixo dizem quais
+            Nenhuma pessoa na composição atual. As lacunas acima dizem quais
             competências ficaram sem cobertura.
           </p>
         )}
@@ -102,13 +160,42 @@ export default function ConteudoDaEquipe({
         </Bloco>
       ) : null}
 
-      {equipe.lacunas.length > 0 ? (
-        <Bloco titulo="Lacunas da composição">
-          <ul className="relatorio-lista">
-            {equipe.lacunas.map((lacuna) => (
-              <li key={lacuna.id_lacuna_equipe}>{lacuna.descricao}</li>
-            ))}
-          </ul>
+      {comoFoiCalculado.length > 0 ? (
+        <Bloco titulo="Como foi calculado">
+          {comoFoiCalculado.map((paragrafo) => (
+            <p key={paragrafo} className="relatorio-texto">{paragrafo}</p>
+          ))}
+        </Bloco>
+      ) : null}
+
+      {execucao ? (
+        <Bloco titulo="Rodada do matching">
+          <dl className="relatorio-campos">
+            <Campo rotulo="Cálculo da nota">{rotuloDaEstrategia(execucao.estrategia)}</Campo>
+            <Campo rotulo={TERMOS.revisaoDaIa}>
+              {execucao.usou_rerank
+                ? 'sim: a IA reordenou as sugestões'
+                : 'não: a ordem é a do cálculo'}
+            </Campo>
+            {mostrarPesos ? null : (
+              <Campo rotulo={PARCELAS_DA_NOTA.semantico}>{afinidadeNaRodada}</Campo>
+            )}
+            <Campo rotulo="Executada por">
+              {execucao.executado_por_nome || execucao.executado_por}
+            </Campo>
+          </dl>
+
+          {mostrarPesos ? (
+            <dl className="relatorio-campos">
+              {Object.entries(execucao.pesos.componentes).map(([nome, peso]) => (
+                <Campo key={nome} rotulo={PARCELAS_DA_NOTA[nome] || nome}>
+                  {nome === 'semantico'
+                    ? `peso ${porcentagem(peso)} · ${afinidadeNaRodada}`
+                    : `peso ${porcentagem(peso)}`}
+                </Campo>
+              ))}
+            </dl>
+          ) : null}
         </Bloco>
       ) : null}
     </>

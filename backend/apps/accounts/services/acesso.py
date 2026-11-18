@@ -6,9 +6,12 @@ Um caso de uso por classe, com `execute()`. O servico nao conhece `request`,
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
@@ -177,6 +180,27 @@ class AlterarSenhaService:
             ator=usuario.email,
         )
         return usuario
+
+
+INTERVALO_ENTRE_CARIMBOS = timedelta(minutes=5)
+"""
+A renovacao roda a cada carga de pagina; carimbar em todas so gravaria no banco
+sem mudar o que a tabela de usuarios mostra.
+"""
+
+
+def marcar_uso_da_sessao(id_usuario) -> None:
+    """
+    A sessao renovada conta como acesso, sem virar entrada na trilha.
+
+    So a entrada com senha carimbava `ultimo_acesso`, e a sessao se renova
+    sozinha por dias: quem estava logado aparecia como acessado "ha 4 dias".
+    """
+    agora = timezone.now()
+
+    Usuario.objects.filter(id_usuario=id_usuario).filter(
+        Q(ultimo_acesso__isnull=True) | Q(ultimo_acesso__lt=agora - INTERVALO_ENTRE_CARIMBOS)
+    ).update(ultimo_acesso=agora)
 
 
 class RegistrarAcessoService:

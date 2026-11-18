@@ -18,6 +18,52 @@
   gap: var(--admin-gap);
 }
 
+.perfil-card.indicadores-vazio {
+  align-items: center;
+  gap: 12px;
+  min-height: 0;
+  max-width: 640px;
+  margin: 8px auto 0;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.indicadores-vazio__icone {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  font-size: 1.5rem;
+  border-radius: 999px;
+  color: var(--accent-primary-text);
+  background: var(--bg-chip);
+
+  svg {
+    width: 1em;
+    height: 1em;
+  }
+}
+
+.indicadores-vazio__titulo {
+  margin: 4px 0 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.indicadores-vazio__texto {
+  max-width: 56ch;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.indicadores-vazio .admin-btn {
+  margin-top: 8px;
+}
+
 .indicadores-linha {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));

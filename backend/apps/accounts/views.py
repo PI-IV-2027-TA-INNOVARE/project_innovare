@@ -12,7 +12,8 @@ from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.accounts.cookie_de_sessao import (
@@ -45,6 +46,7 @@ from apps.accounts.services.acesso import (
     RegistrarAcessoService,
     RegistrarEntradaRecusadaService,
     SolicitarRecuperacaoSenhaService,
+    marcar_uso_da_sessao,
 )
 from apps.accounts.services.titular import (
     AnonimizarContaService,
@@ -137,6 +139,8 @@ class RefreshView(TokenRefreshView):
             raise InvalidToken(exc.args[0]) from exc
 
         dados = dict(serializer.validated_data)
+        marcar_uso_da_sessao(AccessToken(dados['access'])[api_settings.USER_ID_CLAIM])
+
         novo = dados.get('refresh') if do_corpo else dados.pop('refresh', None)
         resposta = Response(dados, status=status.HTTP_200_OK)
 

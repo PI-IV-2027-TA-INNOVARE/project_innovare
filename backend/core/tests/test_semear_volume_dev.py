@@ -7,18 +7,22 @@ rodado: nenhuma chamada a provedor, nenhum e-mail. A situacao de cada
 oportunidade e a que os dados dela dizem, pela mesma regra da conferencia do
 fluxo.
 """
+from datetime import timedelta
 from io import StringIO
 from unittest import mock
 
 from django.conf import settings
 from django.core import mail
 from django.core.management import CommandError, call_command
+from django.db.models import Max, Min
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounts.models import Papel, Usuario
 from apps.ai.models import ExecucaoIA
+from apps.audit.models import EventoAuditoria
 from apps.dashboard.services.indicadores_ia import indicadores_de_ia
-from apps.decisions.models import TipoDecisao
+from apps.decisions.models import Decisao, TipoDecisao
 from apps.network.models import Disponibilidade, MembroRede, PapelNaRede, SituacaoMembro
 from apps.opportunities.models import Oportunidade, SituacaoOportunidade
 from apps.opportunities.services.fluxo import ETAPAS_EM_CURSO, situacao_pelos_dados
@@ -112,6 +116,56 @@ class SemearVolumeDevTests(TestCase):
         self.assertEqual(mail.outbox, [])
         self.envio.assert_not_called()
         self.assertFalse(ExecucaoIA.objects.exists())
+
+    def test_a_trilha_fica_entre_o_cadastro_e_hoje_na_ordem_em_que_aconteceu(self):
+        """
+        O seed roda em segundos. Sem levar as datas para a janela da
+        oportunidade, a trilha mostrava tudo no mesmo minuto e a decisao meses
+        antes dos eventos que levaram a ela.
+        """
+        agora = timezone.now()
+
+        for oportunidade in Oportunidade.objects.all():
+            with self.subTest(oportunidade=oportunidade.codigo):
+                momentos = list(
+                    EventoAuditoria.objects.filter(oportunidade=oportunidade)
+                    .order_by('pk')
+                    .values_list('ocorrido_em', flat=True)
+                )
+
+                self.assertTrue(momentos)
+                self.assertGreaterEqual(momentos[0], oportunidade.criada_em)
+                self.assertLessEqual(momentos[-1], agora)
+                self.assertEqual(momentos, sorted(momentos))
+
+    def test_a_trilha_da_decidida_se_espalha_por_dias(self):
+        for decisao in Decisao.objects.select_related('oportunidade'):
+            with self.subTest(oportunidade=decisao.oportunidade.codigo):
+                momentos = EventoAuditoria.objects.filter(
+                    oportunidade=decisao.oportunidade
+                ).aggregate(primeiro=Min('ocorrido_em'), ultimo=Max('ocorrido_em'))
+
+                self.assertGreater(momentos['ultimo'] - momentos['primeiro'], timedelta(days=1))
+
+    def test_a_decisao_entra_na_trilha_como_decisao_na_data_dela(self):
+        """Como o servico de decisao grava: o evento e da decisao, e nao so a troca de situacao."""
+        for decisao in Decisao.objects.select_related('oportunidade'):
+            with self.subTest(oportunidade=decisao.oportunidade.codigo):
+                evento = EventoAuditoria.objects.get(
+                    oportunidade=decisao.oportunidade,
+                    tipo=f'decisao_{decisao.tipo_decisao}',
+                )
+
+                self.assertEqual(evento.ocorrido_em.date(), decisao.registrada_em.date())
+
+    def test_a_ultima_atualizacao_e_a_do_ultimo_evento(self):
+        for oportunidade in Oportunidade.objects.all():
+            with self.subTest(oportunidade=oportunidade.codigo):
+                ultimo = EventoAuditoria.objects.filter(oportunidade=oportunidade).aggregate(
+                    ultimo=Max('ocorrido_em')
+                )['ultimo']
+
+                self.assertEqual(oportunidade.atualizada_em, ultimo)
 
     def test_rodar_de_novo_nao_duplica(self):
         antes = (

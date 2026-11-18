@@ -18,20 +18,23 @@ Provedor sempre duble (AGENTS.md 0.1).
 """
 import json
 import tempfile
+from datetime import timedelta
 
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.competencies.models import CompetenciaNecessaria, NivelImportancia
-from apps.copilot.models import PropostaEstruturada
+from apps.copilot.models import Lacuna, PropostaEstruturada
+from apps.matching.models import EquipePotencial, MembroEquipe
 from apps.matching.services import ExecutarMatchingService
-from apps.maturity.models import NivelDimensao
+from apps.maturity.models import NivelDimensao, PreAnalise, Recomendacao
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
 from core.tests.builders import (
     MembroRedeBuilder,
@@ -39,6 +42,7 @@ from core.tests.builders import (
     OrganizacaoBuilder,
     UsuarioBuilder,
     indicar_na_equipe,
+    versao_criterio,
 )
 from core.tests.dubles import ProvedorFake, escrever_base_pipe
 
@@ -225,6 +229,92 @@ class MaturidadeTests(IndicadoresDeIABaseTests):
 
         for proibido in ('nota', 'media', 'score', 'pontuacao', 'indice'):
             self.assertNotIn(proibido, campos)
+
+
+class RodadaMaisRecenteTests(IndicadoresDeIABaseTests):
+    """
+    Pessoas indicadas, lacunas e recomendacoes contam so a rodada em jogo.
+
+    E a regra da Saude da IA: cada matching gera uma equipe nova e cada
+    reavaliacao, uma pre-analise nova, e as antigas nunca mais serao
+    validadas, resolvidas nem acatadas. O que conta atividade - rodadas
+    executadas, equipes geradas, pre-analises executadas - segue somando tudo.
+    """
+
+    def indicar(self, equipe, *, validada=False, incluido=True):
+        membro = MembroRedeBuilder().pesquisador().build()
+
+        return MembroEquipe.objects.create(
+            equipe=equipe,
+            membro=membro,
+            papel=membro.papel_rede,
+            validada=validada,
+            incluido=incluido,
+        )
+
+    def pre_analise(self, *, ha_dias):
+        analise = PreAnalise.objects.create(
+            proposta=self.proposta,
+            versao_criterio=versao_criterio(),
+            versao_proposta=1,
+            status=StatusExecucao.OK,
+        )
+        PreAnalise.objects.filter(pk=analise.pk).update(
+            executada_em=timezone.now() - timedelta(days=ha_dias)
+        )
+        return analise
+
+    def lacuna(self, analise, *, resolvida=False):
+        return Lacuna.objects.create(
+            proposta=self.proposta,
+            pre_analise=analise,
+            tipo='pre_analise',
+            descricao='Nao ha descricao do laboratorio.',
+            resolvida=resolvida,
+        )
+
+    def recomendar(self, analise, *, acatada=False):
+        return Recomendacao.objects.create(
+            oportunidade=self.oportunidade,
+            origem='pre_analise',
+            pre_analise=analise,
+            texto='Descrever a infraestrutura disponivel.',
+            acatada=acatada,
+        )
+
+    def test_pessoas_indicadas_contam_so_a_equipe_mais_recente(self):
+        antiga = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        for _ in range(3):
+            self.indicar(antiga)
+        atual = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        self.indicar(atual, validada=True)
+        self.indicar(atual)
+        self.indicar(atual, incluido=False)
+
+        dados = self.client.get(self.url).data['matching']
+
+        self.assertEqual(dados['indicacoes'], 3)
+        self.assertEqual(dados['indicacoes_incluidas'], 2)
+        self.assertEqual(dados['indicacoes_validadas'], 1)
+        self.assertEqual(dados['equipes_geradas'], 2)
+
+    def test_lacunas_e_recomendacoes_contam_so_a_pre_analise_mais_recente(self):
+        antiga = self.pre_analise(ha_dias=2)
+        atual = self.pre_analise(ha_dias=1)
+        self.lacuna(antiga)
+        self.lacuna(antiga)
+        self.recomendar(antiga, acatada=True)
+        self.recomendar(antiga)
+        self.lacuna(atual, resolvida=True)
+        self.recomendar(atual)
+
+        dados = self.client.get(self.url).data['maturidade']
+
+        self.assertEqual((dados['lacunas_abertas'], dados['lacunas']), (0, 1))
+        self.assertEqual(
+            (dados['recomendacoes_acatadas'], dados['recomendacoes']), (0, 1)
+        )
+        self.assertEqual(dados['execucoes'], 2)
 
 
 class UsoDaIATests(IndicadoresDeIABaseTests):

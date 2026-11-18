@@ -8,6 +8,7 @@ O que esta sob prova: o recorte por mes de calendario (o teto e mensal), a
 ausencia declarada em vez de zero enganoso, e o portao do Administrador.
 """
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -23,7 +24,9 @@ from apps.ai.services.gemini_service import ProvedorGemini
 from apps.ai.services.registro import ProvedorRegistrado, desregistrar, registrar
 from apps.ai.services.saude import inicio_do_mes, saude_da_plataforma
 from apps.ai.tests.test_provedor import RespostaFalsa
-from apps.matching.models import ExecucaoMatching
+from apps.copilot.models import PropostaEstruturada
+from apps.matching.models import EquipePotencial, ExecucaoMatching, MembroEquipe
+from apps.maturity.models import PreAnalise, Recomendacao
 from core.medicao import (
     MedidorDeRequisicoes,
     espera_de_ia,
@@ -32,7 +35,12 @@ from core.medicao import (
     zerar_espera_de_ia,
 )
 from core.middleware import MedidorDeDesempenho
-from core.tests.builders import OportunidadeBuilder, UsuarioBuilder
+from core.tests.builders import (
+    MembroRedeBuilder,
+    OportunidadeBuilder,
+    UsuarioBuilder,
+    versao_criterio,
+)
 
 
 def execucao(**campos):
@@ -213,6 +221,43 @@ class ProvedoresPorModeloTests(SaudeBaseTests):
                 ('fake_outro', '', 'sem_uso'),
             ],
         )
+
+    @override_settings(AI_PROVEDOR_RESERVA='fake_outro,fake_primeiro')
+    def test_as_reservas_aparecem_na_ordem_da_fila_e_nao_na_do_uso(self):
+        """Quem le a tela precisa saber qual reserva entra primeiro."""
+        registrar_falso('fake_primeiro', 'Primeiro')
+        registrar_falso('fake_outro', 'Outro')
+        execucao(provedor='fake_primeiro', modelo='')
+
+        self.assertEqual(
+            self.linhas(),
+            [
+                ('google', 'gemini-2.5-flash', 'principal'),
+                ('fake_outro', '', 'reserva'),
+                ('fake_primeiro', '', 'reserva'),
+            ],
+        )
+
+    @override_settings(
+        AI_PROVEDORES_COMPATIVEIS=['groq'],
+        GROQ_API_KEY='chave-de-teste',
+        AI_GROQ_URL='https://api.exemplo.test/openai/v1',
+        AI_GROQ_MODELO='modelo-groq',
+        AI_GROQ_ROTULO='Groq',
+        AI_GROQ_GRATUITO=True,
+        AI_PROVEDOR_RESERVA='groq',
+    )
+    def test_provedor_do_catalogo_aparece_na_tela_com_rotulo_e_papel(self):
+        resposta = self.client.get(self.url())
+
+        google, groq = resposta.data['ia']['provedores'][:2]
+        self.assertEqual(
+            (groq['nome'], groq['rotulo'], groq['modelo'], groq['papel']),
+            ('groq', 'Groq', 'modelo-groq', 'reserva'),
+        )
+        self.assertTrue(groq['configurado'])
+        self.assertTrue(groq['gratuito'])
+        self.assertFalse(google['gratuito'])
 
     def test_o_modelo_da_propria_plataforma_fica_fora_do_consumo_e_dos_provedores(self):
         """
@@ -512,6 +557,104 @@ class CartoesTests(SaudeBaseTests):
         for cartao in ('desempenho', 'ia', 'comparacao', 'jobs', 'banco'):
             with self.subTest(cartao=cartao):
                 self.assertIn(f'{cartao}_erro', dados)
+
+
+class RevisaoHumanaDaRodadaAtualTests(SaudeBaseTests):
+    """
+    Indicacoes e recomendacoes contam so a rodada que esta em jogo.
+
+    Cada matching gera uma equipe nova e cada reavaliacao, uma pre-analise
+    nova; as antigas ficam guardadas e nunca mais serao validadas nem
+    acatadas. Somadas ao total, baixavam a proporcao sem ninguem ter deixado
+    de revisar. Quem o Supervisor tirou da equipe tambem ficou de fora: a
+    validacao marca so os incluidos, como nos Indicadores.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.oportunidade = (
+            OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        )
+
+    def revisao(self):
+        return saude_da_plataforma()['ia']['revisao_humana']
+
+    def indicar(self, equipe, *, validada=False, incluido=True):
+        membro = MembroRedeBuilder().build()
+
+        return MembroEquipe.objects.create(
+            equipe=equipe,
+            membro=membro,
+            papel=membro.papel_rede,
+            validada=validada,
+            incluido=incluido,
+        )
+
+    def analise(self, proposta, *, ha_dias):
+        analise = PreAnalise.objects.create(
+            proposta=proposta,
+            versao_criterio=versao_criterio(),
+            versao_proposta=1,
+            status=StatusExecucao.OK,
+        )
+        PreAnalise.objects.filter(pk=analise.pk).update(
+            executada_em=timezone.now() - timedelta(days=ha_dias)
+        )
+        return analise
+
+    def recomendar(self, analise, *, acatada=False):
+        return Recomendacao.objects.create(
+            oportunidade=analise.proposta.oportunidade,
+            origem='pre_analise',
+            pre_analise=analise,
+            texto='Descrever a infraestrutura disponivel.',
+            acatada=acatada,
+        )
+
+    def test_indicacoes_contam_so_a_equipe_mais_recente(self):
+        antiga = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        for _ in range(3):
+            self.indicar(antiga)
+        atual = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        self.indicar(atual, validada=True)
+        self.indicar(atual)
+
+        dados = self.revisao()
+
+        self.assertEqual((dados['indicacoes_validadas'], dados['indicacoes']), (1, 2))
+
+    def test_quem_saiu_da_equipe_nao_fica_esperando_validacao(self):
+        atual = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        self.indicar(atual, validada=True)
+        self.indicar(atual, incluido=False)
+
+        dados = self.revisao()
+
+        self.assertEqual((dados['indicacoes_validadas'], dados['indicacoes']), (1, 1))
+
+    def test_cada_oportunidade_entra_com_a_propria_equipe_mais_recente(self):
+        outra = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        self.indicar(EquipePotencial.objects.create(oportunidade=self.oportunidade))
+        self.indicar(EquipePotencial.objects.create(oportunidade=outra), validada=True)
+
+        dados = self.revisao()
+
+        self.assertEqual((dados['indicacoes_validadas'], dados['indicacoes']), (1, 2))
+
+    def test_recomendacoes_contam_so_a_pre_analise_mais_recente(self):
+        proposta = PropostaEstruturada.objects.create(oportunidade=self.oportunidade)
+        antiga = self.analise(proposta, ha_dias=2)
+        atual = self.analise(proposta, ha_dias=1)
+        for _ in range(4):
+            self.recomendar(antiga)
+        self.recomendar(atual, acatada=True)
+        self.recomendar(atual)
+
+        dados = self.revisao()
+
+        self.assertEqual(
+            (dados['recomendacoes_acatadas'], dados['recomendacoes']), (1, 2)
+        )
 
 
 class AcessoASaudeTests(SaudeBaseTests):

@@ -14,6 +14,7 @@ import {
 import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
 import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
@@ -325,7 +326,7 @@ export default function AbaCompetencias({
         {podeEditar ? (
           <button
             type="button"
-            className="admin-btn"
+            className={competencias.length > 0 ? 'admin-btn admin-btn--outline' : 'admin-btn'}
             onClick={derivar}
             disabled={ocupado || propostaPendente}
           >
@@ -444,7 +445,11 @@ export default function AbaCompetencias({
         ) : null}
 
         {podeEditar && essenciais > 0 ? (
-          <ProximoPasso etapa="equipe" irPara={irPara} />
+          <BarraDeAcoes
+            estado={`${plural(essenciais, 'competência essencial', 'competências essenciais')} para o matching comparar com a rede interna.`}
+          >
+            <ContinuarPara etapa="equipe" irPara={irPara} />
+          </BarraDeAcoes>
         ) : null}
       </div>
 

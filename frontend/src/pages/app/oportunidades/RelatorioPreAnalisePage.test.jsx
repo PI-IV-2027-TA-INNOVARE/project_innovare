@@ -125,7 +125,9 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     expect(
       await screen.findByRole('heading', { name: /detecção rápida de contaminação/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/desafio tecnológico · consolidada/i)).toBeInTheDocument()
+    const dimensao = screen.getByText('Desafio tecnológico', { selector: 'dt' }).nextElementSibling
+
+    expect(dimensao.querySelector('.relatorio-selo--consolidada')).toHaveTextContent('Consolidada')
     expect(screen.getByText('Não há descrição do laboratório.')).toBeInTheDocument()
     expect(
       screen.getByText('Descrever a infraestrutura disponível.'),
@@ -159,7 +161,10 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
 
     const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
     expect(ligada).toHaveTextContent('Plano de pesquisa · Metodologia adequada (A3)')
-    expect(within(ligada).getByText(/Defina o controle negativo\./)).toHaveTextContent('(acatada)')
+    expect(within(ligada).getByText('Defina o controle negativo.').closest('li')).toHaveTextContent(
+      'Acatada',
+    )
+    expect(screen.getByText('Monte um cronograma.').closest('li')).toHaveTextContent('Pendente')
 
     const semCriterio = screen.getByText('Não há prazo.').closest('li')
     expect(semCriterio).toHaveTextContent('Sem evidência na proposta')

@@ -42,7 +42,11 @@ from core.tests.builders import (
     indicar_na_equipe,
     titulacao,
 )
-from core.tests.dubles import ProvedorFake, ProvedorQueObservaATransacao
+from core.tests.dubles import (
+    ProvedorFake,
+    ProvedorPelaReserva,
+    ProvedorQueObservaATransacao,
+)
 
 PROPOSTA = {
     'problema_pesquisa': 'Contaminacao por Alicyclobacillus na linha de envase.',
@@ -323,6 +327,24 @@ class ExecucaoDoMatchingTests(MatchingBaseTests):
         self.assertTrue(
             any('Segundo a IA' in ' '.join(membro.match_reasons) for membro in membros)
         )
+
+    @override_settings(AI_MATCH_RERANK_ENABLED=True, AI_MATCH_MIN_SCORE=0.0)
+    def test_rerank_que_veio_da_reserva_tambem_reordena(self):
+        """A reserva respondeu: a resposta e de IA, nao o caminho sem IA."""
+        duble = ProvedorPelaReserva(
+            matches={
+                'matches': [
+                    {'candidato_index': 1, 'match_reasons': ['Perfil mais aderente']},
+                    {'candidato_index': 0, 'match_reasons': []},
+                ]
+            }
+        )
+
+        resultado = ExecutarMatchingService(provedor=duble).execute(
+            oportunidade=self.oportunidade, ator=self.supervisor
+        )
+
+        self.assertTrue(resultado['execucao'].usou_rerank)
 
 
 class SupervisaoNaEquipeTests(MatchingBaseTests):

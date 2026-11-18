@@ -354,7 +354,6 @@ describe('AbaPreAnalise', () => {
 
     expect(await screen.findByText(/está em andamento/i)).toBeInTheDocument()
     expect(screen.getByText(/está demorando mais que o normal/i)).toBeInTheDocument()
-    expect(screen.getByText(/^4\ds$/)).toBeInTheDocument()
   })
 
   /**
@@ -367,6 +366,24 @@ describe('AbaPreAnalise', () => {
     expect(await screen.findByRole('link', { name: /gerar relatório/i }))
       .toHaveAttribute('href', '/oportunidades/OP-2026-001/relatorio/pre-analise')
     expect(screen.getByText(/depois de acatar as recomendações/i)).toBeInTheDocument()
+  })
+
+  /**
+   * O avanço era um cartão no meio da página, e o botão laranja do topo era
+   * "Reavaliar", que refaz a análise. Agora o próximo passo é o botão
+   * principal da barra do fim, como nas outras etapas.
+   */
+  it('com resultado, a decisão fica na barra de ações e reavaliar é secundário', async () => {
+    const irPara = vi.fn()
+    renderizar({ irPara })
+
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+
+    expect(barra).toHaveTextContent(/depois de acatar as recomendações/i)
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toHaveClass('admin-btn--outline')
+
+    await userEvent.click(within(barra).getByRole('button', { name: /continuar para decisão/i }))
+    expect(irPara).toHaveBeenCalledWith('decisao')
   })
 
   /**

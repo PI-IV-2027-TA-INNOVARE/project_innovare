@@ -10,14 +10,64 @@ import {
   listarHistorico,
   obterOportunidade,
 } from '../../../services/pdConnectApi'
+import { CONCLUIDA, EM_ANDAMENTO } from '../oportunidades/etapas'
 import {
   daApi,
-  decisaoLabel,
   eventoDaApi,
+  origemLabel,
   situacaoLabel,
 } from '../oportunidades/oportunidadesData'
-import { estagioDoDemandante, precisaComplementacao } from './problemasData'
+import {
+  decisaoEmFrase,
+  estagioDoDemandante,
+  etapasDoProblema,
+  precisaComplementacao,
+} from './problemasData'
+import '../oportunidades/OportunidadesPage.scss'
 import './ProblemasPage.scss'
+
+function quando(timestamp) {
+  const texto = formatarUltimoAcesso(timestamp)
+
+  return /^\d/.test(texto) ? `em ${texto}` : texto.toLowerCase()
+}
+
+/**
+ * O andamento do problema, na mesma linguagem da barra de etapas do
+ * Supervisor - so que de leitura: o Demandante acompanha, nao conduz.
+ */
+function Andamento({ situacao }) {
+  return (
+    <section className="problema-andamento">
+      <ol className="problema-etapas" aria-label="Andamento do problema">
+        {etapasDoProblema(situacao).map((etapa) => {
+          const concluida = etapa.andamento === CONCLUIDA
+          const atual = etapa.andamento === EM_ANDAMENTO
+
+          return (
+            <li
+              key={etapa.id}
+              className={[
+                'problema-etapa',
+                concluida ? 'is-concluida' : '',
+                atual ? 'is-atual' : '',
+              ].filter(Boolean).join(' ')}
+              aria-current={atual ? 'step' : undefined}
+            >
+              <span className="oportunidade-aba__numero" aria-hidden="true">
+                {concluida ? <Icone icon={appIcons.done} /> : etapa.numero}
+              </span>
+              {etapa.label}
+              {concluida ? <span className="sr-only"> concluída</span> : null}
+            </li>
+          )
+        })}
+      </ol>
+
+      <p className="problema-estagio">{estagioDoDemandante(situacao)}</p>
+    </section>
+  )
+}
 
 function Bloco({ titulo, children }) {
   return (
@@ -127,157 +177,156 @@ export default function ProblemaPage() {
 
   return (
     <div className="console problemas-page">
-      <header className="problemas-page__header problemas-page__header--detalhe">
-        <div>
+      <header className="oportunidade-page__header">
+        <div className="oportunidade-page__topo">
           <BackLink to="/problemas">Voltar para meus problemas</BackLink>
+        </div>
 
-          <p className="console-kicker">Problema externo</p>
-          <h1 className="problemas-page__title">{problema.titulo}</h1>
+        <h1 className="oportunidade-page__title">{problema.titulo}</h1>
 
-          <p className="oportunidade-page__meta">
-            <span className="oportunidade-page__codigo">{problema.id}</span>
-            <span className={`fluxo-badge fluxo-badge--${problema.situacao}`}>
-              {situacaoLabel(problema.situacao)}
-            </span>
-            <span className="oportunidade-page__demandante">
-              cadastrado {formatarUltimoAcesso(problema.criadaEm).toLowerCase()}
-            </span>
-          </p>
+        <p className="oportunidade-page__identidade">
+          <span className="oportunidade-page__codigo">{problema.id}</span>
+          <span className="oportunidade-page__demandante">
+            Cadastrado {quando(problema.criadaEm)}
+          </span>
+        </p>
+
+        <div className="oportunidade-page__meta">
+          <span className={`fluxo-badge fluxo-badge--${problema.situacao}`}>
+            {situacaoLabel(problema.situacao)}
+          </span>
+          <span className={`origem-badge origem-badge--${problema.origem}`}>
+            {origemLabel(problema.origem)}
+          </span>
+          <span className="user-cell__meta">Atualizado {quando(problema.atualizadaEm)}</span>
         </div>
       </header>
 
-      <Bloco titulo="Em que ponto está">
-        <p className="problema-estagio">{estagioDoDemandante(problema.situacao)}</p>
+      <Andamento situacao={problema.situacao} />
 
-        <p className="oportunidade-bloco__nota">
-          Atualizado {formatarUltimoAcesso(problema.atualizadaEm).toLowerCase()}.
-        </p>
-      </Bloco>
+      <div className="problema-secoes">
+        {pedeComplementacao ? (
+          <section className="perfil-card perfil-card--destaque">
+            <header className="perfil-card__header">
+              <div>
+                <h2 className="perfil-card__title">A AC2 pediu uma complementação</h2>
+                <p className="perfil-card__description">
+                  O Núcleo de P&amp;D precisa de mais informação para seguir com a
+                  análise deste problema.
+                </p>
+              </div>
+            </header>
 
-      {pedeComplementacao ? (
-        <section className="perfil-card perfil-card--destaque">
-          <header className="perfil-card__header">
-            <div>
-              <h2 className="perfil-card__title">A AC2 pediu uma complementação</h2>
-              <p className="perfil-card__description">
-                O Núcleo de P&amp;D precisa de mais informação para seguir com a
-                análise deste problema.
-              </p>
+            <div className="perfil-card__body">
+              {problema.decisao?.justificativa ? (
+                <blockquote className="oportunidade-justificativa">
+                  {problema.decisao.justificativa}
+                </blockquote>
+              ) : null}
+
+              {enviado ? (
+                <p className="problema-estagio" role="status">
+                  Complementação enviada. O Núcleo de P&amp;D retoma a análise a
+                  partir do que você acrescentou.
+                </p>
+              ) : (
+                <form onSubmit={enviarComplemento} noValidate>
+                  <label className="admin-field">
+                    <span className="admin-field__label">Sua complementação</span>
+                    <textarea
+                      className="admin-input admin-input--area"
+                      rows={4}
+                      value={complemento}
+                      onChange={(event) => setComplemento(event.target.value)}
+                      placeholder="Acrescente o que foi pedido."
+                    />
+                  </label>
+
+                  {erroEnvio ? (
+                    <p className="admin-field__error" role="alert">{erroEnvio}</p>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    className="admin-btn"
+                    disabled={!complemento.trim() || enviando}
+                  >
+                    <Icone icon={appIcons.done} />
+                    {enviando ? 'Enviando...' : 'Enviar complementação'}
+                  </button>
+                </form>
+              )}
             </div>
-          </header>
-
-          <div className="perfil-card__body">
-            {problema.decisao?.justificativa ? (
-              <blockquote className="oportunidade-justificativa">
-                {problema.decisao.justificativa}
-              </blockquote>
-            ) : null}
-
-            {enviado ? (
-              <p className="problema-estagio" role="status">
-                Complementação enviada. O Núcleo de P&amp;D retoma a análise a
-                partir do que você acrescentou.
-              </p>
-            ) : (
-              <form onSubmit={enviarComplemento} noValidate>
-                <label className="admin-field">
-                  <span className="admin-field__label">Sua complementação</span>
-                  <textarea
-                    className="admin-input admin-input--area"
-                    rows={4}
-                    value={complemento}
-                    onChange={(event) => setComplemento(event.target.value)}
-                    placeholder="Acrescente o que foi pedido."
-                  />
-                </label>
-
-                {erroEnvio ? (
-                  <p className="admin-field__error" role="alert">{erroEnvio}</p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  className="admin-btn"
-                  disabled={!complemento.trim() || enviando}
-                >
-                  <Icone icon={appIcons.done} />
-                  {enviando ? 'Enviando...' : 'Enviar complementação'}
-                </button>
-              </form>
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      <Bloco titulo="O que você enviou">
-        <p className="oportunidade-resumo">{problema.resumo}</p>
-
-        {problema.contexto ? (
-          <p className="oportunidade-resumo">{problema.contexto}</p>
+          </section>
         ) : null}
-      </Bloco>
 
-      <AnexosOportunidade
-        codigo={id}
-        podeEnviar
-        titulo="Documentos"
-        descricao="Laudos, fotos e relatórios que a sua empresa anexou a este problema."
-        quemVe="sua empresa, o Supervisor da AC2 e a equipe que ele indicar."
-      />
+        <Bloco titulo="O que você enviou">
+          <p className="oportunidade-resumo">{problema.resumo}</p>
 
-      {problema.decisao && !pedeComplementacao ? (
-        <Bloco titulo="Encaminhamento do Núcleo de P&D">
-          <p className="problema-estagio">
-            <span className={`decisao-selo decisao-selo--${problema.decisao.tipo}`}>
-              {decisaoLabel(problema.decisao.tipo)}
-            </span>
-          </p>
+          {problema.contexto ? (
+            <p className="oportunidade-resumo">{problema.contexto}</p>
+          ) : null}
+        </Bloco>
+
+        <AnexosOportunidade
+          codigo={id}
+          podeEnviar
+          titulo="Documentos"
+          descricao="Laudos, fotos e relatórios que a sua empresa anexou a este problema."
+          quemVe="sua empresa, o Supervisor da AC2 e a equipe que ele indicar."
+        />
+
+        {problema.decisao && !pedeComplementacao ? (
+          <Bloco titulo="Decisão do Núcleo de P&D">
+            <p className="problema-estagio">{decisaoEmFrase(problema.decisao.tipo)}</p>
+
+            <p className="oportunidade-bloco__nota">
+              Decisão registrada {quando(problema.decisao.em)}. A decisão de
+              continuidade é do Núcleo de P&amp;D da AC2.
+            </p>
+          </Bloco>
+        ) : null}
+
+        <Bloco titulo="Histórico">
+          {eventos.length > 0 ? (
+            <ol className="trilha">
+              {eventos.map((evento) => (
+                <li className="trilha__item" key={evento.id}>
+                  <span
+                    className={`trilha__marca trilha__marca--${evento.categoria}`}
+                    aria-hidden="true"
+                  >
+                    <Icone
+                      icon={evento.categoria === 'decisao' ? appIcons.decision : appIcons.folder}
+                    />
+                  </span>
+
+                  <div className="trilha__corpo">
+                    <p className="trilha__texto">{evento.texto}</p>
+                    <p className="trilha__meta">
+                      <span className="trilha__ator">{evento.ator}</span>
+                      <span aria-hidden="true">·</span>
+                      <time dateTime={new Date(evento.em).toISOString()}>
+                        {formatarUltimoAcesso(evento.em)}
+                      </time>
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="oportunidade-bloco__vazio">
+              Ainda não há registros para mostrar neste problema.
+            </p>
+          )}
 
           <p className="oportunidade-bloco__nota">
-            Registrado {formatarUltimoAcesso(problema.decisao.em).toLowerCase()}. A
-            decisão de continuidade é do Núcleo de P&amp;D da AC2.
+            O trabalho interno do Núcleo de P&amp;D — a proposta, as competências
+            levantadas, o matching e a pré-análise — não aparece nesta trilha. Aqui
+            ficam as mudanças de situação e as decisões.
           </p>
         </Bloco>
-      ) : null}
-
-      <Bloco titulo="Histórico">
-        {eventos.length > 0 ? (
-          <ol className="trilha">
-            {eventos.map((evento) => (
-              <li className="trilha__item" key={evento.id}>
-                <span
-                  className={`trilha__marca trilha__marca--${evento.categoria}`}
-                  aria-hidden="true"
-                >
-                  <Icone
-                    icon={evento.categoria === 'decisao' ? appIcons.decision : appIcons.folder}
-                  />
-                </span>
-
-                <div className="trilha__corpo">
-                  <p className="trilha__texto">{evento.texto}</p>
-                  <p className="trilha__meta">
-                    <span className="trilha__ator">{evento.ator}</span>
-                    <span aria-hidden="true">·</span>
-                    <time dateTime={new Date(evento.em).toISOString()}>
-                      {formatarUltimoAcesso(evento.em)}
-                    </time>
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="oportunidade-bloco__vazio">
-            Ainda não há registros para mostrar neste problema.
-          </p>
-        )}
-
-        <p className="oportunidade-bloco__nota">
-          A análise interna do Núcleo de P&amp;D — competências, matching e
-          pré-análise — não aparece nesta trilha.
-        </p>
-      </Bloco>
+      </div>
 
       <p className="problemas-page__rodape">
         Precisa falar sobre este problema?{' '}

@@ -31,21 +31,24 @@ describe('EsperaIA', () => {
 
   /**
    * A chamada ao Gemini leva de 10 a 30 segundos. Um botão que só troca o
-   * rótulo para "Analisando..." não diz se a tela travou; o contador de
-   * segundos é a prova de que o pedido segue vivo.
+   * rótulo para "Analisando..." não diz se a tela travou. O contador de
+   * segundos fazia esse papel, mas desmentia o "10 a 30 segundos" quando
+   * passava dele e era lido pelo leitor de tela a cada segundo. Agora o
+   * ícone girando mostra que o pedido segue vivo, e a frase muda quando
+   * demora.
    */
-  it('avisa quanto costuma demorar e conta o tempo de espera', () => {
+  it('avisa quanto costuma demorar, com um ícone girando e sem contar segundos', () => {
     vi.useFakeTimers()
 
-    render(<EsperaIA titulo="O Copiloto está escrevendo a proposta." />)
+    const { container } = render(<EsperaIA titulo="O Copiloto está escrevendo a proposta." />)
 
     expect(screen.getByRole('status')).toHaveTextContent(/10 a 30 segundos/i)
-    expect(screen.getByText('0s')).toBeInTheDocument()
+    expect(container.querySelector('.espera-ia__icone')).not.toBeNull()
 
     act(() => {
       vi.advanceTimersByTime(3000)
     })
 
-    expect(screen.getByText('3s')).toBeInTheDocument()
+    expect(screen.getByRole('status')).not.toHaveTextContent(/\ds\b/)
   })
 })

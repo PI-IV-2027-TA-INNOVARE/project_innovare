@@ -33,7 +33,9 @@ class RevisaoHumanaSerializer(serializers.Serializer):
 
     Quanto da saida de IA passou por gente: proposta revisada, indicacao
     validada, recomendacao acatada. Sao as colunas que o AGENTS.md 0.2 exige
-    que existam - aqui elas viram numero.
+    que existam - aqui elas viram numero. Indicacoes e recomendacoes sao as da
+    equipe e da pre-analise mais recentes de cada oportunidade; da equipe, so
+    os incluidos.
     """
 
     propostas_de_ia = serializers.IntegerField(read_only=True)
@@ -64,6 +66,7 @@ class ProvedorDeIASerializer(serializers.Serializer):
     `papel` e `principal`, `reserva`, `fora_de_uso` (respondeu no mes, mas a
     configuracao nao o poe mais para responder) ou `sem_uso` (registrado, sem
     papel nem uso). `falhas` conta cada uso uma vez, com erro ou sem IA.
+    `gratuito` diz que o preco zero foi conferido, e nao que falta a tabela.
     """
 
     nome = serializers.CharField(read_only=True)
@@ -72,6 +75,7 @@ class ProvedorDeIASerializer(serializers.Serializer):
         choices=('principal', 'reserva', 'fora_de_uso', 'sem_uso'), read_only=True
     )
     configurado = serializers.BooleanField(read_only=True)
+    gratuito = serializers.BooleanField(read_only=True)
     modelo = serializers.CharField(read_only=True, allow_blank=True)
     chamadas = serializers.IntegerField(read_only=True)
     falhas = serializers.IntegerField(read_only=True)

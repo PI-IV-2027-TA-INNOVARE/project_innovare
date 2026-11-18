@@ -256,10 +256,11 @@ function LinhasComBarra({ titulo, nota, vazio, itens }) {
   )
 }
 
-function Estatisticas({ titulo, itens }) {
+function Estatisticas({ titulo, nota, itens }) {
   return (
     <div className="indicadores-grupo">
       {titulo && <h3 className="indicadores-grupo__titulo">{titulo}</h3>}
+      {nota ? <p className="indicadores-grupo__nota">{nota}</p> : null}
 
       <dl className="estatisticas">
         {itens.map((item) => (
@@ -326,6 +327,7 @@ function SecaoMatching({ dados }) {
 
       <Estatisticas
         titulo="Pessoas indicadas"
+        nota="Da equipe mais recente de cada oportunidade."
         itens={[
           numero(
             'Em equipe já validada',
@@ -384,6 +386,7 @@ function SecaoMaturidade({ dados }) {
 
       <Estatisticas
         titulo="Lacunas e recomendações"
+        nota="Da pré-análise mais recente de cada proposta."
         itens={[
           numero(
             'Lacunas da pré-análise em aberto',
@@ -492,6 +495,60 @@ function horaDe(data) {
   return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+const SEM_OPORTUNIDADE = {
+  [ROLES.PESQUISADOR]: {
+    texto:
+      'Uma oportunidade chega até você quando o matching sugere seu nome numa equipe e o Supervisor mantém a indicação. Com o perfil completo, com competências, formação e disponibilidade, o matching encontra você com mais facilidade.',
+    aparece: 'em que etapa elas estão e as decisões registradas',
+    acao: { rotulo: 'Completar meu perfil', destino: '/perfil', icone: appIcons.profile },
+  },
+  [ROLES.DEMANDANTE]: {
+    texto:
+      'Os números aparecem quando você cadastrar o primeiro problema e ele entrar no fluxo da AC2.',
+    aparece: 'em que etapa estão os seus problemas e as decisões registradas',
+    acao: { rotulo: 'Cadastrar problema', destino: '/problemas/novo', icone: appIcons.addUser },
+  },
+  [ROLES.SUPERVISOR]: {
+    texto:
+      'Os números aparecem quando a primeira oportunidade entrar no fluxo: um problema enviado por uma empresa ou uma ideia interna registrada por você.',
+    aparece:
+      'em que etapa elas estão, as decisões registradas, a rede interna, o matching, a maturidade das propostas e o uso da IA',
+    acao: { rotulo: 'Nova ideia interna', destino: '/oportunidades/nova', icone: appIcons.addUser },
+  },
+}
+
+/**
+ * O que a pessoa le quando ainda nao ha oportunidade no acompanhamento dela.
+ *
+ * Nenhum numero de exemplo: diz como a primeira oportunidade chega, para cada
+ * papel, e leva a acao que de fato aproxima isso. O Pesquisador nao cria
+ * oportunidade - ela chega pelo matching -, e o que esta na mao dele e o
+ * perfil que o matching le.
+ */
+function SemOportunidade({ papel }) {
+  const tituloId = useId()
+  const conteudo = SEM_OPORTUNIDADE[papel] || SEM_OPORTUNIDADE[ROLES.SUPERVISOR]
+
+  return (
+    <section className="perfil-card indicadores-vazio" aria-labelledby={tituloId}>
+      <span className="indicadores-vazio__icone">
+        <Icone icon={appIcons.flow} />
+      </span>
+      <h2 className="indicadores-vazio__titulo" id={tituloId}>
+        Nenhuma oportunidade no seu acompanhamento ainda
+      </h2>
+      <p className="indicadores-vazio__texto">{conteudo.texto}</p>
+      <p className="indicadores-vazio__texto">
+        Quando houver, esta página mostra {conteudo.aparece}.
+      </p>
+      <Link className="admin-btn" to={conteudo.acao.destino}>
+        <Icone icon={conteudo.acao.icone} />
+        {conteudo.acao.rotulo}
+      </Link>
+    </section>
+  )
+}
+
 export default function IndicadoresPage() {
   const { user } = useAuth()
 
@@ -512,7 +569,7 @@ export default function IndicadoresPage() {
         setErro('')
         setAtualizadoEm(new Date())
       })
-      .catch(() => setErro('Não foi possível carregar os indicadores. Tente novamente.'))
+      .catch(() => setErro('Não foi possível carregar os indicadores.'))
       .finally(() => setCarregando(false))
   }, [])
 
@@ -538,6 +595,11 @@ export default function IndicadoresPage() {
 
   useAtualizarAoFocar(carregar)
 
+  const tentarDeNovo = () => {
+    setCarregando(true)
+    carregar()
+  }
+
   if (carregando) {
     return (
       <div className="console indicadores-page">
@@ -553,6 +615,10 @@ export default function IndicadoresPage() {
           <Icone icon={appIcons.warning} className="admin-callout__icon" />
           {erro}
         </p>
+        <button type="button" className="admin-btn admin-btn--outline" onClick={tentarDeNovo}>
+          <Icone icon={appIcons.sync} />
+          Tentar de novo
+        </button>
       </div>
     )
   }
@@ -570,7 +636,7 @@ export default function IndicadoresPage() {
             Os números do fluxo, no que você acompanha.
           </p>
         </div>
-        {atualizadoEm ? (
+        {atualizadoEm && !semOportunidade ? (
           <p className="indicadores-page__atualizado">
             Atualizado às{' '}
             <time dateTime={atualizadoEm.toISOString()}>{horaDe(atualizadoEm)}</time>
@@ -579,10 +645,7 @@ export default function IndicadoresPage() {
       </header>
 
       {semOportunidade ? (
-        <p className="perfil-card__note">
-          Nenhuma oportunidade no seu acompanhamento ainda. Os números aparecem
-          assim que a primeira entrar no fluxo.
-        </p>
+        <SemOportunidade papel={user?.role} />
       ) : (
         <div className="indicadores-pilha">
           <Resumo numeros={numerosDoResumo(dados, ia)} />

@@ -54,6 +54,17 @@ describe('AbaContexto — a entrada', () => {
   })
 })
 
+describe('AbaContexto — responsável', () => {
+  /**
+   * Sem responsável, a linha ficava em branco e parecia erro de carga.
+   */
+  it('sem responsável, diz que ainda não foi definido', () => {
+    renderizar({ responsavel: '' })
+
+    expect(linha('Responsável')).toHaveTextContent('Não definido')
+  })
+})
+
 describe('AbaContexto — como conduzir', () => {
   /**
    * O roteiro listava as seis etapas com um "Abrir" em cada, igual para toda

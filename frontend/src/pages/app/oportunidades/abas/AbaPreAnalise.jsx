@@ -24,6 +24,7 @@ import {
 import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
 import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
@@ -726,7 +727,7 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
             {podeExecutar ? (
               <button
                 type="button"
-                className="admin-btn"
+                className="admin-btn admin-btn--outline"
                 onClick={executar}
                 disabled={
                   Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
@@ -823,14 +824,6 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
           aoAlternar={alternarRecomendacao}
         />
 
-        {concluida && podeExecutar ? (
-          <ProximoPasso
-            etapa="decisao"
-            irPara={irPara}
-            texto="Depois de acatar as recomendações que fizerem sentido, registre a decisão sobre a oportunidade."
-          />
-        ) : null}
-
         <p className="preanalise__versoes">
           Critérios {analise.versao_criterios} · proposta na versão {analise.versao_proposta}
           {data ? ` · executada em ${data}` : ''}
@@ -838,6 +831,12 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
         </p>
 
         <HistoricoDePreAnalises rodadas={rodadas} aoVer={verRodada} />
+
+        {concluida && podeExecutar ? (
+          <BarraDeAcoes estado="Depois de acatar as recomendações que fizerem sentido, registre a decisão sobre a oportunidade.">
+            <ContinuarPara etapa="decisao" irPara={irPara} />
+          </BarraDeAcoes>
+        ) : null}
       </div>
 
       {rodadaAberta ? (

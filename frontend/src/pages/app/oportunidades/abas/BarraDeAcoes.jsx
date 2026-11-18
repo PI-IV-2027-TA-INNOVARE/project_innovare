@@ -12,13 +12,17 @@ export default function BarraDeAcoes({ estado, children }) {
   )
 }
 
-export function ContinuarPara({ etapa, irPara }) {
+export function ContinuarPara({ etapa, irPara, secundario = false }) {
   const destino = etapaPorId(etapa)
 
   if (!destino || !irPara) return null
 
   return (
-    <button type="button" className="admin-btn" onClick={() => irPara(destino.id)}>
+    <button
+      type="button"
+      className={secundario ? 'admin-btn admin-btn--outline' : 'admin-btn'}
+      onClick={() => irPara(destino.id)}
+    >
       Continuar para {destino.label}
       <Icone icon={appIcons.next} />
     </button>

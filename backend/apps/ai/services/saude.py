@@ -42,7 +42,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import connection
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, OuterRef, Q, Sum
 from django.utils import timezone
 
 from apps.ai.models import ExecucaoIA, StatusExecucao
@@ -113,20 +113,28 @@ def _revisao_humana() -> dict[str, Any]:
     quando saiu do Copiloto; a indicacao e a recomendacao contam com ou sem
     IA, porque o matching e a pre-analise tambem sugerem pelo caminho sem IA,
     e essa sugestao precisa da mesma revisao.
+
+    A indicacao e a recomendacao contam so a rodada em jogo: a equipe e a
+    pre-analise mais recentes de cada oportunidade, as mesmas que as telas
+    mostram. As rodadas substituidas nunca mais serao validadas nem acatadas,
+    e somadas baixavam a proporcao sem ninguem ter deixado de revisar. Da
+    equipe, contam so os incluidos, porque a validacao marca so eles.
     """
     from apps.copilot.models import PropostaEstruturada
     from apps.matching.models import EquipePotencial, MembroEquipe
+    from apps.matching.services.matching import equipe_mais_recente
     from apps.maturity.models import Recomendacao
+    from apps.maturity.services.preanalise import preanalise_mais_recente
 
     propostas = PropostaEstruturada.objects.exclude(execucao_ia__isnull=True).aggregate(
         total=Count('pk'), revisadas=Count('pk', filter=Q(revisada_por_humano=True))
     )
-    indicacoes = MembroEquipe.objects.aggregate(
-        total=Count('pk'), validadas=Count('pk', filter=Q(validada=True))
-    )
-    recomendacoes = Recomendacao.objects.aggregate(
-        total=Count('pk'), acatadas=Count('pk', filter=Q(acatada=True))
-    )
+    indicacoes = MembroEquipe.objects.filter(
+        incluido=True, equipe=equipe_mais_recente(OuterRef('equipe__oportunidade'))
+    ).aggregate(total=Count('pk'), validadas=Count('pk', filter=Q(validada=True)))
+    recomendacoes = Recomendacao.objects.filter(
+        pre_analise=preanalise_mais_recente(OuterRef('pre_analise__proposta'))
+    ).aggregate(total=Count('pk'), acatadas=Count('pk', filter=Q(acatada=True)))
 
     return {
         'propostas_de_ia': propostas['total'],
@@ -147,7 +155,8 @@ def _provedores(execucoes) -> list[dict[str, Any]]:
     provedor. Entram os pares que a configuração põe para responder, os que
     responderam no mês - inclusive de provedor que saiu do registro, para a
     soma das linhas bater com o total - e os provedores registrados sem papel
-    nem uso. A ordem é a do papel: principal, reserva, fora de uso, sem uso.
+    nem uso. A ordem é a do papel: principal, reserva, fora de uso, sem uso; as
+    reservas, na ordem da fila, que é a ordem em que entram.
     """
     registrados = {provedor.nome: provedor for provedor in descritores()}
     papeis = papeis_configurados()
@@ -189,6 +198,7 @@ def _provedores(execucoes) -> list[dict[str, Any]]:
                     (nome, modelo), 'fora_de_uso' if uso else 'sem_uso'
                 ),
                 'configurado': provedor.configurado() if provedor else False,
+                'gratuito': provedor.gratuito() if provedor else False,
                 'modelo': modelo,
                 'chamadas': uso.get('chamadas', 0),
                 'falhas': uso.get('falhas', 0),
@@ -206,9 +216,15 @@ def _provedores(execucoes) -> list[dict[str, Any]]:
             }
         )
 
+    na_fila = {par: posicao for posicao, par in enumerate(papeis)}
+
     return sorted(
         linhas,
-        key=lambda linha: (ORDEM_DOS_PAPEIS[linha['papel']], -linha['chamadas']),
+        key=lambda linha: (
+            ORDEM_DOS_PAPEIS[linha['papel']],
+            na_fila.get((linha['nome'], linha['modelo']), len(na_fila)),
+            -linha['chamadas'],
+        ),
     )
 
 

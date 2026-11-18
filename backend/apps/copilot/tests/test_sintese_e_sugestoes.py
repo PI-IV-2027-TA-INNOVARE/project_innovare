@@ -44,6 +44,7 @@ from core.tests.builders import (
 from core.tests.dubles import (
     ProvedorFake,
     ProvedorIndisponivel,
+    ProvedorPelaReserva,
     ProvedorQueObservaATransacao,
     escrever_base_pipe,
 )
@@ -198,6 +199,12 @@ class SinteseDaEntradaTests(CopilotoV2Tests):
         abertura = sessao.mensagens.get(ordem=1)
         self.assertIn('corrija', abertura.conteudo)
         self.assertIsNotNone(abertura.execucao_ia)
+
+    def test_o_resumo_feito_pela_reserva_fica_na_sessao(self):
+        sessao = self.iniciar(ProvedorPelaReserva(sintese=SINTESE))
+
+        self.assertTrue(sessao.sintese.startswith('Problema: Lotes de suco'))
+        self.assertIn('corrija', sessao.mensagens.get(ordem=1).conteudo)
 
     def test_sem_ia_a_sessao_abre_sem_resumo_e_diz_o_motivo(self):
         sessao = self.iniciar(ProvedorIndisponivel(motivo='limite_da_oportunidade'))

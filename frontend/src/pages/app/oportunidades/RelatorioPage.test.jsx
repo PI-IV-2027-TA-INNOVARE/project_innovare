@@ -227,6 +227,25 @@ describe('RelatorioPage', () => {
     expect(within(anexos).getByText(/nenhum documento anexado/i)).toBeInTheDocument()
   })
 
+  /**
+   * O problema externo chega sem responsável, e o relatório mostrava só "—",
+   * que se lê como dado faltando por erro. Na tela de Contexto já se diz
+   * "Não definido"; o documento fala igual.
+   */
+  it('sem responsável, diz que ainda não foi definido', async () => {
+    api.obterRelatorioOportunidade = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      oportunidade: { ...RELATORIO.oportunidade, responsavel_nome: null },
+    })
+
+    renderRelatorio()
+    await esperarRelatorio()
+
+    const entrada = within(screen.getByRole('region', { name: 'Entrada' }))
+
+    expect(entrada.getByText('Responsável').nextElementSibling).toHaveTextContent('Não definido')
+  })
+
   it('sem decisão registrada, diz que o desfecho não foi registrado', async () => {
     api.obterRelatorioOportunidade = vi
       .fn()
@@ -397,7 +416,10 @@ describe('RelatorioPage', () => {
     const equipe = within(screen.getByRole('region', { name: 'Equipe potencial' }))
     expect(equipe.getByText('A nota de cada pessoa soma quatro parcelas.')).toBeInTheDocument()
     expect(equipe.getByText('Quatro parcelas combinadas, versão 1')).toBeInTheDocument()
-    expect(equipe.getByText(/marina alves · pesquisador · aderência 72%/i)).toBeInTheDocument()
+    expect(equipe.getByRole('rowheader', { name: /marina alves/i })).toBeInTheDocument()
+    expect(equipe.getByRole('columnheader', { name: 'Compatibilidade' })).toBeInTheDocument()
+    expect(equipe.getByRole('cell', { name: '72%' })).toBeInTheDocument()
+    expect(equipe.queryByText(/aderência/i)).not.toBeInTheDocument()
     expect(equipe.getByText('Competência em comum: Microbiologia de alimentos.')).toBeInTheDocument()
     expect(equipe.getByText('Estatística aplicada sem cobertura.')).toBeInTheDocument()
     expect(equipe.queryByText(/pessoa tirada da equipe/i)).not.toBeInTheDocument()
@@ -406,15 +428,98 @@ describe('RelatorioPage', () => {
     const preAnalise = within(screen.getByRole('region', { name: 'Pré-análise de maturidade' }))
     expect(preAnalise.getByText(/análise orientativa/i)).toBeInTheDocument()
     expect(preAnalise.getByText('Cada dimensão recebe um de três níveis.')).toBeInTheDocument()
-    expect(preAnalise.getByText(/desafio tecnológico · consolidada/i)).toBeInTheDocument()
+    expect(preAnalise.getByText('Desafio tecnológico', { selector: 'dt' })).toBeInTheDocument()
+    expect(preAnalise.getByText('Consolidada')).toBeInTheDocument()
     expect(preAnalise.getByText('O desafio está descrito e é verificável.')).toBeInTheDocument()
     expect(preAnalise.getByText('Não há descrição do laboratório.')).toBeInTheDocument()
-    expect(preAnalise.getByText(/descrever o laboratório\. \(acatada\)/i)).toBeInTheDocument()
+    expect(preAnalise.getByText('Descrever o laboratório.').closest('li')).toHaveTextContent('Acatada')
     expect(preAnalise.getByText('Metodologia adequada')).toBeInTheDocument()
 
     expect(screen.queryByRole('link', { name: /relatório da equipe|relatório da pré-análise/i }))
       .not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /ainda não disponível/i })).not.toBeInTheDocument()
+  })
+
+  /**
+   * O documento começava na Entrada, e entender a situação pedia rolar cerca
+   * de dez telas. A visão geral junta o estado de cada etapa no topo.
+   */
+  it('abre com uma visão geral da oportunidade', async () => {
+    api.obterRelatorioOportunidade = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      oportunidade: { ...RELATORIO.oportunidade, responsavel_nome: null },
+      decisao: null,
+      proposta: { versao: 3, revisada_por_humano: true, revisor_nome: 'Rafael Antunes' },
+      competencias: [
+        { id_competencia_necessaria: 1, descricao: 'A', nivel_importancia: 'essencial' },
+        { id_competencia_necessaria: 2, descricao: 'B', nivel_importancia: 'desejavel' },
+      ],
+      equipe: {
+        execucao: null,
+        membros: [
+          { id_membro_equipe: 1, nome: 'Ana', incluido: true, validada: true },
+          { id_membro_equipe: 2, nome: 'Bia', incluido: true, validada: true },
+          { id_membro_equipe: 3, nome: 'Fora', incluido: false, validada: false },
+        ],
+        lacunas: [{ id_lacuna_equipe: 1, descricao: 'X sem cobertura.' }],
+      },
+      pre_analise: {
+        status: 'ok',
+        sintese: 'Proposta promissora.\n- Validar o ineditismo',
+        dimensoes: [
+          { id_dimensao: 1, dimensao: 'viabilidade', nivel: 'fragil', nivel_rotulo: 'Frágil' },
+          { id_dimensao: 2, dimensao: 'plano_pesquisa', nivel: 'consolidada', nivel_rotulo: 'Consolidada' },
+          { id_dimensao: 3, dimensao: 'equipe', nivel: 'em_desenvolvimento', nivel_rotulo: 'Em desenvolvimento' },
+        ],
+        lacunas: [],
+        recomendacoes: [
+          { id_recomendacao: 1, texto: 'R1', acatada: true },
+          { id_recomendacao: 2, texto: 'R2', acatada: false },
+        ],
+        aviso: 'Análise orientativa.',
+      },
+      pendentes: [],
+    })
+
+    renderRelatorio()
+    await esperarRelatorio()
+
+    const geral = screen.getByRole('region', { name: 'Visão geral' })
+    const linha = (rotulo) => within(geral).getByText(rotulo, { selector: 'dt' }).nextElementSibling
+
+    expect(within(geral).getByText(/documento parcial: a decisão ainda não foi registrada/i))
+      .toBeInTheDocument()
+    expect(linha('Decisão')).toHaveTextContent('Pendente')
+    expect(linha('Responsável')).toHaveTextContent('Não definido')
+    expect(linha('Proposta')).toHaveTextContent('Revisada por Rafael Antunes, versão 3')
+    expect(linha('Competências')).toHaveTextContent('2 competências, 1 essencial')
+    expect(linha('Equipe potencial')).toHaveTextContent('2 pessoas · 1 lacuna de competência · validada')
+    expect(linha('Maturidade')).toHaveTextContent('1 frágil')
+    expect(linha('Maturidade')).toHaveTextContent('1 em desenvolvimento')
+    expect(linha('Maturidade')).toHaveTextContent('1 consolidada')
+    expect(linha('Recomendações')).toHaveTextContent('1 de 2 acatadas')
+    expect(within(geral).getByText('Proposta promissora.')).toBeInTheDocument()
+    expect(within(geral).getByRole('listitem')).toHaveTextContent('Validar o ineditismo')
+
+    const sumario = screen.getByRole('navigation', { name: 'Sumário do relatório' })
+    expect(within(sumario).getAllByRole('link')[0]).toHaveTextContent('Visão geral')
+
+    const preAnalise = screen.getByRole('region', { name: 'Pré-análise de maturidade' })
+    expect(within(preAnalise).queryByText('Proposta promissora.')).not.toBeInTheDocument()
+    expect(
+      within(preAnalise).getAllByText(/^(Frágil|Em desenvolvimento|Consolidada)$/).map((selo) => selo.textContent),
+    ).toEqual(['Frágil', 'Em desenvolvimento', 'Consolidada'])
+  })
+
+  it('com a decisão registrada, a visão geral não fala em documento parcial', async () => {
+    renderRelatorio()
+    await esperarRelatorio()
+
+    const geral = screen.getByRole('region', { name: 'Visão geral' })
+
+    expect(within(geral).queryByText(/documento parcial/i)).not.toBeInTheDocument()
+    expect(within(geral).getByText('Decisão', { selector: 'dt' }).nextElementSibling)
+      .not.toHaveTextContent('Pendente')
   })
 
   it('o sumário lista só as seções do documento, sem as partes de dentro', async () => {

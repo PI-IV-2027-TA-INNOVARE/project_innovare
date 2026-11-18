@@ -80,6 +80,83 @@ class MeusDadosTests(TestCase):
             resposta.data['atividade_registrada'][0]['acao'], 'Oportunidade cadastrada'
         )
 
+    def test_a_atividade_diz_sobre_o_que_foi_em_palavras(self):
+        """
+        O "sobre" saia como "usuario 11" ou "configuracao tema": o nome da
+        tabela e o numero interno do banco, que nada dizem a quem le a copia.
+        """
+        for entidade, entidade_id in [
+            ('usuario', self.pessoa.pk),
+            ('configuracao', 'tema'),
+            ('configuracao', 'contatos_suporte'),
+            ('criterio_referencia_pipe', 'V2'),
+            ('oportunidade', self.oportunidade.codigo),
+        ]:
+            registrar_evento(
+                categoria=CategoriaEvento.CONTA,
+                tipo='configuracao_alterada',
+                entidade=entidade,
+                entidade_id=entidade_id,
+                ator=self.pessoa.email,
+            )
+
+        sobre = [item['sobre'] for item in self.copia().data['atividade_registrada']]
+
+        self.assertCountEqual(
+            sobre,
+            [
+                'Sua conta',
+                'Aparência da plataforma',
+                'Contatos de suporte',
+                'Critérios PIPE, versão V2',
+                f'Oportunidade {self.oportunidade.codigo}',
+            ],
+        )
+
+    def test_o_registro_ligado_a_uma_oportunidade_diz_qual(self):
+        proposta = PropostaEstruturada.objects.create(oportunidade=self.oportunidade)
+        registrar_evento(
+            categoria=CategoriaEvento.COPILOTO,
+            tipo='proposta_atualizada',
+            entidade='proposta_estruturada',
+            entidade_id=proposta.pk,
+            ator=self.pessoa.email,
+            oportunidade=self.oportunidade,
+        )
+
+        item = self.copia().data['atividade_registrada'][0]
+
+        self.assertEqual(
+            item['sobre'], f'Proposta estruturada da oportunidade {self.oportunidade.codigo}'
+        )
+
+    def test_o_registro_sobre_outra_conta_nao_mostra_o_numero_dela(self):
+        outra = UsuarioBuilder().com_email('outra@ac2.example').build()
+        registrar_evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='usuario_criado',
+            entidade='usuario',
+            entidade_id=outra.pk,
+            ator=self.pessoa.email,
+        )
+
+        item = self.copia().data['atividade_registrada'][0]
+
+        self.assertEqual(item['sobre'], 'Conta de outra pessoa')
+
+    def test_entidade_sem_nome_conhecido_nao_mostra_tabela_nem_numero(self):
+        registrar_evento(
+            categoria=CategoriaEvento.CONTA,
+            tipo='algo_novo',
+            entidade='tabela_interna',
+            entidade_id=4321,
+            ator=self.pessoa.email,
+        )
+
+        item = self.copia().data['atividade_registrada'][0]
+
+        self.assertEqual(item['sobre'], 'Registro da plataforma')
+
     def test_a_copia_traz_o_perfil_da_rede_de_quem_tem(self):
         pesquisador = UsuarioBuilder().pesquisador().build()
         MembroRedeBuilder().pesquisador().com_acesso(pesquisador).com_experiencia(
