@@ -216,3 +216,35 @@ class ComoFoiCalculadoTests(RelatorioEquipeBaseTests):
 
         for termo in ('score', 'rerank', 'fallback', 'embedding'):
             self.assertNotIn(termo, texto)
+
+
+class RelatorioDaOportunidadeTrazAEquipeInteiraTests(RelatorioEquipeBaseTests):
+    """
+    O relatorio da oportunidade (PB76) e o documento que sai da tela. A equipe
+    entra nele com a explicacao da nota, sem depender de abrir o relatorio da
+    equipe.
+    """
+
+    def consolidado(self):
+        return self.client.get(
+            reverse('oportunidade-relatorio', args=[self.oportunidade.codigo])
+        ).data
+
+    def test_leva_a_explicacao_da_nota_da_rodada(self):
+        self.rodar()
+
+        consolidado = self.consolidado()
+        proprio = self.client.get(self.url()).data
+
+        self.assertTrue(consolidado['como_foi_calculado'])
+        self.assertEqual(
+            consolidado['como_foi_calculado'], proprio['como_foi_calculado']
+        )
+        self.assertTrue(consolidado['equipe']['membros'][0]['match_reasons'])
+
+    def test_diz_quem_rodou_pelo_nome_e_nao_pelo_e_mail(self):
+        self.rodar()
+
+        execucao = self.consolidado()['equipe']['execucao']
+
+        self.assertEqual(execucao['executado_por_nome'], self.supervisor.nome)

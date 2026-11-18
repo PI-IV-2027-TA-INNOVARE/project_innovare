@@ -23,6 +23,15 @@ export function SecaoDoRelatorio({ titulo, children }) {
   )
 }
 
+export function SubsecaoDoRelatorio({ titulo, children }) {
+  return (
+    <div className="relatorio-subsecao">
+      <h3 className="relatorio-subsecao__titulo">{titulo}</h3>
+      {children}
+    </div>
+  )
+}
+
 function irPara(evento, id) {
   const alvo = document.getElementById(id)
 
@@ -35,7 +44,9 @@ function irPara(evento, id) {
 
 /**
  * O leiaute único dos relatórios: o documento e, ao lado, o painel com o
- * sumário das seções, a identificação e as ações.
+ * sumário das seções, a identificação e a impressão. A volta para a
+ * oportunidade fica acima de tudo, como botão: quem só consulta o relatório
+ * não precisa procurá-la no painel.
  *
  * Em tela larga o painel acompanha a rolagem à direita; em tela média vira uma
  * faixa acima do documento; no celular, uma coluna só. Na impressão ele some e
@@ -59,6 +70,10 @@ export default function LayoutDoRelatorio({ voltarPara, identificacao = [], chil
 
   return (
     <div className="console relatorio-page relatorio-layout">
+      <div className="relatorio-layout__topo">
+        <BackLink to={voltarPara}>Voltar para a oportunidade</BackLink>
+      </div>
+
       <aside className="relatorio-painel" aria-label="Sumário e ações do relatório">
         {secoes.length > 0 ? (
           <nav className="relatorio-painel__bloco" aria-label="Sumário do relatório">
@@ -91,10 +106,9 @@ export default function LayoutDoRelatorio({ voltarPara, identificacao = [], chil
 
         <div className="relatorio-painel__acoes">
           <button type="button" className="admin-btn" onClick={() => window.print()}>
-            <Icone icon={appIcons.view} />
+            <Icone icon={appIcons.print} />
             Imprimir
           </button>
-          <BackLink to={voltarPara}>Voltar para a oportunidade</BackLink>
         </div>
       </aside>
 

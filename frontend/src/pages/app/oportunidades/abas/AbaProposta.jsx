@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
 import { Icone, appIcons } from '../../../../lib/icons'
@@ -6,9 +6,12 @@ import { ROLES } from '../../../../lib/roles'
 import {
   atualizarProposta,
   criarProposta,
+  obterEstadoCopiloto,
   obterProposta,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
+import EtapaEncerrada from './EtapaEncerrada'
 import '../OportunidadesPage.scss'
 
 const SECOES = [
@@ -95,21 +98,84 @@ const CAMPOS_PROPOSTA = SECOES.flatMap((secao) => secao.campos)
 
 const CODIGO_NAO_INICIADA = 'proposta_inexistente'
 
-const LINHAS_RECOLHIDAS = 2
+const LINHAS_RECOLHIDAS = 3
 
-function Campo({ campo, valor, onChange, erro, somenteLeitura }) {
+function Apontamento({ id, lacuna }) {
+  return (
+    <div
+      id={id}
+      className="admin-callout admin-callout--alerta proposta__apontamento"
+      role="note"
+    >
+      <Icone icon={appIcons.warning} className="admin-callout__icon" />
+      <div className="admin-callout__text">
+        <p className="proposta__apontamento-cabeca">
+          <span className={`copiloto__selo copiloto__selo--${lacuna.severidade}`}>
+            {lacuna.severidade_rotulo || 'Lacuna'}
+          </span>
+          <span>
+            Apontado pelo Copiloto na última análise
+            {lacuna.natureza_rotulo ? ` · ${lacuna.natureza_rotulo}` : ''}
+          </span>
+        </p>
+        <p className="copiloto__lacuna-descricao">{lacuna.descricao}</p>
+        {lacuna.recomendacao ? (
+          <p className="copiloto__lacuna-recomendacao">
+            <span className="copiloto__lacuna-rotulo">O que fazer: </span>
+            {lacuna.recomendacao}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function Campo({ campo, valor, onChange, erro, somenteLeitura, apontamento }) {
   const { id, label, rows, requerido, isList, dica } = campo
   const [focado, setFocado] = useState(false)
+  const [aberto, setAberto] = useState(false)
+  const [transborda, setTransborda] = useState(false)
+  const caixa = useRef(null)
 
   const texto = isList ? (valor || []).join('\n') : valor || ''
-  const recolhido = !focado && texto.trim() !== ''
+  const recolhido = !focado && !aberto && texto.trim() !== ''
+
+  useLayoutEffect(() => {
+    const elemento = caixa.current
+
+    if (!elemento || !recolhido) return undefined
+
+    const medir = () => setTransborda(elemento.scrollHeight > elemento.clientHeight + 1)
+
+    medir()
+    window.addEventListener('resize', medir)
+    return () => window.removeEventListener('resize', medir)
+  }, [recolhido, texto])
+
+  useLayoutEffect(() => {
+    const elemento = caixa.current
+
+    if (!elemento) return
+
+    if (!aberto) {
+      elemento.style.height = ''
+      return
+    }
+
+    elemento.style.height = 'auto'
+    elemento.style.height = `${elemento.scrollHeight + elemento.offsetHeight - elemento.clientHeight}px`
+  }, [aberto, texto])
 
   const aoDigitar = (event) => {
     const digitado = event.target.value
     onChange(isList ? digitado.split('\n') : digitado)
   }
 
-  const descritores = [`dica-${id}`, erro ? `erro-${id}` : null].filter(Boolean).join(' ')
+  const descritores = [
+    `dica-${id}`,
+    apontamento ? `apontamento-${id}` : null,
+    erro ? `erro-${id}` : null,
+  ].filter(Boolean).join(' ')
 
   return (
     <div className="admin-field">
@@ -119,18 +185,35 @@ function Campo({ campo, valor, onChange, erro, somenteLeitura }) {
       <span id={`dica-${id}`} className="admin-field__hint">
         {dica}
       </span>
-      <textarea
-        id={id}
-        className={`admin-input admin-input--area${recolhido ? ' proposta__texto--recolhido' : ''}`}
-        rows={recolhido ? LINHAS_RECOLHIDAS : rows}
-        value={texto}
-        onChange={aoDigitar}
-        onFocus={() => setFocado(true)}
-        onBlur={() => setFocado(false)}
-        readOnly={somenteLeitura}
-        aria-invalid={Boolean(erro)}
-        aria-describedby={descritores}
-      />
+      {apontamento ? <Apontamento id={`apontamento-${id}`} lacuna={apontamento} /> : null}
+      <div className={`proposta__caixa${recolhido && transborda ? ' proposta__caixa--cortada' : ''}`}>
+        <textarea
+          ref={caixa}
+          id={id}
+          className={`admin-input admin-input--area${recolhido ? ' proposta__texto--recolhido' : ''}`}
+          rows={recolhido ? LINHAS_RECOLHIDAS : rows}
+          value={texto}
+          onChange={aoDigitar}
+          onFocus={() => setFocado(true)}
+          onBlur={() => setFocado(false)}
+          readOnly={somenteLeitura}
+          aria-invalid={Boolean(erro)}
+          aria-describedby={descritores}
+        />
+      </div>
+      {transborda && (recolhido || aberto) ? (
+        <button
+          type="button"
+          className="link-button proposta__ver-tudo"
+          aria-expanded={aberto}
+          aria-controls={id}
+          onClick={() => setAberto((atual) => !atual)}
+        >
+          {aberto ? 'Recolher' : 'Ver texto completo'}{' '}
+          <span className="sr-only">{aberto ? label : `de ${label}`}</span>
+          <Icone icon={appIcons.disclosure} className="proposta__ver-tudo-icone" />
+        </button>
+      ) : null}
       {erro ? (
         <span id={`erro-${id}`} className="admin-field__error" role="alert">
           {erro}
@@ -158,11 +241,19 @@ function quandoFoiSalva(instante) {
   return `Salvo em ${dia} às ${hora}.`
 }
 
-export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
+export default function AbaProposta({
+  oportunidadeId,
+  situacao,
+  irPara,
+  aoAlterar,
+  campoEmFoco,
+  aoFocarCampo,
+}) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeEditar = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeEditar = user?.role === ROLES.SUPERVISOR && !encerrada
 
   const [proposta, setProposta] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -172,6 +263,7 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
   const [salvando, setSalvando] = useState(false)
   const [erroValidacao, setErroValidacao] = useState({})
   const [alterado, setAlterado] = useState(false)
+  const [apontamentos, setApontamentos] = useState([])
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -179,7 +271,13 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
     setNaoIniciada(false)
 
     try {
-      setProposta(await obterProposta(oportunidadeId))
+      const [dados, copiloto] = await Promise.all([
+        obterProposta(oportunidadeId),
+        obterEstadoCopiloto(oportunidadeId).catch(() => null),
+      ])
+
+      setProposta(dados)
+      setApontamentos(copiloto?.lacunas || [])
       setAlterado(false)
     } catch (falha) {
       if (falha?.data?.codigo === CODIGO_NAO_INICIADA) {
@@ -202,6 +300,19 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
   }, [alterado, aoAlterar])
 
   useEffect(() => () => aoAlterar?.(false), [aoAlterar])
+
+  useEffect(() => {
+    if (carregando || !campoEmFoco) return
+
+    const campo = document.getElementById(campoEmFoco)
+
+    if (campo) {
+      campo.focus({ preventScroll: true })
+      campo.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    }
+
+    aoFocarCampo?.()
+  }, [carregando, campoEmFoco, aoFocarCampo])
 
   useEffect(() => {
     if (!alterado) return undefined
@@ -299,17 +410,23 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           <div>
             <h2 className="perfil-card__title">Proposta estruturada</h2>
             <p className="perfil-card__description">
-              Esta oportunidade ainda não tem proposta.
+              {encerrada
+                ? 'Esta oportunidade não tem proposta.'
+                : 'Esta oportunidade ainda não tem proposta.'}
             </p>
           </div>
         </header>
 
         <div className="perfil-card__body">
-          <p className="oportunidade-page__vazio">
-            {podeEditar
-              ? 'O caminho mais rápido é pedir uma primeira versão ao Copiloto. Se preferir, comece a escrever aqui.'
-              : 'O Supervisor ainda não começou a proposta desta oportunidade.'}
-          </p>
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
+          {encerrada ? null : (
+            <p className="oportunidade-page__vazio">
+              {podeEditar
+                ? 'O caminho mais rápido é pedir uma primeira versão ao Copiloto. Se preferir, comece a escrever aqui.'
+                : 'O Supervisor ainda não começou a proposta desta oportunidade.'}
+            </p>
+          )}
 
           {podeEditar ? (
             <div className="proposta__inicio">
@@ -348,8 +465,9 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
         <div>
           <h2 className="perfil-card__title">Proposta estruturada</h2>
           <p className="perfil-card__description">
-            Os oito elementos que descrevem a pesquisa. Revise o texto, ajuste o
-            que precisar e salve: salvar registra a sua revisão.
+            {podeEditar
+              ? 'Os oito elementos que descrevem a pesquisa. Revise o texto, ajuste o que precisar e salve: salvar registra a sua revisão.'
+              : 'Os oito elementos que descrevem a pesquisa.'}
           </p>
         </div>
 
@@ -363,18 +481,23 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
         ) : temConteudo ? (
           <span className="proposta__selo proposta__selo--pendente">
             <Icone icon={appIcons.warning} />
-            Aguardando revisão
+            {encerrada ? 'Não revisada' : 'Aguardando revisão'}
           </span>
         ) : null}
       </header>
 
       <div className="perfil-card__body proposta__corpo">
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
         {!revisada && temConteudo ? (
           <div className="admin-callout admin-callout--alerta" role="note">
             <Icone icon={appIcons.warning} className="admin-callout__icon" />
             <p className="admin-callout__text">
-              O texto pode conter sugestões do Copiloto que ainda não foram
-              revisadas. Leia cada elemento, ajuste o que precisar e salve.
+              {podeEditar
+                ? 'O texto pode conter sugestões do Copiloto que ainda não foram revisadas. Leia cada elemento, ajuste o que precisar e salve.'
+                : encerrada
+                  ? 'O texto pode conter sugestões do Copiloto que não foram revisadas antes da decisão.'
+                  : 'O texto pode conter sugestões do Copiloto que ainda não foram revisadas pelo Supervisor.'}
             </p>
           </div>
         ) : null}
@@ -401,7 +524,9 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
           noValidate
         >
           <p className="proposta__legenda">
-            Cada elemento mostra as duas primeiras linhas. Clique no texto para ver tudo.
+            {podeEditar
+              ? 'Textos longos aparecem recolhidos. Use “Ver texto completo” para ler tudo, ou clique no texto para editar.'
+              : 'Textos longos aparecem recolhidos. Use “Ver texto completo” para ler tudo.'}
           </p>
 
           <fieldset className="proposta__campos">
@@ -416,6 +541,9 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
                     onChange={alterarCampo(campo.id)}
                     erro={erroValidacao[campo.id]}
                     somenteLeitura={!podeEditar}
+                    apontamento={apontamentos.find(
+                      (lacuna) => lacuna.campo_afetado === campo.id,
+                    )}
                   />
                 ))}
               </fieldset>
@@ -450,7 +578,10 @@ export default function AbaProposta({ oportunidadeId, irPara, aoAlterar }) {
             </BarraDeAcoes>
           ) : (
             <p className="proposta__legenda">
-              <Icone icon={appIcons.view} /> Somente leitura: apenas o Supervisor edita a proposta.
+              <Icone icon={appIcons.view} />{' '}
+              {encerrada
+                ? 'Somente leitura: a proposta fica como estava na decisão.'
+                : 'Somente leitura: apenas o Supervisor edita a proposta.'}
             </p>
           )}
         </form>

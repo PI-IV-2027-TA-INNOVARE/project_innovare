@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RelatorioEquipePage from './RelatorioEquipePage'
@@ -33,6 +33,7 @@ const RELATORIO = {
       usou_rerank: false,
       fallback_usado: true,
       executado_por: 'supervisor@ac2microbiologia.com.br',
+      executado_por_nome: 'Rafael Antunes',
       status: 'ok',
     },
     membros: [
@@ -111,15 +112,91 @@ describe('RelatorioEquipePage (PB77)', () => {
     api.obterRelatorioEquipe = vi.fn().mockResolvedValue(RELATORIO)
   })
 
-  it('documenta a composição com a aderência de cada pessoa', async () => {
+  /**
+   * Cada pessoa ocupava de 7 a 11 linhas, com a nota chamada de "aderência"
+   * enquanto o app diz "compatibilidade". Agora é uma tabela, com o mesmo
+   * nome do app e a afinidade com o tema como coluna própria.
+   */
+  it('documenta a composição numa tabela, com a compatibilidade de cada pessoa', async () => {
     renderizar()
 
-    expect(
-      await screen.findByText(/marina alves · pesquisador · aderência 72%/i),
-    ).toBeInTheDocument()
+    const linha = (await screen.findByRole('rowheader', { name: /marina alves/i })).closest('tr')
+
+    expect(screen.getByRole('columnheader', { name: 'Compatibilidade' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /afinidade com o tema/i })).toBeInTheDocument()
+    expect(within(linha).getByRole('cell', { name: '72%' })).toBeInTheDocument()
+    expect(within(linha).getByRole('cell', { name: 'Doutorado' })).toBeInTheDocument()
+    expect(within(linha).getByRole('cell', { name: 'Integral' })).toBeInTheDocument()
+    expect(within(linha).getByRole('cell', { name: 'indisponível' })).toBeInTheDocument()
     expect(
       screen.getByText(/Microbiologia de alimentos" coberta \(100%\)/i),
     ).toBeInTheDocument()
+    expect(screen.queryByText(/aderência/i)).not.toBeInTheDocument()
+  })
+
+  it('separa supervisão de pesquisa e não repete nos motivos o que a tabela já diz', async () => {
+    api.obterRelatorioEquipe = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      equipe: {
+        ...RELATORIO.equipe,
+        membros: [
+          ...RELATORIO.equipe.membros,
+          {
+            id_membro_equipe: 12,
+            nome: 'Wagner Macedo',
+            papel: 'supervisor',
+            papel_rotulo: 'Supervisor',
+            titulacao: 'Doutorado',
+            disponibilidade: 'Integral',
+            score_compatibilidade: '0.3000',
+            match_reasons: [
+              'Competência "Processos industriais" coberta pelo perfil (80%).',
+              'Titulação: Doutorado.',
+              'Formação: não informada.',
+              'Disponibilidade declarada: Integral.',
+              'Integra a rede como Supervisor.',
+              'Afinidade com o tema da oportunidade: 38%.',
+            ],
+            score_features: { semantico: 0.38 },
+            incluido: true,
+            origem: 'ia',
+            origem_rotulo: 'Sugerida pelo matching',
+            validada: false,
+          },
+        ],
+      },
+    })
+
+    renderizar()
+
+    const supervisao = await screen.findByRole('table', { name: 'Supervisão' })
+    const pesquisa = screen.getByRole('table', { name: 'Pesquisa' })
+
+    expect(within(supervisao).getByRole('rowheader', { name: /wagner macedo/i })).toBeInTheDocument()
+    expect(within(pesquisa).queryByText(/wagner macedo/i)).not.toBeInTheDocument()
+    expect(within(supervisao).getByRole('cell', { name: '38%' })).toBeInTheDocument()
+
+    const motivos = within(supervisao).getByText(/Processos industriais/).closest('td')
+
+    expect(motivos).toHaveTextContent('Formação: não informada.')
+    expect(motivos).not.toHaveTextContent('Titulação: Doutorado.')
+    expect(motivos).not.toHaveTextContent('Disponibilidade declarada')
+    expect(motivos).not.toHaveTextContent('Integra a rede como Supervisor.')
+    expect(motivos).not.toHaveTextContent('Afinidade com o tema')
+  })
+
+  /**
+   * "Nenhuma pessoa cobre ..." é a informação mais importante da seção e
+   * ficava no fim, depois da composição inteira.
+   */
+  it('as lacunas da composição vêm antes da tabela', async () => {
+    renderizar()
+
+    const lacunas = await screen.findByRole('heading', { name: 'Lacunas da composição' })
+    const composicao = screen.getByRole('heading', { name: 'Composição sugerida' })
+
+    expect(lacunas.compareDocumentPosition(composicao) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
   })
 
   it('não lista quem o Supervisor tirou da composição', async () => {
@@ -130,13 +207,51 @@ describe('RelatorioEquipePage (PB77)', () => {
     expect(screen.queryByText(/bruno dias/i)).not.toBeInTheDocument()
   })
 
-  it('leva os pesos da rodada, que são a régua da aderência', async () => {
+  /**
+   * O documento mostrava o código da rodada ("hibrido_v1"), o e-mail de quem
+   * rodou, o peso em fração e "no vocabulário da rede": nomes de sistema, não
+   * texto de leitura.
+   */
+  it('não mostra código, e-mail nem jargão da rede', async () => {
     renderizar()
 
-    expect(await screen.findByText('hibrido_v1')).toBeInTheDocument()
-    expect(screen.getByText(/indisponível na rodada/i)).toBeInTheDocument()
-    expect(screen.getByText('peso 0.45')).toBeInTheDocument()
-    expect(screen.getAllByText(/afinidade com o tema/i).length).toBe(2)
+    expect(await screen.findByText('Rafael Antunes')).toBeInTheDocument()
+    expect(screen.queryByText('hibrido_v1')).not.toBeInTheDocument()
+    expect(screen.queryByText(/supervisor@ac2microbiologia/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/vocabulário/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/já cadastrada na rede interna/i).length).toBeGreaterThan(0)
+  })
+
+  /**
+   * A afinidade com o tema aparecia duas vezes no quadro da rodada, uma com o
+   * estado e outra com o peso, e "Revisão da IA: não" não dizia o que isso
+   * muda.
+   */
+  it('leva os pesos da rodada, que são a régua da compatibilidade', async () => {
+    renderizar()
+
+    const titulo = await screen.findByRole('heading', { name: 'Rodada do matching' })
+    const rodada = within(titulo.closest('section, .relatorio-subsecao'))
+
+    expect(rodada.getByText('Quatro parcelas combinadas, versão 1')).toBeInTheDocument()
+    expect(rodada.getAllByText(/afinidade com o tema/i)).toHaveLength(1)
+    expect(rodada.getByText('peso 45% · indisponível nesta rodada')).toBeInTheDocument()
+    expect(rodada.getByText(/não: a ordem é a do cálculo/i)).toBeInTheDocument()
+  })
+
+  it('quando o método já explica os pesos, o quadro da rodada não os repete', async () => {
+    api.obterRelatorioEquipe = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      como_foi_calculado: ['A nota de cada pessoa soma quatro parcelas, cada uma com o seu peso.'],
+    })
+
+    renderizar()
+
+    const titulo = await screen.findByRole('heading', { name: 'Rodada do matching' })
+    const rodada = within(titulo.closest('section, .relatorio-subsecao'))
+
+    expect(rodada.queryByText(/^peso /)).not.toBeInTheDocument()
+    expect(rodada.getByText('indisponível nesta rodada')).toBeInTheDocument()
   })
 
   it('lista as competências comparadas e a lacuna da composição', async () => {

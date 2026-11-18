@@ -1,5 +1,5 @@
 """
-Gateway do Google Gemini.
+Gateway do Google Gemini, e a base dos demais provedores.
 
 E **gateway, nao caso de uso**. Na convencao do projeto (plano 7.2) Service
 Object e um caso de uso por classe, com `execute()`; esta classe traduz as
@@ -8,9 +8,12 @@ casos de uso que a consomem - Copiloto, competencias, matching e pre-analise -
 a recebem por construtor (plano 7.3), que e o que permite o duble em teste
 (AGENTS.md 0.1).
 
-Fala com o provedor pela biblioteca `google-genai`, que permite limitar o
-"raciocinio" do modelo (`AI_GEMINI_ORCAMENTO_RACIOCINIO`). Toda chamada leva o
-prompt de sistema da baseline; o texto de cada tarefa vem de `prompts.py`.
+`GatewayDeIA` e o que todo provedor faz igual: registro da execucao,
+tentativas, leitura do JSON e fallback. `ProvedorGemini` acrescenta so o
+cliente, pela biblioteca `google-genai`, que permite limitar o "raciocinio" do
+modelo (`AI_GEMINI_ORCAMENTO_RACIOCINIO`). Os provedores compativeis com a API
+da OpenAI ficam em `compativel_openai.py`. Toda chamada leva o prompt de
+sistema da baseline; o texto de cada tarefa vem de `prompts.py`.
 """
 import json
 import logging
@@ -28,6 +31,7 @@ from apps.ai.services.custo import (
     custo_da_chamada,
 )
 from apps.ai.services.sem_ia import resposta_vazia
+from core.medicao import espera_de_ia
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +72,10 @@ def falha_passageira(erro: Exception) -> bool:
     """
     O que vale tentar de novo: 429, 5xx e o tempo esgotado.
 
-    Erro de requisicao - prompt invalido, chave recusada - devolve a mesma
-    resposta na segunda vez, e repeti-lo so gasta a espera do usuario.
+    Vale para o erro do SDK do Gemini e para o status HTTP das APIs
+    compativeis com a da OpenAI. Erro de requisicao - prompt invalido, chave
+    recusada - devolve a mesma resposta na segunda vez, e repeti-lo so gasta a
+    espera do usuario.
     """
     from google.genai import errors as erros_genai
 
@@ -83,6 +89,10 @@ def falha_passageira(erro: Exception) -> bool:
         import httpx
     except ImportError:
         return False
+
+    if isinstance(erro, httpx.HTTPStatusError):
+        codigo = erro.response.status_code
+        return codigo == 429 or codigo >= 500
 
     return isinstance(erro, httpx.TimeoutException)
 
@@ -140,15 +150,21 @@ class ClienteGenAI:
         )
 
 
-class ProvedorGemini:
+class GatewayDeIA:
     """
-    O Gemini com rastreabilidade, fallback e parsing robusto.
+    O provedor de IA com rastreabilidade, fallback e parsing robusto.
 
-    Sem `GEMINI_API_KEY` nasce indisponivel e toda operacao cai no fallback
+    Cada provedor diz o nome, as settings da chave e do modelo e como criar o
+    cliente. O cliente cumpre `generate_content` e devolve a resposta com
+    `text` e `usage_metadata`, que e a forma do SDK do Gemini.
+
+    Sem chave ou sem modelo nasce indisponivel e toda operacao cai no fallback
     sem tocar a rede - e o que mantem a suite isolada (AGENTS.md 0.1).
     """
 
-    provedor = 'google'
+    provedor = ''
+    chave_setting = ''
+    modelo_setting = ''
 
     def __init__(
         self,
@@ -161,10 +177,10 @@ class ProvedorGemini:
         """
         `cliente` substitui o SDK e `dormir` a espera entre tentativas - e o que
         deixa o teste exercitar o retry sem rede e sem relogio (AGENTS.md 0.1).
-        `orcamento_raciocinio` vence a settings so neste provedor: e o que a
+        `orcamento_raciocinio` vence a settings so no Gemini: e o que a
         medicao manual usa para comparar com e sem limite.
         """
-        self._modelo = modelo or settings.AI_MATCH_GEMINI_MODEL
+        self._modelo = modelo or str(getattr(settings, self.modelo_setting, '') or '')
         self._dormir = dormir
         temperatura = (
             temperatura
@@ -172,22 +188,32 @@ class ProvedorGemini:
             else settings.AI_GEMINI_TEMPERATURA
         )
 
-        api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        api_key = getattr(settings, self.chave_setting, None)
+
         if cliente is not None:
             self.model = cliente
-            self._disponivel = True
-        elif not api_key:
-            logger.warning('GEMINI_API_KEY nao configurada. IA indisponivel - fallback ativo.')
-            self._disponivel = False
-            self.model = None
-        else:
-            self.model = ClienteGenAI(
+        elif api_key and self._modelo:
+            self.model = self._criar_cliente(
                 api_key=api_key,
-                modelo=self._modelo,
                 temperatura=temperatura,
                 orcamento_raciocinio=orcamento_raciocinio,
             )
-            self._disponivel = True
+        else:
+            self.model = None
+
+        self._disponivel = self.model is not None
+
+        if not self._disponivel:
+            logger.warning(
+                f'{self.provedor}: chave, modelo ou endereco nao configurado. '
+                'IA indisponivel - fallback ativo.'
+            )
+
+    def _criar_cliente(
+        self, *, api_key: str, temperatura: float, orcamento_raciocinio: int | None
+    ):
+        """O cliente do provedor, ou `None` quando falta configuracao."""
+        raise NotImplementedError
 
     @property
     def disponivel(self) -> bool:
@@ -271,19 +297,25 @@ class ProvedorGemini:
         logger.warning(f'Falha ao parsear JSON da IA: {texto[:200]}')
         return {'_erro_parse': True, '_raw': texto[:500]}
 
-    def _gerar(self, prompt: str):
+    def _gerar(self, prompt: str, ao_repetir: Callable[..., None] | None = None):
         """
         A chamada ao provedor com timeout e retry limitado.
 
         `Metodos_Integracao_IA.md` pede "timeout e retry limitado; tratamento
         de 429, 5xx e indisponibilidade". A espera dobra a cada tentativa para
         nao insistir sobre um provedor que pediu calma (429).
+
+        `ao_repetir` e avisado de cada tentativa que falhou e vai ser repetida,
+        depois da espera: e o que deixa cada tentativa com a sua linha no
+        registro de chamadas (PB108).
         """
         tentativas = max(1, settings.AI_GEMINI_TENTATIVAS)
         espera = settings.AI_GEMINI_ESPERA_INICIAL_S
         sistema, _ = prompts.prompt_de_sistema()
 
         for tentativa in range(1, tentativas + 1):
+            inicio = time.perf_counter()
+
             try:
                 return self.model.generate_content(
                     prompt,
@@ -298,12 +330,21 @@ class ProvedorGemini:
                     raise ChamadaEsgotada(
                         f'Falha passageira em {tentativas} tentativas: {falha}'
                     ) from falha
+                latencia_ms = int((time.perf_counter() - inicio) * 1000)
                 logger.warning(
-                    f'Falha passageira no Gemini (tentativa {tentativa} de '
+                    f'Falha passageira em {self.provedor} (tentativa {tentativa} de '
                     f'{tentativas}): {falha}'
                 )
                 self._dormir(espera)
                 espera *= 2
+
+                if ao_repetir is not None:
+                    ao_repetir(
+                        tentativa=tentativa,
+                        tentativas=tentativas,
+                        falha=falha,
+                        latencia_ms=latencia_ms,
+                    )
 
     def _ler(self, response, validar: Callable[[dict], bool] | None) -> dict[str, Any]:
         resultado = self._parse_json_seguro(getattr(response, 'text', None) or '{}')
@@ -326,7 +367,7 @@ class ProvedorGemini:
         validar: Callable[[dict], bool] | None = None,
     ) -> dict[str, Any]:
         """
-        Executa no Gemini com fallback automatico.
+        Executa no provedor com fallback automatico.
 
         O teto de gasto nao e conferido aqui: o registro entrega o provedor
         embrulhado em `ProvedorComTetoDeCusto`, que vale para todos.
@@ -335,7 +376,7 @@ class ProvedorGemini:
         exige - e pedida de novo uma vez, com o mesmo prompt.
         """
         if not self._disponivel:
-            logger.info(f'Gemini indisponivel - executando fallback para {tipo}')
+            logger.info(f'{self.provedor} indisponivel - executando fallback para {tipo}')
             return {
                 'dados': fallback_fn(),
                 'execucao_ia': None,
@@ -343,19 +384,35 @@ class ProvedorGemini:
                 'motivo_fallback': MOTIVO_SEM_IA,
             }
 
-        execucao = self._criar_execucao(
-            tipo=tipo,
-            oportunidade_id=oportunidade_id,
-            correlation_id=correlation_id,
-            prompt_versao=prompt_versao,
-            parametros=parametros,
-            executado_por=executado_por,
-        )
+        def abrir_execucao() -> ExecucaoIA:
+            return self._criar_execucao(
+                tipo=tipo,
+                oportunidade_id=oportunidade_id,
+                correlation_id=correlation_id,
+                prompt_versao=prompt_versao,
+                parametros=parametros,
+                executado_por=executado_por,
+            )
 
+        execucao = abrir_execucao()
         inicio = time.perf_counter()
 
+        def nova_tentativa(*, tentativa, tentativas, falha, latencia_ms) -> None:
+            """A tentativa que falhou fecha a sua linha; a proxima abre outra."""
+            nonlocal execucao, inicio
+
+            self._finalizar_execucao(
+                execucao=execucao,
+                status=StatusExecucao.ERRO,
+                latencia_ms=latencia_ms,
+                erro=f'Tentativa {tentativa} de {tentativas}: {falha}',
+            )
+            execucao = abrir_execucao()
+            inicio = time.perf_counter()
+
         try:
-            response = self._gerar(prompt)
+            with espera_de_ia():
+                response = self._gerar(prompt, ao_repetir=nova_tentativa)
             latencia_ms = int((time.perf_counter() - inicio) * 1000)
 
             tokens_entrada, tokens_saida = tokens_da_resposta(
@@ -365,8 +422,9 @@ class ProvedorGemini:
             resultado = self._ler(response, validar)
 
             if resultado.get('_erro_parse'):
-                logger.warning(f'Resposta malformada do Gemini ({tipo}); pedindo de novo.')
-                response = self._gerar(prompt)
+                logger.warning(f'Resposta malformada de {self.provedor} ({tipo}); pedindo de novo.')
+                with espera_de_ia():
+                    response = self._gerar(prompt, ao_repetir=nova_tentativa)
                 latencia_ms = int((time.perf_counter() - inicio) * 1000)
                 entrada_extra, saida_extra = tokens_da_resposta(
                     response, prompt=prompt
@@ -394,7 +452,7 @@ class ProvedorGemini:
 
         except Exception as e:
             latencia_ms = int((time.perf_counter() - inicio) * 1000)
-            logger.error(f'Erro no Gemini ({tipo}): {e}')
+            logger.error(f'Erro em {self.provedor} ({tipo}): {e}')
 
             self._finalizar_execucao(
                 execucao=execucao,
@@ -535,6 +593,24 @@ class ProvedorGemini:
             fallback_fn=lambda: resposta_vazia('pre_analise_pipe'),
             executado_por=executado_por,
             validar=recomendacoes_vinculadas,
+        )
+
+
+class ProvedorGemini(GatewayDeIA):
+    """O Gemini, pela biblioteca `google-genai`."""
+
+    provedor = 'google'
+    chave_setting = 'GEMINI_API_KEY'
+    modelo_setting = 'AI_MATCH_GEMINI_MODEL'
+
+    def _criar_cliente(
+        self, *, api_key: str, temperatura: float, orcamento_raciocinio: int | None
+    ) -> ClienteGenAI:
+        return ClienteGenAI(
+            api_key=api_key,
+            modelo=self._modelo,
+            temperatura=temperatura,
+            orcamento_raciocinio=orcamento_raciocinio,
         )
 
 

@@ -10,11 +10,12 @@ from datetime import timedelta
 from pathlib import Path
 
 from celery.schedules import crontab
-from decouple import Config, RepositoryEnv, config as env_config
+from decouple import Config, Csv, RepositoryEnv, config as env_config
 
 from core.configuracao import (
     AMBIENTE_PRODUCAO,
     ambiente_declarado,
+    cache_da_aplicacao,
     caminho_do_admin,
     chave_de_assinatura,
     exigir_ambiente_coerente,
@@ -94,6 +95,8 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'core.middleware.LimiteDeCorpo',
+    'core.middleware.TravaDoAdmin',
     'core.middleware.MedidorDeDesempenho',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -208,6 +211,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
         'rest_framework.throttling.ScopedRateThrottle',
         'core.limites.LimiteDaIA',
+        'core.limites.LimiteDeEnvioDeAnexo',
+        'core.limites.LimitePorConta',
     ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': config('THROTTLE_ANON', default='60/min'),
@@ -225,11 +230,47 @@ LIMITE_DA_IA = config('THROTTLE_IA', default='') or '30/hour'
 Pedidos que chamam a IA, por pessoa, somados entre as rotas (`core/limites.py`).
 """
 
+LIMITE_DE_ANEXOS = config('THROTTLE_ANEXO', default='') or '30/hour'
+"""
+Envios de anexo, por pessoa (`core/limites.py`). A cota de cada oportunidade e
+o `ANEXO_LIMITE_POR_OPORTUNIDADE`.
+"""
+
+LIMITES_POR_CONTA = {
+    'entrada': config('THROTTLE_LOGIN_CONTA', default='') or '30/hour',
+    'recuperacao': config('THROTTLE_RECUPERACAO_CONTA', default='') or '5/hour',
+}
+"""
+Tentativas de entrada e pedidos de recuperacao de senha contados pelo e-mail
+digitado, somando todos os enderecos de origem (`core/limites.py`).
+"""
+
+LIMITE_DE_ENTRADA_NO_ADMIN = config('THROTTLE_ADMIN', default='') or '10/min'
+"""
+Tentativas de senha no `/admin/` do Django, por endereco (`core/middleware.py`).
+"""
+
+CACHES = cache_da_aplicacao(
+    config('CACHE_URL', default=''), rodando_testes=RUNNING_TESTS
+)
+"""
+Onde vivem os contadores dos limites acima. Sem `CACHE_URL` e a memoria de cada
+processo; com mais de um processo, o limite real se multiplica.
+"""
+
+SEGUNDO_PLANO_IMEDIATO = RUNNING_TESTS
+"""
+Na suite, o que sairia do pedido (`core/segundo_plano.py`) roda na hora.
+"""
+
 if RUNNING_TESTS:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = dict.fromkeys(
         REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
     )
     LIMITE_DA_IA = None
+    LIMITE_DE_ANEXOS = None
+    LIMITES_POR_CONTA = {}
+    LIMITE_DE_ENTRADA_NO_ADMIN = None
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 SIMPLE_JWT = {
@@ -284,6 +325,13 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+CORPO_MAXIMO_KB = config('CORPO_MAXIMO_KB', default=1024, cast=int)
+"""
+Tamanho maximo do corpo de um pedido, fora o envio de anexo, que segue o
+`ANEXO_TAMANHO_MAXIMO_MB` (`core/middleware.py`).
+"""
 ANEXO_TAMANHO_MAXIMO_MB = config('ANEXO_TAMANHO_MAXIMO_MB', default=10, cast=int)
 ANEXO_TIPOS_ACEITOS = tuple(
     config(
@@ -294,6 +342,10 @@ ANEXO_TIPOS_ACEITOS = tuple(
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         ),
     ).split(',')
+)
+
+ANEXO_LIMITE_POR_OPORTUNIDADE = config(
+    'ANEXO_LIMITE_POR_OPORTUNIDADE', default=30, cast=int
 )
 
 RETENCAO_EVENTOS_CONTA_MESES = config(
@@ -360,6 +412,36 @@ AI_MATCH_GEMINI_MODEL = config('AI_MATCH_GEMINI_MODEL', default='gemini-2.5-flas
 AI_PROVEDOR_PRINCIPAL = config('AI_PROVEDOR_PRINCIPAL', default='google')
 AI_PROVEDOR_RESERVA = config('AI_PROVEDOR_RESERVA', default='')
 AI_MODELO_RESERVA = config('AI_MODELO_RESERVA', default='')
+
+# Catalogo de provedores compativeis com a API da OpenAI (SPEC-23). Cada nome
+# le as proprias settings pelo prefixo: groq -> GROQ_API_KEY, AI_GROQ_URL,
+# AI_GROQ_MODELO, AI_GROQ_ROTULO, AI_GROQ_CUSTO_*_BRL_POR_MILHAO e
+# AI_GROQ_GRATUITO.
+AI_PROVEDORES_COMPATIVEIS = config('AI_PROVEDORES_COMPATIVEIS', default='', cast=Csv())
+_do_catalogo = {}
+
+for _nome in AI_PROVEDORES_COMPATIVEIS:
+    _prefixo = _nome.upper()
+    _do_catalogo.update(
+        {
+            f'{_prefixo}_API_KEY': config(f'{_prefixo}_API_KEY', default=''),
+            f'AI_{_prefixo}_URL': config(f'AI_{_prefixo}_URL', default=''),
+            f'AI_{_prefixo}_MODELO': config(f'AI_{_prefixo}_MODELO', default=''),
+            f'AI_{_prefixo}_ROTULO': config(f'AI_{_prefixo}_ROTULO', default=''),
+            f'AI_{_prefixo}_CUSTO_ENTRADA_BRL_POR_MILHAO': config(
+                f'AI_{_prefixo}_CUSTO_ENTRADA_BRL_POR_MILHAO', default=0.0, cast=float
+            ),
+            f'AI_{_prefixo}_CUSTO_SAIDA_BRL_POR_MILHAO': config(
+                f'AI_{_prefixo}_CUSTO_SAIDA_BRL_POR_MILHAO', default=0.0, cast=float
+            ),
+            f'AI_{_prefixo}_GRATUITO': config(
+                f'AI_{_prefixo}_GRATUITO', default=False, cast=bool
+            ),
+        }
+    )
+
+globals().update(_do_catalogo)
+
 AI_GEMINI_TEMPERATURA = config('AI_GEMINI_TEMPERATURA', default=0.3, cast=float)
 AI_GEMINI_MAX_TOKENS_SAIDA = config(
     'AI_GEMINI_MAX_TOKENS_SAIDA', default=8192, cast=int
@@ -391,6 +473,17 @@ AI_CUSTO_SAIDA_BRL_POR_MILHAO = config(
 # Fila assincrona (SPEC-14). A pre-analise continua sincrona por padrao; so
 # liga no worker quando o ambiente tiver Redis e um worker rodando.
 PREANALISE_ASSINCRONA = config('PREANALISE_ASSINCRONA', default=False, cast=bool)
+_reservas = [nome for nome in AI_PROVEDOR_RESERVA.split(',') if nome.strip()]
+PREANALISE_TEMPO_MAXIMO_S = config(
+    'PREANALISE_TEMPO_MAXIMO_S',
+    default=(1 + (len(_reservas) or (1 if AI_MODELO_RESERVA else 0)))
+    * (
+        AI_GEMINI_TENTATIVAS * AI_GEMINI_TIMEOUT_S
+        + AI_GEMINI_ESPERA_INICIAL_S * (2 ** (AI_GEMINI_TENTATIVAS - 1) - 1)
+    )
+    + 15,
+    cast=float,
+)
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='')
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
@@ -401,6 +494,10 @@ CELERY_BEAT_SCHEDULE = {
     'aplicar-retencao-lgpd': {
         'task': 'audit.aplicar_retencao',
         'schedule': crontab(hour=3, minute=0),
+    },
+    'limpar-sessoes-vencidas': {
+        'task': 'accounts.limpar_sessoes_vencidas',
+        'schedule': crontab(hour=3, minute=30),
     },
 }
 
@@ -421,7 +518,13 @@ BASE_CONHECIMENTO_PIPE = Path(
 )
 
 if RUNNING_TESTS:
-    GEMINI_API_KEY = ''
+    for _nome in _do_catalogo:
+        del globals()[_nome]
+    globals().update({nome: '' for nome in list(globals()) if nome.endswith('_API_KEY')})
+    AI_PROVEDOR_PRINCIPAL = 'google'
+    AI_PROVEDOR_RESERVA = ''
+    AI_MODELO_RESERVA = ''
+    AI_PROVEDORES_COMPATIVEIS = []
     AI_MATCH_RERANK_ENABLED = False
     SEARCH_EMBEDDING_ENABLED = False
     PREANALISE_ASSINCRONA = False

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
 import { AdminToast, useToast } from '../../../components/console/toast'
@@ -13,6 +13,7 @@ import {
   registrarDecisao as registrarDecisaoNaApi,
 } from '../../../services/pdConnectApi'
 import AnexosOportunidade from '../../../components/AnexosOportunidade'
+import NaoEncontradaPage from '../../system/NaoEncontradaPage'
 import AbaCompetencias from './abas/AbaCompetencias'
 import AbaContexto from './abas/AbaContexto'
 import AbaCopiloto from './abas/AbaCopiloto'
@@ -27,6 +28,7 @@ import {
   ETAPAS,
   REGISTROS,
   andamentoDasEtapas,
+  etapaDaSituacao,
   etapaPorId,
 } from './etapas'
 import {
@@ -40,6 +42,40 @@ import {
 import './OportunidadesPage.scss'
 
 const ABAS = [...ETAPAS, ...REGISTROS]
+
+const FORMATO_DO_CODIGO = /^OP-\d{4}-\d{3,}$/
+
+const VOLTA_PARA_A_LISTA = { to: '/oportunidades', label: 'Voltar para oportunidades' }
+
+const AVISO_DA_PROPOSTA = 'Há alterações não salvas na proposta. Sair desta etapa sem salvar?'
+
+const AVISO_DAS_RESPOSTAS =
+  'Há respostas ao Copiloto que não foram enviadas. Sair desta etapa sem enviar?'
+
+const ESTADO_VISIVEL = {
+  [CONCLUIDA]: 'concluída',
+  [EM_ANDAMENTO]: 'em andamento',
+}
+
+function posicaoDa(etapa, andamento) {
+  const estado = andamento[etapa.id]
+  const atual = ETAPAS.find((item) => andamento[item.id] === EM_ANDAMENTO)
+
+  if (!atual || estado === EM_ANDAMENTO) {
+    const partes = [`Etapa ${etapa.numero} de ${ETAPAS.length}`]
+
+    if (estado) partes.push(ESTADO_VISIVEL[estado])
+
+    return { texto: partes.join(' · '), atual: null }
+  }
+
+  const comoEsta = estado === CONCLUIDA ? 'já concluída' : 'que ainda não começou'
+
+  return {
+    texto: `Você está vendo a etapa ${etapa.numero} de ${ETAPAS.length}, ${comoEsta}. Etapa atual: ${atual.numero}, ${atual.label}.`,
+    atual,
+  }
+}
 
 function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
   const classes = [
@@ -84,10 +120,24 @@ export default function OportunidadePage() {
   const [erroCarga, setErroCarga] = useState('')
   const [abaAtiva, setAbaAtiva] = useState('contexto')
   const [abaOcupada, setAbaOcupada] = useState(false)
-  const [rascunhoPendente, setRascunhoPendente] = useState(false)
+  const [rascunhoPendente, setRascunhoPendente] = useState('')
+  const [campoEmFoco, setCampoEmFoco] = useState(null)
+  const [matchingEmCurso, setMatchingEmCurso] = useState(false)
+  const abaAberta = useRef(abaAtiva)
+  const [naoEncontrada, setNaoEncontrada] = useState(false)
+  const [bordas, setBordas] = useState({ antes: false, depois: false })
+  const barraDeEtapas = useRef(null)
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
-    if (!silencioso) setCarregando(true)
+    if (!FORMATO_DO_CODIGO.test(id)) {
+      setCarregando(false)
+      return
+    }
+
+    if (!silencioso) {
+      setCarregando(true)
+      setNaoEncontrada(false)
+    }
     setErroCarga('')
 
     try {
@@ -96,10 +146,16 @@ export default function OportunidadePage() {
         listarHistorico(id).catch(() => []),
       ])
 
-      setRegistro(daApi(dados))
+      const carregado = daApi(dados)
+
+      setRegistro(carregado)
       setEventos((trilha.results || trilha).map(eventoDaApi))
+      if (!silencioso) setAbaAtiva(etapaDaSituacao(carregado.situacao))
     } catch (falha) {
-      if (!silencioso) setRegistro(null)
+      if (!silencioso) {
+        setRegistro(null)
+        setNaoEncontrada(falha?.status === 404)
+      }
       setErroCarga(falha?.message || 'Não foi possível carregar esta oportunidade.')
     } finally {
       setCarregando(false)
@@ -110,27 +166,104 @@ export default function OportunidadePage() {
     carregar()
   }, [carregar])
 
+  useEffect(() => {
+    if (carregando) return
+
+    barraDeEtapas.current
+      ?.querySelector('[aria-current="step"]')
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'center' })
+  }, [carregando, abaAtiva])
+
+  const medirBordas = useCallback(() => {
+    const barra = barraDeEtapas.current
+
+    if (!barra) return
+
+    const antes = barra.scrollLeft > 1
+    const depois = barra.scrollLeft + barra.clientWidth < barra.scrollWidth - 1
+
+    setBordas((atual) =>
+      atual.antes === antes && atual.depois === depois ? atual : { antes, depois },
+    )
+  }, [])
+
+  useEffect(() => {
+    const barra = barraDeEtapas.current
+
+    if (carregando || !barra) return undefined
+
+    medirBordas()
+    barra.addEventListener('scroll', medirBordas, { passive: true })
+    window.addEventListener('resize', medirBordas)
+
+    return () => {
+      barra.removeEventListener('scroll', medirBordas)
+      window.removeEventListener('resize', medirBordas)
+    }
+  }, [carregando, medirBordas])
+
+  const rolarEtapas = (sentido) => {
+    const barra = barraDeEtapas.current
+
+    barra?.scrollBy?.({ left: sentido * barra.clientWidth * 0.7, behavior: 'smooth' })
+  }
+
   const atualizarEmSegundoPlano = useCallback(
     () => carregar({ silencioso: true }),
     [carregar],
   )
 
+  useEffect(() => {
+    abaAberta.current = abaAtiva
+  }, [abaAtiva])
+
+  const rodarMatching = useCallback(async (acao) => {
+    setMatchingEmCurso(true)
+
+    try {
+      const resultado = await acao()
+
+      if (abaAberta.current !== 'equipe') {
+        showToast('A equipe potencial ficou pronta. Veja na etapa Equipe potencial.')
+      }
+
+      atualizarEmSegundoPlano()
+      return resultado
+    } catch (falha) {
+      if (abaAberta.current !== 'equipe') {
+        showToast(falha?.message || 'O matching não foi concluído.')
+      }
+
+      throw falha
+    } finally {
+      setMatchingEmCurso(false)
+    }
+  }, [atualizarEmSegundoPlano, showToast])
+
   const trocarAba = useCallback((destino) => {
-    if (
-      rascunhoPendente &&
-      !window.confirm('Há alterações não salvas na proposta. Sair desta etapa sem salvar?')
-    ) {
+    if (rascunhoPendente && !window.confirm(rascunhoPendente)) {
       return
     }
 
-    setRascunhoPendente(false)
+    setRascunhoPendente('')
     setAbaAtiva(destino)
   }, [rascunhoPendente])
 
-  const irPara = useCallback((destino) => {
+  const alterouProposta = useCallback((alterado) => {
+    setRascunhoPendente(alterado ? AVISO_DA_PROPOSTA : '')
+  }, [])
+
+  const alterouRespostas = useCallback((alterado) => {
+    setRascunhoPendente(alterado ? AVISO_DAS_RESPOSTAS : '')
+  }, [])
+
+  const irPara = useCallback((destino, campo = null) => {
     trocarAba(destino)
+    setCampoEmFoco(campo)
     window.scrollTo?.({ top: 0, behavior: 'smooth' })
   }, [trocarAba])
+
+  const focouCampo = useCallback(() => setCampoEmFoco(null), [])
 
   const mudarPrioridade = async (event) => {
     const prioridade = event.target.value
@@ -155,6 +288,10 @@ export default function OportunidadePage() {
     }
   }
 
+  if (!FORMATO_DO_CODIGO.test(id)) {
+    return <NaoEncontradaPage voltar={VOLTA_PARA_A_LISTA} />
+  }
+
   if (carregando) {
     return (
       <div className="console oportunidade-page">
@@ -166,12 +303,27 @@ export default function OportunidadePage() {
     )
   }
 
+  if (!registro && naoEncontrada) {
+    return (
+      <NaoEncontradaPage
+        titulo="Oportunidade não encontrada"
+        texto={
+          <>
+            Não encontramos a oportunidade <code>{id}</code>. Ela pode não existir ou
+            não estar disponível para o seu perfil.
+          </>
+        }
+        voltar={VOLTA_PARA_A_LISTA}
+      />
+    )
+  }
+
   if (!registro) {
     return (
       <div className="console oportunidade-page">
         <BackLink to="/oportunidades">Voltar para oportunidades</BackLink>
         <p className="oportunidade-page__vazio">
-          Nenhuma oportunidade com o código <code>{id}</code>.
+          Não foi possível carregar a oportunidade <code>{id}</code>.
           {erroCarga ? ` ${erroCarga}` : ''}
         </p>
         <button type="button" className="admin-btn admin-btn--outline" onClick={() => carregar()}>
@@ -185,6 +337,7 @@ export default function OportunidadePage() {
   const decisao = registro.decisao
   const andamento = andamentoDasEtapas(registro.situacao)
   const etapaAtiva = etapaPorId(abaAtiva)
+  const posicao = etapaAtiva ? posicaoDa(etapaAtiva, andamento) : null
 
   return (
     <div className="console oportunidade-page">
@@ -205,13 +358,17 @@ export default function OportunidadePage() {
 
         <h1 className="oportunidade-page__title">{registro.titulo}</h1>
 
-        <div className="oportunidade-page__meta">
+        <p className="oportunidade-page__identidade">
           <span className="oportunidade-page__codigo">{registro.id}</span>
-          <span className={`origem-badge origem-badge--${registro.origem}`}>
-            {origemLabel(registro.origem)}
-          </span>
+          <span className="oportunidade-page__demandante">{registro.demandante}</span>
+        </p>
+
+        <div className="oportunidade-page__meta">
           <span className={`fluxo-badge fluxo-badge--${registro.situacao}`}>
             {situacaoLabel(registro.situacao)}
+          </span>
+          <span className={`origem-badge origem-badge--${registro.origem}`}>
+            {origemLabel(registro.origem)}
           </span>
           {ehSupervisor && registro.prioridade ? (
             <label className="oportunidade-page__prioridade">
@@ -232,14 +389,33 @@ export default function OportunidadePage() {
               Prioridade {prioridadeLabel(registro.prioridade).toLowerCase()}
             </span>
           ) : null}
-          <span className="oportunidade-page__demandante">{registro.demandante}</span>
           <span className="user-cell__meta">
             Atualizada {formatarUltimoAcesso(registro.atualizadaEm).toLowerCase()}
           </span>
         </div>
       </header>
 
-      <nav className="oportunidade-abas" aria-label="Etapas da oportunidade">
+      <div
+        className={[
+          'oportunidade-abas-trilho',
+          bordas.antes ? 'ha-antes' : '',
+          bordas.depois ? 'ha-depois' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        {bordas.antes ? (
+          <button
+            type="button"
+            className="oportunidade-abas__rolar oportunidade-abas__rolar--antes"
+            aria-label="Ver etapas anteriores"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => rolarEtapas(-1)}
+          >
+            <Icone icon={appIcons.previous} />
+          </button>
+        ) : null}
+
+      <nav className="oportunidade-abas" aria-label="Etapas da oportunidade" ref={barraDeEtapas}>
         <ol className="oportunidade-abas__etapas">
           {ETAPAS.map((item) => (
             <li key={item.id}>
@@ -268,9 +444,36 @@ export default function OportunidadePage() {
         </ul>
       </nav>
 
-      {etapaAtiva ? (
+        {bordas.depois ? (
+          <button
+            type="button"
+            className="oportunidade-abas__rolar oportunidade-abas__rolar--depois"
+            aria-label="Ver mais etapas"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => rolarEtapas(1)}
+          >
+            <Icone icon={appIcons.next} />
+          </button>
+        ) : null}
+      </div>
+
+      {posicao ? (
         <p className="oportunidade-abas__posicao">
-          Etapa {etapaAtiva.numero} de {ETAPAS.length}
+          <span>{posicao.texto}</span>
+          {posicao.atual ? (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => trocarAba(posicao.atual.id)}
+                disabled={abaOcupada}
+              >
+                Ir para a etapa atual
+              </button>
+            </>
+          ) : null}
         </p>
       ) : null}
 
@@ -292,8 +495,10 @@ export default function OportunidadePage() {
         {abaAtiva === 'copiloto' ? (
           <AbaCopiloto
             oportunidadeId={id}
+            situacao={registro.situacao}
             aoEstruturar={atualizarEmSegundoPlano}
             aoOcupar={setAbaOcupada}
+            aoAlterar={alterouRespostas}
             irPara={irPara}
           />
         ) : null}
@@ -301,25 +506,45 @@ export default function OportunidadePage() {
         {abaAtiva === 'proposta' ? (
           <AbaProposta
             oportunidadeId={id}
+            situacao={registro.situacao}
             irPara={irPara}
-            aoAlterar={setRascunhoPendente}
+            aoAlterar={alterouProposta}
+            campoEmFoco={campoEmFoco}
+            aoFocarCampo={focouCampo}
           />
         ) : null}
 
         {abaAtiva === 'competencias' ? (
-          <AbaCompetencias oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+          <AbaCompetencias
+            oportunidadeId={id}
+            situacao={registro.situacao}
+            aoOcupar={setAbaOcupada}
+            irPara={irPara}
+          />
         ) : null}
 
         {abaAtiva === 'equipe' ? (
-          <AbaEquipe oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+          <AbaEquipe
+            oportunidadeId={id}
+            situacao={registro.situacao}
+            rodadaEmCurso={matchingEmCurso}
+            aoRodar={rodarMatching}
+            irPara={irPara}
+          />
         ) : null}
 
         {abaAtiva === 'pre-analise' ? (
-          <AbaPreAnalise oportunidadeId={id} aoOcupar={setAbaOcupada} irPara={irPara} />
+          <AbaPreAnalise
+            oportunidadeId={id}
+            situacao={registro.situacao}
+            aoOcupar={setAbaOcupada}
+            irPara={irPara}
+          />
         ) : null}
 
         {abaAtiva === 'decisao' ? (
           <AbaDecisao
+            oportunidadeId={id}
             decisao={decisao}
             situacao={registro.situacao}
             podeDecidir={ehSupervisor}

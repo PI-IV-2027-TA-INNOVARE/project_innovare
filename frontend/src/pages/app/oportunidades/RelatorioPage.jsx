@@ -1,8 +1,21 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
-import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
+import ConteudoDaEquipe from '../../../components/relatorio/ConteudoDaEquipe'
+import ConteudoDaPreAnalise from '../../../components/relatorio/ConteudoDaPreAnalise'
+import LayoutDoRelatorio, {
+  SecaoDoRelatorio,
+  SubsecaoDoRelatorio,
+} from '../../../components/relatorio/LayoutDoRelatorio'
+import {
+  Campo,
+  SeloDeMaturidade,
+  TextoFormatado,
+  formatarData,
+  porGravidade,
+} from '../../../components/relatorio/partesDoRelatorio'
 import { obterRelatorioOportunidade } from '../../../services/pdConnectApi'
+import { eventoDaApi } from './oportunidadesData'
 import './RelatorioPage.scss'
 
 const ROTULOS_DAS_SECOES = {
@@ -22,22 +35,6 @@ const ELEMENTOS_DA_PROPOSTA = [
   ['infraestrutura_recursos', 'Infraestrutura e recursos'],
 ]
 
-function formatarData(valor) {
-  if (!valor) return '—'
-
-  const data = new Date(valor)
-
-  return Number.isNaN(data.getTime())
-    ? '—'
-    : data.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
-
 function formatarTamanho(bytes) {
   if (!bytes) return '—'
   if (bytes < 1024) return `${bytes} B`
@@ -48,13 +45,105 @@ function formatarTamanho(bytes) {
 
 const Secao = SecaoDoRelatorio
 
-function Campo({ rotulo, children }) {
+const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
+
+function situacaoDaProposta(proposta) {
+  if (!proposta) return 'Não iniciada'
+
+  if (!proposta.revisada_por_humano) return `Sem revisão humana, versão ${proposta.versao}`
+
+  return proposta.revisor_nome
+    ? `Revisada por ${proposta.revisor_nome}, versão ${proposta.versao}`
+    : `Revisada, versão ${proposta.versao}`
+}
+
+function MaturidadePorNivel({ dimensoes }) {
+  const niveis = []
+
+  porGravidade(dimensoes).forEach((dimensao) => {
+    const nivel = niveis.find((item) => item.nivel === dimensao.nivel)
+
+    if (nivel) nivel.total += 1
+    else niveis.push({ nivel: dimensao.nivel, rotulo: dimensao.nivel_rotulo, total: 1 })
+  })
+
   return (
-    <div className="relatorio-campo">
-      <dt className="relatorio-campo__rotulo">{rotulo}</dt>
-      <dd className="relatorio-campo__valor">{children || '—'}</dd>
-    </div>
+    <span className="relatorio-selos">
+      {niveis.map((item) => (
+        <SeloDeMaturidade
+          key={item.nivel}
+          nivel={item.nivel}
+          rotulo={`${item.total} ${String(item.rotulo || '').toLowerCase()}`}
+        />
+      ))}
+    </span>
   )
+}
+
+function VisaoGeral({ oportunidade, decisao, proposta, competencias, equipe, analise }) {
+  const essenciais = competencias.filter(
+    (competencia) => competencia.nivel_importancia === 'essencial',
+  ).length
+  const incluidos = equipe ? equipe.membros.filter((membro) => membro.incluido) : []
+  const validada = incluidos.length > 0 && incluidos.every((membro) => membro.validada)
+  const dimensoes = analise?.dimensoes || []
+  const recomendacoes = analise?.recomendacoes || []
+  const acatadas = recomendacoes.filter((recomendacao) => recomendacao.acatada).length
+
+  let maturidade = 'Pré-análise não executada'
+  if (dimensoes.length > 0) maturidade = <MaturidadePorNivel dimensoes={dimensoes} />
+  else if (analise) maturidade = analise.status_rotulo || 'Sem resultado'
+
+  return (
+    <Secao titulo="Visão geral">
+      {!decisao ? (
+        <p className="relatorio-aviso">Documento parcial: a decisão ainda não foi registrada.</p>
+      ) : null}
+
+      <dl className="relatorio-campos">
+        <Campo rotulo="Decisão">{decisao ? decisao.tipo_rotulo : 'Pendente'}</Campo>
+        <Campo rotulo="Responsável">{oportunidade.responsavel_nome || 'Não definido'}</Campo>
+        <Campo rotulo="Proposta">{situacaoDaProposta(proposta)}</Campo>
+        <Campo rotulo="Competências">
+          {competencias.length > 0
+            ? `${plural(competencias.length, 'competência', 'competências')}, ${plural(essenciais, 'essencial', 'essenciais')}`
+            : 'Nenhuma identificada'}
+        </Campo>
+        <Campo rotulo="Equipe potencial">
+          {equipe
+            ? [
+                plural(incluidos.length, 'pessoa', 'pessoas'),
+                plural(equipe.lacunas.length, 'lacuna de competência', 'lacunas de competência'),
+                validada ? 'validada' : 'não validada',
+              ].join(' · ')
+            : 'Matching não executado'}
+        </Campo>
+        <Campo rotulo="Maturidade">{maturidade}</Campo>
+        <Campo rotulo="Recomendações">
+          {recomendacoes.length > 0
+            ? `${acatadas} de ${recomendacoes.length} ${recomendacoes.length === 1 ? 'acatada' : 'acatadas'}`
+            : 'Nenhuma'}
+        </Campo>
+      </dl>
+
+      {analise?.sintese ? (
+        <>
+          <h3 className="relatorio-subtitulo">Síntese da pré-análise</h3>
+          <TextoFormatado texto={analise.sintese} />
+        </>
+      ) : null}
+    </Secao>
+  )
+}
+
+function notaDaRevisao(proposta) {
+  if (!proposta.revisada_por_humano) {
+    return `Ainda sem revisão humana registrada — versão ${proposta.versao}.`
+  }
+
+  return proposta.revisor_nome
+    ? `Revisada por ${proposta.revisor_nome} — versão ${proposta.versao}.`
+    : `Revisada por uma pessoa — versão ${proposta.versao}.`
 }
 
 export default function RelatorioPage() {
@@ -108,7 +197,18 @@ export default function RelatorioPage() {
     )
   }
 
-  const { oportunidade, anexos, historico, decisao, proposta, pendentes } = relatorio
+  const {
+    oportunidade,
+    anexos,
+    historico,
+    decisao,
+    proposta,
+    competencias = [],
+    equipe = null,
+    pre_analise: analise = null,
+    pendentes,
+  } = relatorio
+  const eventos = historico.map(eventoDaApi).sort((a, b) => a.em - b.em)
   const identificacao = [
     { rotulo: 'Código', valor: oportunidade.codigo },
     { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
@@ -137,10 +237,19 @@ export default function RelatorioPage() {
           </p>
         </header>
 
+        <VisaoGeral
+          oportunidade={oportunidade}
+          decisao={decisao}
+          proposta={proposta}
+          competencias={competencias}
+          equipe={equipe}
+          analise={analise}
+        />
+
         <Secao titulo="Entrada">
           <dl className="relatorio-campos">
             <Campo rotulo="Demandante">{oportunidade.demandante_nome}</Campo>
-            <Campo rotulo="Responsável">{oportunidade.responsavel_nome}</Campo>
+            <Campo rotulo="Responsável">{oportunidade.responsavel_nome || 'Não definido'}</Campo>
             <Campo rotulo="Cadastrada em">{formatarData(oportunidade.criada_em)}</Campo>
             <Campo rotulo="Atualizada em">
               {formatarData(oportunidade.atualizada_em)}
@@ -159,7 +268,9 @@ export default function RelatorioPage() {
             <dl className="relatorio-campos relatorio-campos--coluna">
               {ELEMENTOS_DA_PROPOSTA.map(([campo, rotulo]) => (
                 <Fragment key={campo}>
-                  <Campo rotulo={rotulo}>{proposta[campo]}</Campo>
+                  <Campo rotulo={rotulo}>
+                    {proposta[campo] ? <TextoFormatado texto={proposta[campo]} /> : null}
+                  </Campo>
 
                   {campo === 'objetivo_geral' ? (
                     <Campo rotulo="Objetivos específicos">
@@ -176,11 +287,49 @@ export default function RelatorioPage() {
               ))}
             </dl>
 
+            <p className="relatorio-nota">{notaDaRevisao(proposta)}</p>
+          </Secao>
+        ) : null}
+
+        {competencias.length > 0 ? (
+          <Secao titulo="Competências necessárias">
+            <ul className="relatorio-lista">
+              {competencias.map((competencia) => (
+                <li key={competencia.id_competencia_necessaria}>
+                  {competencia.descricao} · {competencia.nivel_rotulo} ·{' '}
+                  {competencia.derivada_rotulo}
+                </li>
+              ))}
+            </ul>
+          </Secao>
+        ) : null}
+
+        {equipe ? (
+          <Secao titulo="Equipe potencial">
             <p className="relatorio-nota">
-              {proposta.revisada_por_humano
-                ? `Revisada por uma pessoa — versão ${proposta.versao}.`
-                : `Ainda sem revisão humana registrada — versão ${proposta.versao}.`}
+              Composição sugerida para validação do Supervisor. Não é convocação:
+              não há convite, aceite nem recusa.
             </p>
+
+            <ConteudoDaEquipe
+              equipe={equipe}
+              comoFoiCalculado={relatorio.como_foi_calculado || []}
+              Bloco={SubsecaoDoRelatorio}
+            />
+          </Secao>
+        ) : null}
+
+        {analise ? (
+          <Secao titulo="Pré-análise de maturidade">
+            <p className="relatorio-nota">{analise.aviso}</p>
+
+            <ConteudoDaPreAnalise
+              analise={analise}
+              comoLer={relatorio.como_ler || []}
+              criterios={relatorio.criterios || []}
+              mostrarSintese={false}
+              Bloco={SubsecaoDoRelatorio}
+            />
           </Secao>
         ) : null}
 
@@ -221,17 +370,13 @@ export default function RelatorioPage() {
         </Secao>
 
         <Secao titulo="Histórico">
-          {historico.length > 0 ? (
+          {eventos.length > 0 ? (
             <ol className="relatorio-trilha">
-              {historico.map((evento, indice) => (
-                <li key={`${evento.tipo}-${evento.ocorrido_em}-${indice}`}>
-                  <span className="relatorio-trilha__quando">
-                    {formatarData(evento.ocorrido_em)}
-                  </span>
-                  <span className="relatorio-trilha__o-que">{evento.tipo}</span>
-                  <span className="relatorio-trilha__quem">
-                    {evento.ator_nome || evento.ator}
-                  </span>
+              {eventos.map((evento) => (
+                <li key={evento.id}>
+                  <span className="relatorio-trilha__quando">{formatarData(evento.em)}</span>
+                  <span className="relatorio-trilha__o-que">{evento.texto}</span>
+                  <span className="relatorio-trilha__quem">{evento.ator}</span>
                 </li>
               ))}
             </ol>

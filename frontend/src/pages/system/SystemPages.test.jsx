@@ -35,13 +35,32 @@ function renderRota(Componente, rota, state) {
 }
 
 describe('AcessoRestritoPage', () => {
-  it('diz qual página foi barrada e sob qual perfil', () => {
+  /**
+   * A página seguia outro desenho que a 404: cadeado no lugar do número,
+   * "Acesso restrito" como título e "Voltar ao painel" até para o
+   * Administrador, cujo início é a Administração. Agora segue o mesmo padrão:
+   * o 403 em destaque, o título que diz o que aconteceu, o perfil de quem
+   * tentou, os contatos de suporte (PB81) e uma saída para o início do papel.
+   */
+  it('mostra o 403 em destaque e diz sob qual perfil o acesso foi negado', () => {
     renderRota(AcessoRestritoPage, '/sem-acesso', { from: '/admin' })
 
-    expect(screen.getByRole('heading', { name: /acesso restrito/i })).toBeInTheDocument()
-    expect(screen.getByText('/admin')).toBeInTheDocument()
+    expect(screen.getByText('403')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Acesso não autorizado' })).toBeInTheDocument()
     expect(screen.getByText('Maria Ferreira')).toBeInTheDocument()
     expect(screen.getByText('Pesquisador')).toBeInTheDocument()
+  })
+
+  it('diz qual página foi barrada, para a pessoa contar ao suporte', () => {
+    renderRota(AcessoRestritoPage, '/sem-acesso', { from: '/admin' })
+
+    expect(screen.getByText('/admin')).toBeInTheDocument()
+  })
+
+  it('sem o endereço barrado, fala da página sem citar caminho', () => {
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(screen.getByText(/esta página não está disponível para o seu perfil/i)).toBeInTheDocument()
   })
 
   it('oferece com quem falar, não só um botão de voltar', async () => {
@@ -49,7 +68,24 @@ describe('AcessoRestritoPage', () => {
 
     expect(await screen.findByRole('link', { name: /pd@ac2microbiologia\.com\.br/ }))
       .toHaveAttribute('href', 'mailto:pd@ac2microbiologia.com.br')
-    expect(screen.getByRole('link', { name: /voltar ao painel/i })).toHaveAttribute('href', '/painel')
+    expect(screen.getByRole('link', { name: 'Ir para o painel' })).toHaveAttribute('href', '/painel')
+  })
+
+  it('leva o Administrador para a administração, e não para o painel', () => {
+    auth.user = { role: 'administrador', displayName: 'Ana Souza' }
+
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(screen.getByRole('link', { name: 'Ir para a administração' })).toHaveAttribute(
+      'href',
+      '/admin'
+    )
+  })
+
+  it('não oferece tentar de novo', () => {
+    renderRota(AcessoRestritoPage, '/sem-acesso')
+
+    expect(screen.queryByRole('button', { name: /tentar/i })).not.toBeInTheDocument()
   })
 
   it('mostra os contatos gravados pelo Administrador, que valem para todos', async () => {
@@ -74,31 +110,67 @@ describe('AcessoRestritoPage', () => {
 })
 
 describe('NaoEncontradaPage', () => {
-  it('mostra o endereço que não existe', () => {
+  /**
+   * A página dizia "Endereço não encontrado", repetia o caminho digitado e
+   * listava todos os destinos do papel, que o menu do layout já mostra. Agora
+   * o 404 é o destaque, o texto diz o que aconteceu sem termo técnico, e há
+   * duas saídas: voltar à seção em que a pessoa estava e ir para o início
+   * dela. Tentar de novo não entra: recarregar não faz o endereço existir.
+   */
+  it('diz que a página não foi encontrada, com o 404 em destaque', () => {
     renderRota(NaoEncontradaPage, '/rota/que/nao/existe')
 
     expect(screen.getByText('404')).toBeInTheDocument()
-    expect(screen.getByText('/rota/que/nao/existe')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Página não encontrada' })).toBeInTheDocument()
+    expect(screen.getByText(/o endereço pode estar incorreto/i)).toBeInTheDocument()
   })
 
-  it('sugere apenas destinos que o papel alcança', () => {
+  it('volta para a seção em que a pessoa estava e oferece o painel', () => {
+    auth.user = { role: 'supervisor', displayName: 'Rafael Antunes' }
+
+    renderRota(NaoEncontradaPage, '/oportunidades/OP-2026-014/qualquer')
+
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toHaveAttribute(
+      'href',
+      '/oportunidades'
+    )
+    expect(screen.getByRole('link', { name: 'Ir para o painel' })).toHaveAttribute('href', '/painel')
+  })
+
+  it('fora de uma seção conhecida, oferece só o início do papel', () => {
     renderRota(NaoEncontradaPage, '/qualquer')
 
-    expect(screen.getByRole('link', { name: 'Meu perfil' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Administração' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Ir para o painel' })).toHaveAttribute('href', '/painel')
   })
 
-  it('dá ao Demandante a porta de entrada dele, e não a do Administrador', () => {
+  it('leva o Demandante de volta aos problemas dele, e não à Administração', () => {
     auth.user = { role: 'demandante', displayName: 'Agroindústria Vale Verde' }
 
-    renderRota(NaoEncontradaPage, '/qualquer')
+    renderRota(NaoEncontradaPage, '/problemas/OP-2026-014/qualquer')
 
-    expect(screen.getByRole('link', { name: 'Meus problemas' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /voltar para meus problemas/i })).toHaveAttribute(
       'href',
       '/problemas'
     )
-    expect(screen.queryByRole('link', { name: 'Administração' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Oportunidades' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /administração/i })).not.toBeInTheDocument()
+  })
+
+  it('o início do Administrador é a Administração', () => {
+    auth.user = { role: 'administrador', displayName: 'Ana Souza' }
+
+    renderRota(NaoEncontradaPage, '/qualquer')
+
+    expect(screen.getByRole('link', { name: 'Ir para a administração' })).toHaveAttribute(
+      'href',
+      '/admin'
+    )
+  })
+
+  it('não oferece tentar de novo', () => {
+    renderRota(NaoEncontradaPage, '/qualquer')
+
+    expect(screen.queryByRole('button', { name: /tentar/i })).not.toBeInTheDocument()
   })
 
   it('manda quem não está autenticado para o login', () => {

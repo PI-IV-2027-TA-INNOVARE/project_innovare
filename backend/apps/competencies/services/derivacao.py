@@ -24,6 +24,7 @@ from django.db import transaction
 
 from apps.accounts.models import Usuario
 from apps.ai.services.protocolos import ProvedorDeIA
+from apps.ai.services.sem_ia import sem_resposta_da_ia
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.competencies.models import (
@@ -98,9 +99,9 @@ class DerivarCompetenciasService:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.registro import provedor_principal
+        from apps.ai.services.registro import provedor_com_reserva
 
-        return provedor_principal()
+        return provedor_com_reserva()
 
     def execute(
         self, *, oportunidade: Oportunidade, ator: Usuario
@@ -133,7 +134,7 @@ class DerivarCompetenciasService:
         )
 
         execucao_ia = resultado.get('execucao_ia')
-        fallback_usado = bool(resultado.get('fallback_usado'))
+        fallback_usado = sem_resposta_da_ia(resultado)
         motivo_fallback = resultado.get('motivo_fallback') if fallback_usado else None
         saida = SaidaCompetenciasSerializer(data=resultado.get('dados') or {})
         aceita = saida.is_valid()

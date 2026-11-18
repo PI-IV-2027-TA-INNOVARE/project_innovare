@@ -11,8 +11,11 @@ import {
   listarCompetencias,
   removerCompetencia,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
+import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -112,11 +115,18 @@ function Linha({ competencia, podeEditar, onSalvar, onRemover, ocupado }) {
   )
 }
 
-export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irPara }) {
+export default function AbaCompetencias({
+  oportunidadeId,
+  situacao,
+  aoMudar,
+  aoOcupar,
+  irPara,
+}) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeEditar = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeEditar = user?.role === ROLES.SUPERVISOR && !encerrada
 
   const [competencias, setCompetencias] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -276,8 +286,11 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
         </header>
 
         <div className="perfil-card__body">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
           <p className="oportunidade-page__vazio">
-            Esta oportunidade ainda não tem proposta estruturada.
+            {encerrada
+              ? 'A proposta estruturada não foi iniciada antes da decisão.'
+              : 'Esta oportunidade ainda não tem proposta estruturada.'}
           </p>
           {podeEditar ? (
             <ProximoPasso
@@ -313,7 +326,7 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
         {podeEditar ? (
           <button
             type="button"
-            className="admin-btn"
+            className={competencias.length > 0 ? 'admin-btn admin-btn--outline' : 'admin-btn'}
             onClick={derivar}
             disabled={ocupado || propostaPendente}
           >
@@ -323,7 +336,11 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
         ) : (
           <span
             className="perfil-card__lock"
-            title="Apenas o Supervisor edita as competências."
+            title={
+              encerrada
+                ? 'A oportunidade foi encerrada: as competências ficam como estavam na decisão.'
+                : 'Apenas o Supervisor edita as competências.'
+            }
           >
             <Icone icon={appIcons.view} />
             Somente leitura
@@ -332,10 +349,14 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
       </header>
 
       <div className="perfil-card__body competencias__corpo">
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
         <AvisoPropostaNaoRevisada
           oportunidadeId={oportunidadeId}
           irPara={irPara}
           aoVerificar={setPropostaPendente}
+          podeRevisar={podeEditar}
+          encerrada={encerrada}
         />
 
         {derivando ? (
@@ -359,7 +380,9 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
           <p className="oportunidade-page__vazio">
             {podeEditar
               ? 'Nenhuma competência registrada. Clique em Derivar da proposta para a IA sugerir a lista, ou acrescente manualmente abaixo.'
-              : 'Nenhuma competência registrada ainda.'}
+              : encerrada
+                ? 'Nenhuma competência foi registrada antes da decisão.'
+                : 'Nenhuma competência registrada ainda.'}
           </p>
         ) : (
           <ul className="competencias__lista">
@@ -422,7 +445,11 @@ export default function AbaCompetencias({ oportunidadeId, aoMudar, aoOcupar, irP
         ) : null}
 
         {podeEditar && essenciais > 0 ? (
-          <ProximoPasso etapa="equipe" irPara={irPara} />
+          <BarraDeAcoes
+            estado={`${plural(essenciais, 'competência essencial', 'competências essenciais')} para o matching comparar com a rede interna.`}
+          >
+            <ContinuarPara etapa="equipe" irPara={irPara} />
+          </BarraDeAcoes>
         ) : null}
       </div>
 

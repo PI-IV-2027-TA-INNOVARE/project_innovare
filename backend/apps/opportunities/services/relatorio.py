@@ -75,6 +75,9 @@ class RelatorioDaOportunidade:
     pre_analise: PreAnalise | None
     pendentes: tuple[SecaoPendente, ...]
     gerado_em: datetime
+    como_foi_calculado: tuple[str, ...] = ()
+    como_ler: tuple[str, ...] = ()
+    criterios: tuple[CriterioPreAnalise, ...] = ()
 
 
 class FluxoDaOportunidade:
@@ -93,6 +96,11 @@ class FluxoDaOportunidade:
         self._oportunidade = oportunidade
 
     def relatorio(self) -> RelatorioDaOportunidade:
+        """
+        Equipe e pre-analise entram inteiras, com a explicacao da nota, a
+        leitura das dimensoes e os criterios citados: o documento impresso e o
+        unico que sai da tela, e nao pode depender de outro relatorio.
+        """
         proposta = self._proposta()
         competencias = tuple(self._competencias(proposta))
         equipe = self._equipe()
@@ -114,6 +122,23 @@ class FluxoDaOportunidade:
                 pre_analise=pre_analise,
             ),
             gerado_em=timezone.now(),
+            como_foi_calculado=como_foi_calculado(equipe) if equipe else (),
+            como_ler=como_ler_a_preanalise(pre_analise) if pre_analise else (),
+            criterios=self._criterios(pre_analise),
+        )
+
+    def _criterios(
+        self, pre_analise: PreAnalise | None
+    ) -> tuple[CriterioPreAnalise, ...]:
+        if pre_analise is None:
+            return ()
+
+        return tuple(
+            CriterioPreAnalise.objects.filter(
+                versao_criterio_id=pre_analise.versao_criterio_id
+            )
+            .select_related('versao_criterio')
+            .order_by('dimensao', 'codigo')
         )
 
     def _anexos(self) -> QuerySet[AnexoOportunidade]:
@@ -157,9 +182,13 @@ class FluxoDaOportunidade:
         if proposta is None:
             return None
 
-        return proposta.pre_analises.prefetch_related(
-            'dimensoes', 'lacunas', 'recomendacoes'
-        ).first()
+        return (
+            proposta.pre_analises.select_related('versao_criterio')
+            .prefetch_related(
+                'dimensoes', 'lacunas__criterio', 'recomendacoes__lacuna__criterio'
+            )
+            .first()
+        )
 
     def _ultima_decisao(self) -> Decisao | None:
         return self._oportunidade.decisoes.select_related('responsavel').first()

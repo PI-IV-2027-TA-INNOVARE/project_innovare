@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminModal from '../../../../components/console/AdminModal'
 import VerDetalhes from '../../../../components/console/VerDetalhes'
@@ -12,16 +12,34 @@ import {
   adicionarMembroEquipe,
   ajustarMembroEquipe,
   executarMatching,
+  listarCompetencias,
   listarRede,
   obterEquipePotencial,
   validarEquipe,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
+import EtapaBloqueada from './EtapaBloqueada'
+import EtapaEncerrada from './EtapaEncerrada'
 import '../OportunidadesPage.scss'
 
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
+
+const CODIGO_SEM_PROPOSTA = 'proposta_inexistente'
+
+const SEM_COMPETENCIAS =
+  'O matching compara as competências necessárias com a rede interna. Identifique as competências antes de rodar.'
+
+function EsperaDoMatching() {
+  return (
+    <EsperaIA
+      titulo="Comparando as competências necessárias com a rede interna."
+      detalhe="Você pode seguir para outra etapa enquanto isso: o resultado fica salvo aqui."
+    />
+  )
+}
 
 const ROTULOS_DAS_FEATURES = PARCELAS_DA_NOTA
 
@@ -129,11 +147,19 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
   )
 }
 
-export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
+export default function AbaEquipe({
+  oportunidadeId,
+  situacao,
+  rodadaEmCurso = false,
+  aoRodar,
+  irPara,
+}) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeConduzir = user?.role === ROLES.SUPERVISOR
+  const ehSupervisor = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeConduzir = ehSupervisor && !encerrada
 
   const [equipe, setEquipe] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -143,6 +169,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
   const [rodando, setRodando] = useState(false)
   const [confirmarRodada, setConfirmarRodada] = useState(false)
   const [propostaPendente, setPropostaPendente] = useState(false)
+  const [semCompetencias, setSemCompetencias] = useState(false)
   const [termo, setTermo] = useState('')
   const [achados, setAchados] = useState([])
   const [escolhido, setEscolhido] = useState(null)
@@ -171,10 +198,35 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
   }, [carregar])
 
   useEffect(() => {
-    aoOcupar?.(rodando)
-  }, [rodando, aoOcupar])
+    if (!podeConduzir) return undefined
 
-  useEffect(() => () => aoOcupar?.(false), [aoOcupar])
+    let ativo = true
+
+    listarCompetencias(oportunidadeId)
+      .then((lista) => {
+        if (ativo) setSemCompetencias((lista?.results || lista || []).length === 0)
+      })
+      .catch((falha) => {
+        if (ativo) setSemCompetencias(falha?.data?.codigo === CODIGO_SEM_PROPOSTA)
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [oportunidadeId, podeConduzir])
+
+  const rodadaAnterior = useRef(rodadaEmCurso)
+
+  useEffect(() => {
+    if (rodadaAnterior.current && !rodadaEmCurso && !rodando) {
+      carregar({ silencioso: true })
+    }
+
+    rodadaAnterior.current = rodadaEmCurso
+  }, [rodadaEmCurso, rodando, carregar])
+
+  const emCurso = rodando || rodadaEmCurso
+  const travada = ocupado || propostaPendente || semCompetencias || emCurso
 
   useEffect(() => {
     const consulta = termo.trim()
@@ -220,7 +272,10 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
     setRodando(true)
 
     await executar(
-      () => executarMatching(oportunidadeId),
+      () =>
+        aoRodar
+          ? aoRodar(() => executarMatching(oportunidadeId))
+          : executarMatching(oportunidadeId),
       (resultado) =>
         `Matching concluído: ${plural(resultado.equipe.membros.length, 'sugestão', 'sugestões')} entre ${plural(resultado.avaliados, 'perfil', 'perfis')} da rede.`,
     )
@@ -295,31 +350,36 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className="admin-btn"
               onClick={rodar}
-              disabled={ocupado || propostaPendente}
+              disabled={travada}
             >
               <Icone icon={appIcons.users} />
-              {rodando ? 'Rodando...' : 'Rodar matching'}
+              {emCurso ? 'Rodando...' : 'Rodar matching'}
             </button>
           ) : null}
         </header>
 
         <div className="perfil-card__body equipe__corpo">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
           <AvisoPropostaNaoRevisada
             oportunidadeId={oportunidadeId}
             irPara={irPara}
             aoVerificar={setPropostaPendente}
+            podeRevisar={podeConduzir}
+            encerrada={encerrada}
           />
 
-          {rodando ? (
-            <EsperaIA
-              titulo="Comparando as competências necessárias com a rede interna."
-              detalhe="Leva alguns segundos. Não feche esta aba."
-            />
+          {podeConduzir && semCompetencias ? (
+            <EtapaBloqueada motivo={SEM_COMPETENCIAS} etapa="competencias" irPara={irPara} />
           ) : null}
+
+          {emCurso ? <EsperaDoMatching /> : null}
           <p className="oportunidade-page__vazio">
             {podeConduzir
               ? 'Nenhum matching foi rodado nesta oportunidade. O matching compara as competências necessárias com os perfis da rede interna.'
-              : 'O Supervisor ainda não rodou o matching desta oportunidade.'}
+              : encerrada
+                ? 'Nenhum matching foi rodado antes da decisão.'
+                : 'O Supervisor ainda não rodou o matching desta oportunidade.'}
           </p>
         </div>
 
@@ -346,7 +406,7 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
           ) : null}
         </div>
 
-        {podeConduzir ? (
+        {ehSupervisor ? (
           <div className="equipe__acoes">
             <Link
               className="admin-btn admin-btn--outline"
@@ -356,15 +416,17 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               Gerar relatório
             </Link>
 
-            <button
-              type="button"
-              className="admin-btn admin-btn--outline"
-              onClick={() => setConfirmarRodada(true)}
-              disabled={ocupado || propostaPendente}
-            >
-              <Icone icon={appIcons.reset} />
-              {rodando ? 'Rodando...' : 'Rodar de novo'}
-            </button>
+            {podeConduzir ? (
+              <button
+                type="button"
+                className="admin-btn admin-btn--outline"
+                onClick={() => setConfirmarRodada(true)}
+                disabled={travada}
+              >
+                <Icone icon={appIcons.reset} />
+                {emCurso ? 'Rodando...' : 'Rodar de novo'}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span
@@ -378,20 +440,21 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
       </header>
 
       <div className="perfil-card__body equipe__corpo">
-        {podeConduzir ? (
-          <AvisoPropostaNaoRevisada
-            oportunidadeId={oportunidadeId}
-            irPara={irPara}
-            aoVerificar={setPropostaPendente}
-          />
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
+        <AvisoPropostaNaoRevisada
+          oportunidadeId={oportunidadeId}
+          irPara={irPara}
+          aoVerificar={setPropostaPendente}
+          podeRevisar={podeConduzir}
+          encerrada={encerrada}
+        />
+
+        {podeConduzir && semCompetencias ? (
+          <EtapaBloqueada motivo={SEM_COMPETENCIAS} etapa="competencias" irPara={irPara} />
         ) : null}
 
-        {rodando ? (
-          <EsperaIA
-            titulo="Comparando as competências necessárias com a rede interna."
-            detalhe="Leva alguns segundos. Não feche esta aba."
-          />
-        ) : null}
+        {emCurso ? <EsperaDoMatching /> : null}
 
         {(equipe?.membros || []).length === 0 ? (
           <p className="oportunidade-page__vazio">
@@ -497,10 +560,10 @@ export default function AbaEquipe({ oportunidadeId, aoOcupar, irPara }) {
               type="button"
               className={validada ? 'admin-btn admin-btn--outline' : 'admin-btn'}
               onClick={validar}
-              disabled={ocupado || incluidos.length === 0}
+              disabled={ocupado || incluidos.length === 0 || validada}
             >
               <Icone icon={appIcons.done} />
-              Validar equipe
+              {validada ? 'Equipe validada' : 'Validar equipe'}
             </button>
             {validada ? <ContinuarPara etapa="pre-analise" irPara={irPara} /> : null}
           </BarraDeAcoes>

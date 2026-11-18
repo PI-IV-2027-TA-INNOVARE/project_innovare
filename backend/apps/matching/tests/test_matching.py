@@ -33,15 +33,20 @@ from apps.matching.services import (
     candidato_de,
     termos,
 )
-from apps.network.models import Disponibilidade, PapelNaRede
+from apps.network.models import Disponibilidade, Formacao, MembroRede, PapelNaRede
 from core.tests.builders import (
     MembroRedeBuilder,
     OportunidadeBuilder,
     OrganizacaoBuilder,
     UsuarioBuilder,
     indicar_na_equipe,
+    titulacao,
 )
-from core.tests.dubles import ProvedorFake, ProvedorQueObservaATransacao
+from core.tests.dubles import (
+    ProvedorFake,
+    ProvedorPelaReserva,
+    ProvedorQueObservaATransacao,
+)
 
 PROPOSTA = {
     'problema_pesquisa': 'Contaminacao por Alicyclobacillus na linha de envase.',
@@ -176,6 +181,32 @@ class MotorTests(MatchingBaseTests):
         self.assertIn('Microbiologia de alimentos', texto)
         self.assertIn('Doutorado', texto)
 
+    def test_justificativa_cita_a_formacao_cadastrada(self):
+        """PB93: a formacao aparece entre os fatores considerados."""
+        Formacao.objects.create(
+            membro=self.especialista,
+            curso='Engenharia de Alimentos',
+            instituicao='Universidade Estadual',
+            titulacao=titulacao('doutorado'),
+        )
+        membro = MembroRede.objects.prefetch_related(
+            'vinculos_competencia__competencia', 'formacoes__titulacao'
+        ).get(pk=self.especialista.pk)
+
+        avaliacao = MotorDeMatching().avaliar([self.essencial], [candidato_de(membro)])[0]
+
+        self.assertIn(
+            'Formação: Engenharia de Alimentos (Doutorado).', avaliacao.motivos
+        )
+
+    def test_sem_formacao_a_justificativa_diz_que_nao_foi_informada(self):
+        """PB93: o fator formacao e indicado como nao informado."""
+        avaliacao = MotorDeMatching().avaliar(
+            [self.essencial], [candidato_de(self.especialista)]
+        )[0]
+
+        self.assertIn('Formação: não informada.', avaliacao.motivos)
+
     @override_settings(AI_MATCH_PESO_DESEJAVEL=0.0)
     def test_peso_da_desejavel_vem_da_configuracao(self):
         """AGENTS.md 2.4: peso e configuracao, nao numero no codigo."""
@@ -296,6 +327,24 @@ class ExecucaoDoMatchingTests(MatchingBaseTests):
         self.assertTrue(
             any('Segundo a IA' in ' '.join(membro.match_reasons) for membro in membros)
         )
+
+    @override_settings(AI_MATCH_RERANK_ENABLED=True, AI_MATCH_MIN_SCORE=0.0)
+    def test_rerank_que_veio_da_reserva_tambem_reordena(self):
+        """A reserva respondeu: a resposta e de IA, nao o caminho sem IA."""
+        duble = ProvedorPelaReserva(
+            matches={
+                'matches': [
+                    {'candidato_index': 1, 'match_reasons': ['Perfil mais aderente']},
+                    {'candidato_index': 0, 'match_reasons': []},
+                ]
+            }
+        )
+
+        resultado = ExecutarMatchingService(provedor=duble).execute(
+            oportunidade=self.oportunidade, ator=self.supervisor
+        )
+
+        self.assertTrue(resultado['execucao'].usou_rerank)
 
 
 class SupervisaoNaEquipeTests(MatchingBaseTests):

@@ -32,6 +32,7 @@ from core.tests.builders import (
 from core.tests.dubles import (
     ProvedorFake,
     ProvedorIndisponivel,
+    ProvedorPelaReserva,
     ProvedorQueObservaATransacao,
 )
 
@@ -147,6 +148,14 @@ class DerivacaoTests(CompetenciasBaseTests):
 
         self.assertEqual(resultado['criadas'], [])
         self.assertTrue(resultado['fallback_usado'])
+
+    def test_competencias_da_reserva_entram_e_nao_viram_aviso_de_falha(self):
+        """A tela so diz "a IA nao respondeu" quando nenhuma IA respondeu."""
+        resultado = self.derivar(provedor=ProvedorPelaReserva())
+
+        self.assertEqual(len(resultado['criadas']), 3)
+        self.assertFalse(resultado['fallback_usado'])
+        self.assertIsNone(resultado['motivo_fallback'])
 
     def test_derivacao_barrada_pelo_limite_devolve_o_motivo(self):
         resultado = self.derivar(provedor=ProvedorIndisponivel(motivo='limite_da_oportunidade'))

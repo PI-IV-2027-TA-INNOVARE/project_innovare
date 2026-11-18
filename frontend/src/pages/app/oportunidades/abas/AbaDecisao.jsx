@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
+import { situacaoEncerrada } from '../etapas'
 import { DECISOES, decisaoLabel } from '../oportunidadesData'
+import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import EtapaBloqueada from './EtapaBloqueada'
-
-const ENCERRADAS = ['continuar', 'arquivada']
 
 function bloqueioDa(situacao) {
   if (situacao === 'aguardando_decisao') return null
@@ -22,7 +22,7 @@ function bloqueioDa(situacao) {
   }
 }
 
-function DecisaoRegistrada({ decisao, titulo }) {
+function DecisaoRegistrada({ decisao, titulo, aviso = null }) {
   return (
     <section className="perfil-card oportunidade-decisao">
       <header className="perfil-card__header">
@@ -39,6 +39,8 @@ function DecisaoRegistrada({ decisao, titulo }) {
       </header>
 
       <div className="perfil-card__body">
+        {aviso}
+
         <blockquote className="oportunidade-justificativa">
           {decisao.justificativa}
         </blockquote>
@@ -52,18 +54,37 @@ function DecisaoRegistrada({ decisao, titulo }) {
   )
 }
 
-export default function AbaDecisao({ decisao, situacao, podeDecidir, onRegistrar, irPara }) {
+export default function AbaDecisao({
+  oportunidadeId,
+  decisao,
+  situacao,
+  podeDecidir,
+  onRegistrar,
+  irPara,
+}) {
   const [tipo, setTipo] = useState('')
   const [justificativa, setJustificativa] = useState('')
   const [erro, setErro] = useState('')
 
-  if (decisao && (!podeDecidir || ENCERRADAS.includes(situacao))) {
-    return <DecisaoRegistrada decisao={decisao} titulo="Decisão registrada" />
+  const encerrada = situacaoEncerrada(situacao)
+
+  const aviso = (
+    <AvisoPropostaNaoRevisada
+      oportunidadeId={oportunidadeId}
+      irPara={irPara}
+      podeRevisar={podeDecidir}
+      bloqueiaEtapa={false}
+      encerrada={encerrada}
+    />
+  )
+
+  if (decisao && (!podeDecidir || encerrada)) {
+    return <DecisaoRegistrada decisao={decisao} titulo="Decisão registrada" aviso={aviso} />
   }
 
   if (!podeDecidir) {
     return (
-      <section className="perfil-card">
+      <section className="perfil-card oportunidade-decisao">
         <header className="perfil-card__header">
           <div>
             <h2 className="perfil-card__title">Aguardando decisão</h2>
@@ -73,6 +94,8 @@ export default function AbaDecisao({ decisao, situacao, podeDecidir, onRegistrar
             </p>
           </div>
         </header>
+
+        {aviso}
       </section>
     )
   }
@@ -112,6 +135,8 @@ export default function AbaDecisao({ decisao, situacao, podeDecidir, onRegistrar
         </header>
 
         <form className="perfil-card__body" onSubmit={enviar} noValidate>
+          {aviso}
+
           {bloqueio ? (
             <EtapaBloqueada motivo={bloqueio.motivo} etapa={bloqueio.etapa} irPara={irPara} />
           ) : null}

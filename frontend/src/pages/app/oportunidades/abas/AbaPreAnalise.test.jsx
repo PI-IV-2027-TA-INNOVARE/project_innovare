@@ -28,9 +28,13 @@ const api = vi.hoisted(() => ({
   acatarRecomendacao: null,
   obterEquipePotencial: null,
   obterProposta: null,
+  listarPreAnalises: null,
+  obterPreAnaliseDaRodada: null,
 }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
+  listarPreAnalises: (...args) => api.listarPreAnalises(...args),
+  obterPreAnaliseDaRodada: (...args) => api.obterPreAnaliseDaRodada(...args),
   obterPreAnalise: (...args) => api.obterPreAnalise(...args),
   executarPreAnalise: (...args) => api.executarPreAnalise(...args),
   acatarRecomendacao: (...args) => api.acatarRecomendacao(...args),
@@ -48,6 +52,7 @@ const ANALISE = {
   sintese: 'Proposta consistente, com lacuna de infraestrutura.',
   executada_em: '2026-10-15T12:00:00Z',
   executada_por: 'supervisor@ac2microbiologia.com.br',
+  executada_por_nome: 'Rafael Antunes',
   status: 'ok',
   status_rotulo: 'Concluída',
   erro: '',
@@ -93,6 +98,8 @@ describe('AbaPreAnalise', () => {
       problema_pesquisa: 'Contaminação resiste à pasteurização.',
       revisada_por_humano: true,
     })
+    api.listarPreAnalises = vi.fn().mockResolvedValue([])
+    api.obterPreAnaliseDaRodada = vi.fn()
   })
 
   it('apresenta o aviso de que o resultado é orientativo', async () => {
@@ -160,6 +167,78 @@ describe('AbaPreAnalise', () => {
     expect(within(bloco).queryByText(/critérios mudaram/i)).not.toBeInTheDocument()
   })
 
+  /**
+   * PB98 e PB100: a comparacao inclui as recomendacoes e mostra quais da
+   * analise anterior o Supervisor acatou.
+   */
+  it('na comparação, identifica as recomendações acatadas da análise anterior', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      comparacao: {
+        anterior: { id_pre_analise: 'pa-0', executada_em: '2026-10-01T12:00:00Z', versao_proposta: 1, versao_criterios: 'V2' },
+        mesmos_criterios: true,
+        dimensoes: [],
+        lacunas: { anterior: 3, atual: 1 },
+        recomendacoes: {
+          anterior: 4,
+          atual: 1,
+          acatadas_na_anterior: [{ id_recomendacao: 11, texto: 'Descrever o laboratório.' }],
+        },
+      },
+    })
+
+    renderizar()
+
+    const bloco = (await screen.findByText(/em relação à análise anterior/i)).closest('div')
+    expect(within(bloco).getByText(/4 recomendações antes, 1 agora/i)).toBeInTheDocument()
+    expect(within(bloco).getByText(/acatadas na análise anterior/i)).toBeInTheDocument()
+    expect(within(bloco).getByText('Descrever o laboratório.')).toBeInTheDocument()
+  })
+
+  it('lista todas as pré-análises e abre uma rodada antiga', async () => {
+    api.listarPreAnalises = vi.fn().mockResolvedValue([
+      { id_pre_analise: 'pa-1', executada_em: '2026-10-15T12:00:00Z', versao_proposta: 2, versao_criterios: 'V2', status: 'ok', status_rotulo: 'Concluída', lacunas: 1, recomendacoes: 1, recomendacoes_acatadas: 0, atual: true },
+      { id_pre_analise: 'pa-0', executada_em: '2026-10-01T12:00:00Z', versao_proposta: 1, versao_criterios: 'V2', status: 'ok', status_rotulo: 'Concluída', lacunas: 3, recomendacoes: 4, recomendacoes_acatadas: 2, atual: false },
+    ])
+    api.obterPreAnaliseDaRodada = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      id_pre_analise: 'pa-0',
+      executada_em: '2026-10-01T12:00:00Z',
+      sintese: 'Rodada antiga, ainda frágil.',
+      comparacao: null,
+    })
+    const user = userEvent.setup()
+
+    renderizar()
+
+    await user.click(await screen.findByRole('button', { name: /todas as pré-análises \(2\)/i }))
+
+    const lista = screen.getByRole('list', { name: /pré-análises desta oportunidade/i })
+    const atual = within(lista).getAllByRole('listitem')[0]
+    expect(atual).toHaveTextContent('Atual')
+    expect(within(atual).queryByRole('button', { name: /ver/i })).not.toBeInTheDocument()
+
+    const antiga = within(lista).getAllByRole('listitem')[1]
+    expect(antiga).toHaveTextContent('3 lacunas · 2 de 4 recomendações acatadas')
+    await user.click(within(antiga).getByRole('button', { name: /ver a pré-análise de/i }))
+
+    expect(api.obterPreAnaliseDaRodada).toHaveBeenCalledWith('OP-2026-001', 'pa-0')
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText('Rodada antiga, ainda frágil.')).toBeInTheDocument()
+    expect(within(dialogo).queryByRole('button', { name: /marcar como acatada/i })).not.toBeInTheDocument()
+  })
+
+  it('com uma pré-análise só, não oferece o histórico', async () => {
+    api.listarPreAnalises = vi.fn().mockResolvedValue([
+      { id_pre_analise: 'pa-1', executada_em: '2026-10-15T12:00:00Z', versao_proposta: 1, versao_criterios: 'V2', status: 'ok', status_rotulo: 'Concluída', lacunas: 1, recomendacoes: 1, recomendacoes_acatadas: 0, atual: true },
+    ])
+
+    renderizar()
+    await screen.findByText(/em resumo/i)
+
+    expect(screen.queryByRole('button', { name: /todas as pré-análises/i })).not.toBeInTheDocument()
+  })
+
   it('avisa quando as duas rodadas usaram critérios diferentes', async () => {
     api.obterPreAnalise = vi.fn().mockResolvedValue({
       ...ANALISE,
@@ -185,6 +264,29 @@ describe('AbaPreAnalise', () => {
     renderizar()
 
     expect(await screen.findByText(/Critérios V2/)).toBeInTheDocument()
+  })
+
+  /**
+   * A linha da execução terminava em "por supervisor@ac2microbiologia.com.br":
+   * o e-mail é identificador da conta, não o nome de quem executou.
+   */
+  it('diz quem executou pelo nome, não pelo e-mail', async () => {
+    renderizar()
+
+    expect(await screen.findByText(/por Rafael Antunes/)).toBeInTheDocument()
+    expect(screen.queryByText(/supervisor@ac2microbiologia/)).not.toBeInTheDocument()
+  })
+
+  it('sem conta para o e-mail gravado, mostra o que foi gravado', async () => {
+    api.obterPreAnalise = vi
+      .fn()
+      .mockResolvedValue({ ...ANALISE, executada_por_nome: null })
+
+    renderizar()
+
+    expect(
+      await screen.findByText(/por supervisor@ac2microbiologia\.com\.br/),
+    ).toBeInTheDocument()
   })
 
   it('reavalia pelo botão do Supervisor', async () => {
@@ -234,6 +336,102 @@ describe('AbaPreAnalise', () => {
 
     expect(await screen.findByText(/enviada\. a tela atualiza sozinha/i)).toBeInTheDocument()
     expect(await screen.findByText(/na fila para começar/i)).toBeInTheDocument()
+  })
+
+  it('a espera de uma execução em andamento conta desde o início dela', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'executando',
+      status_rotulo: 'Executando',
+      executada_em: new Date(Date.now() - 40000).toISOString(),
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/está em andamento/i)).toBeInTheDocument()
+    expect(screen.getByText(/está demorando mais que o normal/i)).toBeInTheDocument()
+  })
+
+  /**
+   * O servidor apresenta como interrompida a execução que passou do teto sem
+   * terminar. Antes, a tela esperava para sempre, com o Reavaliar travado.
+   */
+  it('com resultado, oferece o relatório e aponta a decisão como próximo passo', async () => {
+    renderizar()
+
+    expect(await screen.findByRole('link', { name: /gerar relatório/i }))
+      .toHaveAttribute('href', '/oportunidades/OP-2026-001/relatorio/pre-analise')
+    expect(screen.getByText(/depois de acatar as recomendações/i)).toBeInTheDocument()
+  })
+
+  /**
+   * O avanço era um cartão no meio da página, e o botão laranja do topo era
+   * "Reavaliar", que refaz a análise. Agora o próximo passo é o botão
+   * principal da barra do fim, como nas outras etapas.
+   */
+  it('com resultado, a decisão fica na barra de ações e reavaliar é secundário', async () => {
+    const irPara = vi.fn()
+    renderizar({ irPara })
+
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+
+    expect(barra).toHaveTextContent(/depois de acatar as recomendações/i)
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toHaveClass('admin-btn--outline')
+
+    await userEvent.click(within(barra).getByRole('button', { name: /continuar para decisão/i }))
+    expect(irPara).toHaveBeenCalledWith('decisao')
+  })
+
+  /**
+   * O relatório é da última execução: sem resultado, o botão abria um
+   * documento vazio. E o próximo passo mandava acatar recomendações que ainda
+   * não existiam.
+   */
+  it('sem resultado, não oferece o relatório nem o próximo passo', async () => {
+    const semResultado = { dimensoes: [], lacunas: [], recomendacoes: [], sintese: '' }
+    const casos = [
+      { ...ANALISE, ...semResultado, status: 'executando', executada_em: new Date().toISOString() },
+      { ...ANALISE, ...semResultado, status: 'pendente', executada_em: new Date().toISOString() },
+      { ...ANALISE, ...semResultado, status: 'erro', erro: 'execucao_interrompida' },
+    ]
+
+    for (const caso of casos) {
+      api.obterPreAnalise = vi.fn().mockResolvedValue(caso)
+      const { unmount } = renderizar()
+
+      expect(await screen.findByRole('button', { name: /reavaliar/i })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /gerar relatório/i })).not.toBeInTheDocument()
+      expect(screen.queryByText(/depois de acatar as recomendações/i)).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('execução interrompida explica o que houve e libera o Reavaliar', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      status: 'erro',
+      status_rotulo: 'Erro',
+      erro: 'execucao_interrompida',
+      dimensoes: [],
+      lacunas: [],
+      recomendacoes: [],
+      sintese: '',
+    })
+
+    renderizar()
+
+    const aviso = await screen.findByRole('alert')
+
+    expect(aviso).toHaveTextContent(/passou do tempo esperado sem terminar/i)
+    expect(aviso).toHaveTextContent(/reavalie para tentar de novo/i)
+    expect(aviso).not.toHaveTextContent(/em alguns minutos/i)
+    expect(screen.queryByText(/está em andamento/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reavaliar/i })).toBeEnabled()
   })
 
   it('não desenha dimensão quando a execução falhou', async () => {
@@ -370,7 +568,7 @@ describe('AbaPreAnalise', () => {
 
     const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
     expect(ligada).toHaveTextContent('Plano de pesquisa')
-    expect(ligada).toHaveTextContent('A3 · Metodologia adequada')
+    expect(ligada).toHaveTextContent('Metodologia adequada (A3)')
     expect(within(ligada).getByText('Defina o controle negativo.')).toBeInTheDocument()
 
     await userEvent.click(within(ligada).getByRole('button', { name: /marcar como acatada/i }))
@@ -384,6 +582,31 @@ describe('AbaPreAnalise', () => {
 
     expect(screen.getByText('Outras recomendações')).toBeInTheDocument()
     expect(screen.getByText(/1 de 3 acatadas/)).toBeInTheDocument()
+  })
+
+  /**
+   * PB97: a lacuna que veio sem recomendacao e sinalizada, em vez de aparecer
+   * sozinha como se nao faltasse nada.
+   */
+  it('sinaliza a lacuna que veio sem recomendação', async () => {
+    api.obterPreAnalise = vi.fn().mockResolvedValue({
+      ...ANALISE,
+      lacunas: [
+        { id_lacuna: 8, campo_afetado: 'plano_pesquisa', descricao: 'Falta o controle negativo.', criterio_codigo: 'A3' },
+        { id_lacuna: 9, campo_afetado: 'viabilidade', descricao: 'Não há prazo.', criterio_codigo: null },
+      ],
+      recomendacoes: [
+        { id_recomendacao: 20, id_lacuna: 8, texto: 'Defina o controle negativo.', acatada: false },
+      ],
+    })
+
+    renderizar()
+
+    const semRecomendacao = (await screen.findByText('Não há prazo.')).closest('li')
+    expect(semRecomendacao).toHaveTextContent('A pré-análise não trouxe recomendação para esta lacuna.')
+
+    const comRecomendacao = screen.getByText('Falta o controle negativo.').closest('li')
+    expect(comRecomendacao).not.toHaveTextContent('não trouxe recomendação')
   })
 
   it('avisa que falta a equipe antes de executar sem ela', async () => {
@@ -449,6 +672,8 @@ describe('AbaPreAnalise', () => {
     await userEvent.click(await screen.findByRole('button', { name: /reavaliar/i }))
 
     expect(await screen.findByText(/10 a 30 segundos/i)).toBeInTheDocument()
+    expect(screen.getByText('A pré-análise está lendo a proposta e a equipe potencial.'))
+      .toBeInTheDocument()
     expect(aoOcupar).toHaveBeenLastCalledWith(true)
   })
 
@@ -511,6 +736,61 @@ describe('AbaPreAnalise', () => {
     expect(await screen.findByText(/somente leitura/i)).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /reavaliar/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * Com a pré-análise feita, o aviso só aparecia ao Supervisor; o Pesquisador
+   * lia o resultado sem saber que a proposta por trás dele não foi revisada.
+   */
+  it('o Pesquisador vê que a proposta não foi revisada, sem pedido de revisão (RN-IA01)', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar({ irPara: vi.fn() })
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * PB66: depois de Continuar o sistema recusa nova pré-análise. Acatar
+   * recomendação serve para a próxima rodada ler o progresso; sem rodada
+   * possível, a tela também deixa de oferecer. O relatório continua.
+   */
+  it('depois de Continuar, não oferece reavaliar nem acatar, e mantém o relatório (PB66)', async () => {
+    renderizar({ situacao: 'continuar' })
+
+    expect(await screen.findByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.getByText('Descrever a infraestrutura disponível.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reavaliar/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /marcar como acatada/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/próximo passo/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /gerar relatório/i })).toBeInTheDocument()
+  })
+
+  it('arquivada sem pré-análise, não oferece executar', async () => {
+    api.obterPreAnalise = vi
+      .fn()
+      .mockRejectedValue({ data: { codigo: 'preanalise_inexistente' }, message: 'sem' })
+
+    renderizar({ situacao: 'arquivada' })
+
+    expect(await screen.findByText(/foi arquivada/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/nenhuma pré-análise foi executada antes da decisão/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /executar pré-análise/i }),
     ).not.toBeInTheDocument()
   })
 })

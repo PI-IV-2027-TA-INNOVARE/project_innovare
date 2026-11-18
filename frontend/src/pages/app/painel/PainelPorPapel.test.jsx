@@ -92,17 +92,45 @@ beforeEach(() => {
 })
 
 describe('PainelPorPapel — Supervisor', () => {
+  it('conta a fila inteira, mesmo quando ela passa de uma página da API', async () => {
+    /**
+     * A API entrega no máximo 100 oportunidades por página, e o Painel lia só
+     * a primeira: da 101ª em diante, nada entrava nos indicadores.
+     */
+    api.listOportunidades = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 3, next: '/?page=2', results: [AGUARDANDO, ESTRUTURACAO] })
+      .mockResolvedValueOnce({ count: 3, next: null, results: [CONTINUAR] })
+
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const total = (await screen.findByText('Oportunidades')).closest('.stat-card')
+
+    expect(await within(total).findByText('3')).toBeInTheDocument()
+    expect(api.listOportunidades).toHaveBeenCalledTimes(2)
+  })
+
   it('conta a fila que o servidor devolve, não um exemplo local', async () => {
     renderPainel('supervisor', 'Rafael Antunes')
 
     const total = (await screen.findByText('Oportunidades')).closest('.stat-card')
     expect(within(total).getByText('3')).toBeInTheDocument()
 
-    const decisao = screen.getByText('Aguardando sua decisão').closest('.stat-card')
+    const decisao = screen.getByText('Aguardando decisão', { selector: '.stat-card__label' }).closest('.stat-card')
     expect(within(decisao).getByText('1')).toBeInTheDocument()
 
-    const andamento = screen.getByText('Em andamento').closest('.stat-card')
+    const andamento = screen.getByText('Em andamento', { selector: '.stat-card__label' }).closest('.stat-card')
     expect(within(andamento).getByText('2')).toBeInTheDocument()
+  })
+
+  it('cada indicador diz o que conta, sem deixar o período e a causa para deduzir', async () => {
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const total = (await screen.findByText('Oportunidades')).closest('.stat-card')
+    expect(total).toHaveTextContent('Todas as cadastradas, inclusive as decididas')
+
+    const invisiveis = screen.getByText('Perfis invisíveis ao matching').closest('.stat-card')
+    expect(invisiveis).toHaveTextContent('Sem competência declarada — o matching não os encontra')
   })
 
   it('cada indicador leva à fila que corresponde ao que ele conta', async () => {
@@ -110,11 +138,14 @@ describe('PainelPorPapel — Supervisor', () => {
 
     await screen.findByText('Oportunidades')
 
-    expect(screen.getByText('Aguardando sua decisão').closest('a'))
+    expect(screen.getByText('Em andamento', { selector: '.stat-card__label' }).closest('a'))
+      .toHaveAttribute('href', '/oportunidades?situacao=em_andamento')
+
+    expect(screen.getByText('Aguardando decisão', { selector: '.stat-card__label' }).closest('a'))
       .toHaveAttribute('href', '/oportunidades?situacao=aguardando_decisao')
 
     expect(screen.getByText('Perfis invisíveis ao matching').closest('a'))
-      .toHaveAttribute('href', '/rede')
+      .toHaveAttribute('href', '/rede?sem_competencia=1')
   })
 
   it('agrupa por etapa com os números do servidor e abre a fila filtrada', async () => {
@@ -129,6 +160,95 @@ describe('PainelPorPapel — Supervisor', () => {
 
     expect(within(etapas).getByText('Em estruturação')).toBeInTheDocument()
     expect(within(etapas).queryByText('Competências')).not.toBeInTheDocument()
+  })
+
+  it('separa as etapas em andamento das que já tiveram decisão', async () => {
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const etapas = (await screen.findByRole('heading', { name: /oportunidades por etapa/i }))
+      .closest('.painel-secao')
+
+    const grupo = (nome) =>
+      within(etapas).getByRole('heading', { name: nome }).closest('.painel-etapas-grupo')
+
+    expect(within(grupo('Em andamento')).getByText('Aguardando decisão')).toBeInTheDocument()
+    expect(within(grupo('Em andamento')).getByText('Em estruturação')).toBeInTheDocument()
+    expect(within(grupo('Em andamento')).queryByText('Continuar')).not.toBeInTheDocument()
+
+    expect(within(grupo('Decididas')).getByText('Continuar')).toBeInTheDocument()
+    expect(within(grupo('Decididas')).queryByText('Em estruturação')).not.toBeInTheDocument()
+  })
+
+  it('não mostra o grupo das decididas enquanto nenhuma teve decisão', async () => {
+    api.listOportunidades = vi.fn().mockResolvedValue({ results: [AGUARDANDO, ESTRUTURACAO] })
+
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const etapas = (await screen.findByRole('heading', { name: /oportunidades por etapa/i }))
+      .closest('.painel-secao')
+
+    expect(within(etapas).getByRole('heading', { name: 'Em andamento' })).toBeInTheDocument()
+    expect(within(etapas).queryByRole('heading', { name: 'Decididas' })).not.toBeInTheDocument()
+  })
+
+  /**
+   * A fila chega da atualizacao mais recente para a mais antiga, e o painel
+   * pegava as tres primeiras: as que esperavam havia mais tempo ficavam de fora.
+   */
+  it('lista primeiro as decisões paradas há mais tempo e diz quantas ficaram de fora', async () => {
+    const aguardando = (codigo, titulo, atualizadaEm) => ({
+      ...AGUARDANDO,
+      codigo,
+      titulo,
+      atualizada_em: atualizadaEm,
+    })
+
+    api.listOportunidades = vi.fn().mockResolvedValue({
+      results: [
+        aguardando('OP-2026-021', 'Mais recente', '2026-09-20T10:00:00.000Z'),
+        aguardando('OP-2026-020', 'Quarta mais antiga', '2026-09-15T10:00:00.000Z'),
+        aguardando('OP-2026-019', 'Terceira mais antiga', '2026-09-10T10:00:00.000Z'),
+        aguardando('OP-2026-018', 'Segunda mais antiga', '2026-09-05T10:00:00.000Z'),
+        aguardando('OP-2026-017', 'Mais antiga', '2026-09-01T10:00:00.000Z'),
+      ],
+    })
+
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const secao = (await screen.findByRole('heading', { name: 'Esperando decisão' }))
+      .closest('.painel-secao')
+
+    const titulos = [...secao.querySelectorAll('.painel-lista__titulo')].map((item) => item.textContent)
+
+    expect(titulos).toEqual(['Mais antiga', 'Segunda mais antiga', 'Terceira mais antiga'])
+    expect(secao).toHaveTextContent(
+      'Mostrando as 3 que estão há mais tempo sem atualização, de 5 aguardando decisão.'
+    )
+  })
+
+  it('não fala em "ficaram de fora" quando todas as que esperam decisão cabem na lista', async () => {
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const secao = (await screen.findByRole('heading', { name: 'Esperando decisão' }))
+      .closest('.painel-secao')
+
+    expect(within(secao).getByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
+    expect(secao).not.toHaveTextContent(/Mostrando as/)
+  })
+
+  /**
+   * Toda oportunidade dessa lista esta aguardando decisao, e o titulo da secao
+   * ja diz isso. No celular, a etiqueta repetida ocupava quase metade da linha
+   * e espremia o titulo em tres linhas.
+   */
+  it('a lista de decisões não repete em cada item a situação que o título já diz', async () => {
+    renderPainel('supervisor', 'Rafael Antunes')
+
+    const secao = (await screen.findByRole('heading', { name: 'Esperando decisão' }))
+      .closest('.painel-secao')
+
+    expect(within(secao).getByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
+    expect(secao.querySelector('.fluxo-badge')).toBeNull()
   })
 
   it('conta os perfis invisíveis pela rede do servidor', async () => {
@@ -148,7 +268,7 @@ describe('PainelPorPapel — Pesquisador', () => {
     renderPainel('pesquisador', 'Maria Ferreira')
 
     expect(await screen.findByText('Oportunidades comigo')).toBeInTheDocument()
-    expect(screen.queryByText('Aguardando sua decisão')).not.toBeInTheDocument()
+    expect(screen.queryByText('Aguardando decisão', { selector: '.stat-card__label' })).not.toBeInTheDocument()
     expect(screen.getByText(/não há convite para aceitar ou recusar/i)).toBeInTheDocument()
   })
 
@@ -185,6 +305,18 @@ describe('PainelPorPapel — Demandante', () => {
 
     expect(screen.getByRole('link', { name: /bioinsumo/i }))
       .toHaveAttribute('href', '/problemas/OP-2026-014')
+  })
+
+  it('a lista do Demandante mostra a situação de cada problema', async () => {
+    api.listOportunidades = vi.fn().mockResolvedValue({ results: [AGUARDANDO, REVISAR] })
+
+    renderPainel('demandante', 'Agroindústria Vale Verde')
+
+    const secao = (await screen.findByRole('heading', { name: 'Seus problemas' }))
+      .closest('.painel-secao')
+
+    expect(within(secao).getByText('Revisar', { selector: '.fluxo-badge' })).toBeInTheDocument()
+    expect(within(secao).getByText('Aguardando decisão', { selector: '.fluxo-badge' })).toBeInTheDocument()
   })
 
   it('o indicador "Aguardando você" abre a lista já filtrada', async () => {

@@ -92,11 +92,14 @@ from apps.maturity.serializers import (
     AcatarRecomendacaoSerializer,
     PreAnaliseSerializer,
     RecomendacaoSerializer,
+    RodadaDaPreAnaliseSerializer,
 )
 from apps.maturity.services import (
     AcatarRecomendacaoService,
     PreAnalisarService,
     preanalise_atual_de,
+    preanalise_da_rodada,
+    preanalises_de,
     recomendacao_de,
 )
 from apps.network.models import MembroRede
@@ -179,6 +182,8 @@ ACOES_DE_TRABALHO_INTERNO = (
     'equipe_membro_item',
     'equipe_validar',
     'pre_analise',
+    'pre_analises',
+    'pre_analise_rodada',
     'recomendacao_item',
 )
 """
@@ -1034,6 +1039,37 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
             )
 
         return Response(PreAnaliseSerializer(preanalise_atual_de(oportunidade)).data)
+
+    @extend_schema(responses=RodadaDaPreAnaliseSerializer(many=True))
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='pre-analises',
+        url_name='pre-analises',
+    )
+    def pre_analises(self, request, codigo=None):
+        """Todas as rodadas da pre-analise, e nao so a ultima (PB98)."""
+        rodadas = list(preanalises_de(self.get_object()))
+        atual = rodadas[0].id_pre_analise if rodadas else None
+
+        return Response(
+            RodadaDaPreAnaliseSerializer(rodadas, many=True, context={'atual': atual}).data
+        )
+
+    @extend_schema(responses=PreAnaliseSerializer)
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path=r'pre-analises/(?P<identificador>[0-9a-f-]{36})',
+        url_name='pre-analise-rodada',
+    )
+    def pre_analise_rodada(self, request, codigo=None, identificador=None):
+        """Uma rodada antiga, com a comparacao dela com a que veio antes (PB98)."""
+        return Response(
+            PreAnaliseSerializer(
+                preanalise_da_rodada(self.get_object(), identificador)
+            ).data
+        )
 
     @extend_schema(
         request=AcatarRecomendacaoSerializer, responses=RecomendacaoSerializer

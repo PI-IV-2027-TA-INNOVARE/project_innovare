@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -98,6 +101,19 @@ describe('ProblemasPage', () => {
     expect(api.listOportunidades).toHaveBeenCalledTimes(1)
   })
 
+  it('lista todos os problemas, mesmo quando passam de uma página da API', async () => {
+    api.listOportunidades = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 2, next: '/?page=2', results: [BIOINSUMO] })
+      .mockResolvedValueOnce({ count: 2, next: null, results: [SUCO] })
+
+    renderApp()
+
+    expect(await screen.findByText('Vida de prateleira de suco integral')).toBeInTheDocument()
+    expect(screen.getByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
+    expect(api.listOportunidades).toHaveBeenCalledTimes(2)
+  })
+
   it('avisa e oferece nova tentativa quando a API falha', async () => {
     const user = userEvent.setup({ delay: null })
     api.listOportunidades = vi.fn().mockRejectedValue(new Error('Servidor fora do ar.'))
@@ -144,6 +160,72 @@ describe('ProblemasPage', () => {
       'href',
       '/problemas/novo'
     )
+  })
+})
+
+describe('ProblemasPage — estilo', () => {
+  it('carrega o estilo da lista do Supervisor que ela reaproveita', () => {
+    /**
+     * O link de titulo e codigo vem de OportunidadesPage.scss. Sem o import,
+     * o Demandante - que nunca abre a lista do Supervisor - via os dois
+     * colados na mesma linha.
+     */
+    const fonte = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'ProblemasPage.jsx'),
+      'utf8',
+    )
+
+    expect(fonte).toContain("import '../oportunidades/OportunidadesPage.scss'")
+  })
+})
+
+describe('ProblemasPage — paginação', () => {
+  const muitos = Array.from({ length: 12 }, (_, indice) => ({
+    ...BIOINSUMO,
+    codigo: `OP-2026-${String(100 + indice)}`,
+    titulo: `Problema número ${String(indice + 1).padStart(2, '0')}`,
+    atualizada_em: new Date(Date.UTC(2026, 8, 30 - indice)).toISOString(),
+  }))
+
+  const linhas = () => screen.getAllByRole('link', { name: /problema número/i })
+
+  beforeEach(() => {
+    api.listOportunidades = vi.fn().mockResolvedValue({ results: muitos })
+  })
+
+  it('mostra uma página por vez, como a lista do Supervisor', async () => {
+    renderApp()
+    await screen.findByText('Problema número 01')
+
+    const paginacao = screen.getByRole('navigation', { name: /paginação de meus problemas/i })
+
+    expect(linhas()).toHaveLength(10)
+    expect(paginacao).toHaveTextContent('Mostrando 1–10 de 12')
+  })
+
+  it('a próxima página traz o resto', async () => {
+    const user = userEvent.setup({ delay: null })
+    renderApp()
+    await screen.findByText('Problema número 01')
+
+    await user.click(screen.getByRole('button', { name: 'Próxima página' }))
+
+    expect(linhas()).toHaveLength(2)
+    expect(screen.getByText('Problema número 12')).toBeInTheDocument()
+  })
+
+  it('filtrar volta para a primeira página', async () => {
+    const user = userEvent.setup({ delay: null })
+    renderApp()
+    await screen.findByText('Problema número 01')
+
+    await user.click(screen.getByRole('button', { name: 'Próxima página' }))
+    await user.type(screen.getByLabelText(/buscar problemas/i), 'Problema')
+
+    expect(screen.getByText('Problema número 01')).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: /paginação de meus problemas/i }),
+    ).toHaveTextContent('Mostrando 1–10 de 12')
   })
 })
 
@@ -336,7 +418,7 @@ describe('ProblemaPage', () => {
     renderApp('/problemas/OP-2026-014')
 
     expect(await screen.findByText('Oportunidade cadastrada.')).toBeInTheDocument()
-    expect(screen.getByText(/análise interna do núcleo/i)).toBeInTheDocument()
+    expect(screen.getByText(/trabalho interno do núcleo/i)).toBeInTheDocument()
   })
 
   it('abre a complementação com o pedido do Supervisor e envia pela API', async () => {
@@ -389,10 +471,12 @@ describe('ProblemaPage', () => {
     await screen.findByRole('heading', { name: /redução de nitrito/i })
 
     const encaminhamento = screen
-      .getByRole('heading', { name: /encaminhamento do núcleo/i })
+      .getByRole('heading', { name: /decisão do núcleo/i })
       .closest('.perfil-card')
 
-    expect(within(encaminhamento).getByText('Continuar')).toBeInTheDocument()
+    expect(
+      within(encaminhamento).getByText(/decidiu dar continuidade a este problema/i),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/maturidade suficiente/i)).not.toBeInTheDocument()
   })
 })

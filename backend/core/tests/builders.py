@@ -439,3 +439,24 @@ def indicar_na_equipe(
         membro=membro,
         papel=papel or membro.papel_rede,
     )
+
+
+def conferir_sintese(oportunidade: Oportunidade, ator: Usuario, texto: str | None = None):
+    """
+    O resumo da entrada aceito pelo Supervisor (PB87).
+
+    A estruturacao so parte de sintese conferida. Abre a sessao do Copiloto se
+    nao houver uma aberta e aceita o resumo que ela tem - ou o `texto` dado.
+    """
+    from apps.copilot.models import SessaoCopiloto
+    from apps.copilot.services.copiloto import AtualizarSinteseService, sessao_aberta_de
+
+    sessao = sessao_aberta_de(oportunidade) or SessaoCopiloto.objects.create(
+        oportunidade=oportunidade, iniciada_por=ator
+    )
+
+    return AtualizarSinteseService().execute(
+        sessao=sessao,
+        sintese=texto or sessao.sintese or 'Resumo da entrada conferido pelo Supervisor.',
+        ator=ator,
+    )

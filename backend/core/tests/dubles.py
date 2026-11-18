@@ -166,6 +166,24 @@ class ProvedorFake:
         )
 
 
+class ProvedorPelaReserva(ProvedorFake):
+    """
+    O principal falhou e a reserva respondeu: ha resposta, marcada como da reserva.
+
+    E o envelope que `ProvedorComReserva` devolve. A resposta e de IA, e quem
+    consome nao pode trata-la como o caminho sem IA.
+    """
+
+    def _responder(
+        self, tipo: str, dados: dict[str, Any], executado_por: str
+    ) -> dict[str, Any]:
+        return {
+            **super()._responder(tipo, dados, executado_por),
+            'fallback_usado': True,
+            'motivo_fallback': 'modelo_de_reserva',
+        }
+
+
 class ProvedorIndisponivel:
     """
     O gateway que nao chama a IA: fallback em toda operacao, sem execucao.

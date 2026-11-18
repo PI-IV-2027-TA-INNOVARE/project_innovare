@@ -35,6 +35,16 @@ def ordenar_rede(queryset: QuerySet[MembroRede], ordem: str) -> QuerySet[MembroR
     return queryset.order_by(principal, 'nome_atual')
 
 
+def sem_competencia_declarada(queryset: QuerySet[MembroRede]) -> QuerySet[MembroRede]:
+    """
+    Quem nao declarou competencia: o matching compara competencias, entao esse
+    perfil fica invisivel a ele. O resumo conta e a lista filtra pela mesma regra.
+    """
+    return queryset.exclude(
+        vinculos_competencia__competencia__tipo=TipoCompetencia.COMPETENCIA
+    )
+
+
 def resumo_da_rede() -> dict[str, int]:
     rede = MembroRede.objects.all()
 
@@ -44,7 +54,5 @@ def resumo_da_rede() -> dict[str, int]:
         'titulados': rede.filter(
             titulacao__codigo__in=TITULACOES_DE_MESTRE_OU_DOUTOR
         ).count(),
-        'sem_competencia': rede.exclude(
-            vinculos_competencia__competencia__tipo=TipoCompetencia.COMPETENCIA
-        ).count(),
+        'sem_competencia': sem_competencia_declarada(rede).count(),
     }

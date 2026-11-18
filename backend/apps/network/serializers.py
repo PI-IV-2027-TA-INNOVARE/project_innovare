@@ -5,6 +5,7 @@ O vocabulario e o do cliente: membro da rede, titulacao, competencia, tecnica,
 linha de pesquisa, disponibilidade.
 """
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.network.services.consulta import ORDENS_DA_REDE
@@ -193,8 +194,34 @@ class MudancaDeSituacaoSerializer(serializers.Serializer):
     """Sem corpo: inativar e reativar sao a propria rota."""
 
 
+class EquipeAfetadaSerializer(serializers.Serializer):
+    codigo = serializers.CharField()
+    titulo = serializers.CharField()
+
+
+class MembroInativadoSerializer(MembroRedeSerializer):
+    """
+    O membro inativado e as equipes vigentes em que ele esta (PB84).
+
+    A lista e para o Supervisor decidir o ajuste de cada equipe (PB47): a
+    inativacao nao tira ninguem de equipe nenhuma.
+    """
+
+    equipes_afetadas = serializers.SerializerMethodField()
+
+    class Meta(MembroRedeSerializer.Meta):
+        fields = [*MembroRedeSerializer.Meta.fields, 'equipes_afetadas']
+
+    @extend_schema_field(EquipeAfetadaSerializer(many=True))
+    def get_equipes_afetadas(self, membro):
+        return EquipeAfetadaSerializer(
+            self.context.get('equipes_afetadas', []), many=True
+        ).data
+
+
 class FiltroDaRedeSerializer(serializers.Serializer):
     ordenar = serializers.ChoiceField(choices=ORDENS_DA_REDE, required=False)
+    sem_competencia = serializers.BooleanField(required=False, default=False)
 
 
 class ResumoDaRedeSerializer(serializers.Serializer):

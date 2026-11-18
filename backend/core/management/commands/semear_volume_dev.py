@@ -8,8 +8,10 @@ Monta uma rede de 60 pessoas, 12 empresas demandantes e oportunidades em todas
 as etapas do fluxo. Ate as competencias, cada oportunidade passa pelos services
 de sempre. O resultado do matching e o da pre-analise sao gravados como se a IA
 tivesse rodado: nenhuma chamada a provedor, nenhum e-mail. A situacao final e a
-que os dados dizem (`ajustar_pelos_dados`); as decididas recebem a decisao e
-passam pelo `mover`.
+que os dados dizem (`ajustar_pelos_dados`); as decididas recebem a decisao pelo
+`RegistrarDecisaoService`, que grava o evento da decisao na trilha, como na
+plataforma. Depois, as datas da rodada vao para a janela da oportunidade
+(`espalhar_no_tempo`): do cadastro a decisao, ou ate poucas horas atras.
 
 Pessoas e empresas sao ficticias (`@*.example`), sem senha utilizavel. O plano
 sai de um sorteio com semente fixa, entao rodar de novo nao duplica nada.
@@ -23,12 +25,14 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Max, Q
 from django.test.utils import override_settings
 from django.utils import timezone
 
 from apps.accounts.models import Papel, SituacaoConta, Usuario
 from apps.accounts.services.criadores import CriadorDeDemandante
 from apps.ai.models import StatusExecucao
+from apps.audit.models import EventoAuditoria
 from apps.competencies.models import NivelImportancia
 from apps.competencies.services.derivacao import AdicionarCompetenciaService
 from apps.copilot.models import Lacuna, Severidade, TipoLacuna
@@ -68,8 +72,11 @@ from apps.opportunities.models import (
     PrioridadeOportunidade,
     SituacaoOportunidade as S,
 )
-from apps.opportunities.services.fluxo import ETAPAS_EM_CURSO, ajustar_pelos_dados, mover
-from apps.opportunities.services.oportunidade import CadastrarOportunidadeService
+from apps.opportunities.services.fluxo import ETAPAS_EM_CURSO, ajustar_pelos_dados
+from apps.opportunities.services.oportunidade import (
+    CadastrarOportunidadeService,
+    RegistrarDecisaoService,
+)
 from apps.organizations.cnpj import PESOS_PRIMEIRO_DIGITO, PESOS_SEGUNDO_DIGITO
 from apps.organizations.models import Organizacao, TipoOrganizacao
 from core.management.commands.semear_dev import TITULACOES, exigir_banco_local
@@ -564,6 +571,64 @@ def plano_das_oportunidades(sorteio, total):
     return plano
 
 
+def espalhar_no_tempo(oportunidade, *, comeco, inicio, fim):
+    """
+    Leva para a janela da oportunidade o que a rodada gravou com a hora de agora.
+
+    O seed roda em segundos: sem isto, a trilha mostrava todos os eventos no
+    mesmo minuto, e a decisao meses antes deles. Cada data vai para a mesma
+    proporcao da janela [inicio, fim] em que caiu entre `comeco` e o ultimo
+    evento da rodada, entao a ordem se mantem e o ultimo evento cai em `fim`.
+    So o que foi gravado a partir de `comeco` se move.
+
+    A trilha e append-only para a aplicacao (`apps/audit/models.py`). Aqui o
+    seed monta uma historia ficticia que acabou de gravar, no banco local; nao
+    e precedente para mexer em evento que aconteceu.
+    """
+    da_oportunidade = Q(oportunidade=oportunidade) | Q(
+        entidade='oportunidade', entidade_id=oportunidade.codigo
+    )
+    eventos = EventoAuditoria.objects.filter(da_oportunidade, ocorrido_em__gte=comeco)
+    termino = eventos.aggregate(ultimo=Max('ocorrido_em'))['ultimo']
+
+    if termino is None:
+        return
+
+    duracao = max((termino - comeco).total_seconds(), 1e-6)
+
+    def levar(momento):
+        fracao = min(max((momento - comeco).total_seconds() / duracao, 0.0), 1.0)
+        return inicio + (fim - inicio) * fracao
+
+    alvos = (
+        (eventos, ('ocorrido_em',)),
+        (
+            EquipePotencial.objects.filter(oportunidade=oportunidade, data_geracao__gte=comeco),
+            ('data_geracao',),
+        ),
+        (
+            ExecucaoMatching.objects.filter(oportunidade=oportunidade, iniciado_em__gte=comeco),
+            ('iniciado_em', 'concluido_em'),
+        ),
+        (
+            PreAnalise.objects.filter(proposta__oportunidade=oportunidade, executada_em__gte=comeco),
+            ('executada_em',),
+        ),
+    )
+
+    for consulta, campos in alvos:
+        for pk, *momentos in list(consulta.values_list('pk', *campos)):
+            consulta.model.objects.filter(pk=pk).update(
+                **{
+                    campo: levar(momento)
+                    for campo, momento in zip(campos, momentos)
+                    if momento is not None
+                }
+            )
+
+    Oportunidade.objects.filter(pk=oportunidade.pk).update(atualizada_em=levar(termino))
+
+
 def proposta_do_tema(tema):
     return {
         'problema_pesquisa': tema['resumo'] + ' ' + tema['contexto'],
@@ -717,6 +782,7 @@ class Command(BaseCommand):
         if Oportunidade.objects.filter(titulo=item['titulo'], criado_por=autor).exists():
             return 0
 
+        comeco = timezone.now()
         sorteio = random.Random(item['semente'])
         tema = item['tema']
         etapa = item['etapa']
@@ -758,20 +824,23 @@ class Command(BaseCommand):
 
         if decisao is not None:
             oportunidade.refresh_from_db()
-            Decisao.objects.create(
+            RegistrarDecisaoService().execute(
                 oportunidade=oportunidade,
-                tipo_decisao=decisao,
-                observacoes=OBSERVACAO_DA_DECISAO[decisao],
-                responsavel=coordenacao,
-                pre_analise=analise,
+                tipo=decisao,
+                justificativa=OBSERVACAO_DA_DECISAO[decisao],
+                ator=coordenacao,
             )
-            mover(oportunidade, etapa, coordenacao)
+            Decisao.objects.filter(oportunidade=oportunidade).update(pre_analise=analise)
 
         quando = timezone.now() - timedelta(days=item['dias'])
-        Oportunidade.objects.filter(pk=oportunidade.pk).update(criada_em=quando)
-        Decisao.objects.filter(oportunidade=oportunidade).update(
-            registrada_em=quando + timedelta(days=sorteio.randint(20, 90))
+        fim = (
+            quando + timedelta(days=sorteio.randint(20, 90))
+            if decisao is not None
+            else timezone.now() - timedelta(hours=sorteio.randint(1, 36))
         )
+        espalhar_no_tempo(oportunidade, comeco=comeco, inicio=quando, fim=fim)
+        Oportunidade.objects.filter(pk=oportunidade.pk).update(criada_em=quando)
+        Decisao.objects.filter(oportunidade=oportunidade).update(registrada_em=fim)
 
         return 1
 

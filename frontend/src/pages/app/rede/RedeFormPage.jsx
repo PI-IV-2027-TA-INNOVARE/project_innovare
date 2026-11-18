@@ -46,7 +46,7 @@ const VAZIO = {
   nome: '',
   email: '',
   papel: 'pesquisador',
-  titulacao: 'mestrado',
+  titulacao: '',
   instituicao: 'AC2 Microbiologia',
   disponibilidade: 'parcial',
   competencias: [],
@@ -206,8 +206,10 @@ export default function RedeFormPage() {
             {editando ? valores.nome : 'Cadastrar pesquisador'}
           </h1>
           <p className="rede-page__description">
-            O cadastro coloca a pessoa na rede que o matching enxerga. A liberação
-            de acesso é o passo seguinte — e separado.
+            Adicione pesquisadores à rede institucional, informe suas
+            qualificações e competências e permita que o sistema identifique
+            possíveis correspondências com oportunidades de pesquisa. O acesso à
+            plataforma pode ser concedido separadamente.
           </p>
         </div>
       </header>
@@ -233,6 +235,7 @@ export default function RedeFormPage() {
               <input
                 type="text"
                 className="admin-input"
+                autoComplete="name"
                 aria-required="true"
                 value={valores.nome}
                 onChange={alterarCampo('nome')}
@@ -253,6 +256,7 @@ export default function RedeFormPage() {
               <input
                 type="email"
                 className="admin-input"
+                autoComplete="email"
                 aria-required="true"
                 value={valores.email}
                 onChange={alterarCampo('email')}
@@ -276,19 +280,18 @@ export default function RedeFormPage() {
                 </select>
               </label>
 
-              <div className="admin-field">
+              <div className="admin-field admin-field--info">
                 <label className="admin-field__label" htmlFor="campo-rede-instituicao">
                   Instituição
                 </label>
-                <input
+                <div
                   id="campo-rede-instituicao"
-                  type="text"
-                  className="admin-input"
-                  value={valores.instituicao}
-                  readOnly
+                  className="admin-field__valor"
                   aria-readonly="true"
                   aria-describedby="dica-instituicao"
-                />
+                >
+                  {valores.instituicao}
+                </div>
                 <span id="dica-instituicao" className="admin-field__hint">
                   O vínculo institucional vem do cadastro de organizações.
                 </span>
@@ -302,8 +305,9 @@ export default function RedeFormPage() {
             <div>
               <h2 className="perfil-card__title">Qualificação</h2>
               <p className="perfil-card__description">
-                Titulação é lista fechada porque o matching usa o nível dela para
-                priorizar mestres e doutores na supervisão.
+                A titulação ajuda o sistema a identificar o nível de formação dos
+                profissionais e considerar os critérios de qualificação definidos
+                para cada oportunidade.
               </p>
             </div>
           </header>
@@ -317,6 +321,7 @@ export default function RedeFormPage() {
                   value={valores.titulacao}
                   onChange={alterarCampo('titulacao')}
                 >
+                  <option value="">Selecione a titulação</option>
                   {TITULACOES.map((titulacao) => (
                     <option key={titulacao.id} value={titulacao.id}>{titulacao.label}</option>
                   ))}
@@ -369,9 +374,11 @@ export default function RedeFormPage() {
           <header className="perfil-card__header">
             <div>
               <h2 className="perfil-card__title">O que o matching compara</h2>
-              <p className="perfil-card__description">
-                O matching compara estas listas com as competências necessárias
-                de cada oportunidade.
+              <p className="perfil-card__description descricao-una-linha">
+                O matching compara estas listas com as competências necessárias de cada oportunidade.
+              </p>
+              <p className="admin-field__hint" role="note">
+                Técnicas e Linhas de Pesquisa aparecem após preencher Competências.
               </p>
             </div>
           </header>
@@ -384,7 +391,12 @@ export default function RedeFormPage() {
               </p>
             ) : null}
 
-            {LISTAS_DO_MATCHING.map((lista) => (
+            {LISTAS_DO_MATCHING.filter(({ campo }) => {
+              if (campo === 'competencias') return true;
+              if (campo === 'tecnicas') return valores.competencias.length > 0;
+              if (campo === 'linhas') return valores.tecnicas.length > 0;
+              return false;
+            }).map((lista) => (
               <div key={lista.campo} className="admin-field">
                 <span className="admin-field__label">{lista.label}</span>
                 <span className="admin-field__hint">{lista.dica}</span>
@@ -400,13 +412,12 @@ export default function RedeFormPage() {
           </div>
         </section>
 
-        <section className="perfil-card">
+        <section className="perfil-card perfil-card--acesso-plataforma">
           <header className="perfil-card__header">
             <div>
               <h2 className="perfil-card__title">Acesso à plataforma</h2>
               <p className="perfil-card__description">
-                Passo separado do cadastro: a pessoa pode integrar a rede antes de
-                receber login.
+                Cadastro na rede e acesso à plataforma são passos separados.
               </p>
             </div>
           </header>
@@ -447,7 +458,11 @@ export default function RedeFormPage() {
           <button type="button" className="admin-btn admin-btn--outline" onClick={cancelar}>
             Cancelar
           </button>
-          <button type="submit" className="admin-btn" disabled={salvando}>
+          <button
+            type="submit"
+            className="admin-btn"
+            disabled={salvando || !valores.nome.trim() || !valores.email.trim()}
+          >
             <Icone icon={editando ? appIcons.save : appIcons.addUser} />
             {salvando
               ? 'Gravando...'

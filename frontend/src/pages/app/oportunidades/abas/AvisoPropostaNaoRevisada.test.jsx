@@ -40,11 +40,67 @@ describe('AvisoPropostaNaoRevisada', () => {
 
   it('leva à aba Proposta para revisar', async () => {
     const irPara = vi.fn()
-    render(<AvisoPropostaNaoRevisada oportunidadeId="OP-2026-001" irPara={irPara} />)
+    render(
+      <AvisoPropostaNaoRevisada oportunidadeId="OP-2026-001" irPara={irPara} podeRevisar />,
+    )
 
-    await userEvent.click(await screen.findByRole('button', { name: /revisar a proposta/i }))
+    expect(await screen.findByText(/esta etapa fica liberada/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /revisar a proposta/i }))
 
     expect(irPara).toHaveBeenCalledWith('proposta')
+  })
+
+  /**
+   * RN-IA01 indica o conteúdo não revisado a quem o lê, sem restringir o
+   * perfil. Mas só o Supervisor revisa: para o Pesquisador, "revise e salve" e
+   * o botão de revisar pediam algo que ele não pode fazer.
+   */
+  it('para quem não revisa, só informa: sem pedir revisão nem botão (RN-IA01)', async () => {
+    render(<AvisoPropostaNaoRevisada oportunidadeId="OP-2026-001" irPara={vi.fn()} />)
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/não vale como definitivo/i)).toBeInTheDocument()
+    expect(screen.queryByText(/você revisa/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A Decisão não espera a revisão. Ali, "esta etapa fica liberada" seria
+   * falso: o aviso diz que o texto não vale como definitivo e leva a revisar.
+   */
+  it('em etapa que não espera a revisão, não diz que ela está travada (PB90)', async () => {
+    const irPara = vi.fn()
+    render(
+      <AvisoPropostaNaoRevisada
+        oportunidadeId="OP-2026-001"
+        irPara={irPara}
+        podeRevisar
+        bloqueiaEtapa={false}
+      />,
+    )
+
+    expect(await screen.findByText(/só vale como definitivo/i)).toBeInTheDocument()
+    expect(screen.queryByText(/fica liberada/i)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /revisar a proposta/i }))
+    expect(irPara).toHaveBeenCalledWith('proposta')
+  })
+
+  it('na oportunidade encerrada, diz que a decisão saiu sem revisão e não oferece revisar', async () => {
+    render(
+      <AvisoPropostaNaoRevisada
+        oportunidadeId="OP-2026-001"
+        irPara={vi.fn()}
+        podeRevisar
+        encerrada
+      />,
+    )
+
+    expect(await screen.findByText(/não foi revisada antes da decisão/i)).toBeInTheDocument()
+    expect(screen.queryByText(/fica liberada/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('não avisa depois da revisão humana', async () => {

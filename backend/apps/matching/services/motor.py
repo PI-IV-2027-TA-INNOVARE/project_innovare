@@ -409,6 +409,8 @@ class MotorDeMatching:
         if candidato.membro.titulacao_id:
             motivos.append(f'Titulação: {candidato.membro.titulacao.rotulo}.')
 
+        motivos.append(self._motivo_da_formacao(candidato))
+
         motivos.append(
             f'Disponibilidade declarada: '
             f'{candidato.membro.get_disponibilidade_display()}.'
@@ -428,6 +430,25 @@ class MotorDeMatching:
             )
 
         return motivos
+
+    def _motivo_da_formacao(self, candidato: Candidato) -> str:
+        """
+        A formacao entre os fatores da justificativa (PB93).
+
+        Sem formacao cadastrada o fator aparece como nao informado, e nao some:
+        quem le precisa saber que o perfil nao a declarou.
+        """
+        cursos = [
+            f'{formacao.curso} ({formacao.titulacao.rotulo})'
+            if formacao.titulacao_id
+            else formacao.curso
+            for formacao in candidato.membro.formacoes.all()
+        ]
+
+        if not cursos:
+            return 'Formação: não informada.'
+
+        return f'Formação: {"; ".join(cursos)}.'
 
 
 def candidato_de(membro: MembroRede) -> Candidato:

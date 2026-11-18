@@ -95,3 +95,85 @@ describe('eventoDaApi — situação e prioridade', () => {
     expect(evento.texto).toBe('Prioridade: Média.')
   })
 })
+
+describe('eventoDaApi — versão anterior da proposta (PB88)', () => {
+  it('traz o texto que cada elemento tinha antes de mudar', () => {
+    const evento = eventoDaApi(
+      {
+        ocorrido_em: '2026-11-12T10:00:00.000Z',
+        categoria: 'copiloto',
+        tipo: 'sugestao_aceita',
+        ator_nome: 'Rafael Antunes',
+        detalhe: {
+          elemento: 'metodologia',
+          anterior: {
+            metodologia: 'PCR em tempo real.',
+            objetivos_especificos: ['Isolar cepas', 'Validar o método'],
+          },
+        },
+      },
+      0,
+    )
+
+    expect(evento.texto).toBe('Sugestão do Copiloto aceita na proposta.')
+    expect(evento.anterior).toEqual([
+      { elemento: 'metodologia', rotulo: 'Metodologia', texto: 'PCR em tempo real.' },
+      { elemento: 'objetivos_especificos', rotulo: 'Objetivos específicos', texto: 'Isolar cepas; Validar o método' },
+    ])
+  })
+
+  it('evento sem versão anterior não traz nada a consultar', () => {
+    const evento = eventoDaApi(
+      { ocorrido_em: '2026-11-12T10:00:00.000Z', categoria: 'copiloto', tipo: 'proposta_atualizada', detalhe: { campos: ['metodologia'], anterior: {} } },
+      0,
+    )
+
+    expect(evento.texto).toBe('Proposta estruturada atualizada.')
+    expect(evento.anterior).toEqual([])
+  })
+})
+
+/**
+ * O histórico mostrava o `tipo` gravado (`competencia_adicionada`) para os
+ * eventos sem texto próprio na tela. A API passou a mandar o mesmo nome que a
+ * Auditoria usa, e é ele que aparece.
+ */
+describe('eventoDaApi — nome legível do evento', () => {
+  it('usa o nome que a API manda quando a tela não tem texto próprio', () => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-11-10T12:00:00Z',
+      categoria: 'competencias',
+      tipo: 'competencia_adicionada',
+      tipo_rotulo: 'Competência adicionada',
+      ator_nome: 'Rafael Antunes',
+      detalhe: { descricao: 'Microbiologia de alimentos' },
+    }, 0)
+
+    expect(evento.texto).toBe('Competência adicionada.')
+  })
+
+  it('sem nome legível, não repete o código como se fosse texto', () => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-11-10T12:00:00Z',
+      categoria: 'ia',
+      tipo: 'evento_novo',
+      tipo_rotulo: 'evento_novo',
+      detalhe: {},
+    }, 0)
+
+    expect(evento.texto).toBe('evento novo')
+  })
+
+  it('o que rodou sem pessoa sai como Sistema', () => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-11-10T12:00:00Z',
+      categoria: 'oportunidade',
+      tipo: 'situacao_atualizada',
+      ator: '__sistema__',
+      ator_nome: 'Sistema',
+      detalhe: { de: 'entrada', para: 'estruturacao', conferencia: true },
+    }, 0)
+
+    expect(evento.ator).toBe('Sistema')
+  })
+})

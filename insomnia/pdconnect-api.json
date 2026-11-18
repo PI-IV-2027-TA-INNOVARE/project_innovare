@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b7a1f0c2-5d64-4f3a-9c58-0f1a2b3c4d5e",
     "name": "P&D Connect API",
-    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular). Em 05/11/2026 foi conferida contra o schema e reproduzida contra a API: todas as rotas estao aqui.\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: docker compose up, ou python manage.py runserver (127.0.0.1:8000).\n2. Num banco local, semeie as contas: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. O access volta no corpo; no Postman o script o guarda em access_token, e no Insomnia, sem o script, cole o access na variavel. O refresh vai num cookie HttpOnly, que os dois clientes guardam e mandam sozinhos em \"Renova o access\" e em \"Logout\".\n4. Ajuste usuario_id, membro_id, codigo, anexo_id, competencia_id, membro_equipe_id, recomendacao_id e notificacao_id para registros do seu banco - os valores do arquivo sao exemplos.\n5. Os corpos ja sao exemplos validos, prontos para rodar. Eles gravam de verdade: troque o texto antes, se quiser outro conteudo, e num PATCH mande so o que muda, porque campo enviado vazio pode apagar o que estava salvo.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos as rotas publicas (login, renovacao, esqueci minha senha, redefinicao, leitura do tema e dos contatos de suporte, e aviso de privacidade). /schema/ e /docs/ abrem sem login so em desenvolvimento; em producao pedem o token do Administrador.\n\nPermissoes por ator: o Administrador nao entra no fluxo das oportunidades; o Demandante ve so as oportunidades da empresa e, nos anexos, so o que a empresa enviou; o Pesquisador da equipe le os anexos, mas so o Supervisor e o Demandante enviam.",
+    "description": "Colecao dos endpoints do P&D Connect (Django + DRF), gerada a partir de GET /api/schema/ (drf-spectacular). Em 05/11/2026 foi conferida contra o schema e reproduzida contra a API; em 10/11/2026, conferida de novo contra o schema: todas as rotas estao aqui.\n\nFormato: Postman Collection v2.1 - importa no Postman (Import > File) e no Insomnia (Import > From File, que le colecao Postman v2).\n\nComo usar:\n1. Suba o backend: docker compose up, ou python manage.py runserver (127.0.0.1:8000).\n2. Num banco local, semeie as contas: python manage.py semear_dev (senha padrao 123).\n3. Rode \"Login\" em Autenticacao. O access volta no corpo; no Postman o script o guarda em access_token, e no Insomnia, sem o script, cole o access na variavel. O refresh vai num cookie HttpOnly, que os dois clientes guardam e mandam sozinhos em \"Renova o access\" e em \"Logout\".\n4. Ajuste usuario_id, membro_id, codigo, anexo_id, competencia_id, membro_equipe_id, recomendacao_id e notificacao_id para registros do seu banco - os valores do arquivo sao exemplos.\n5. Os corpos ja sao exemplos validos, prontos para rodar. Eles gravam de verdade: troque o texto antes, se quiser outro conteudo, e num PATCH mande so o que muda, porque campo enviado vazio pode apagar o que estava salvo.\n\nAutenticacao: Bearer {{access_token}} herdado pela colecao inteira, menos as rotas publicas (login, renovacao, esqueci minha senha, redefinicao, leitura do tema e dos contatos de suporte, e aviso de privacidade). /schema/ e /docs/ abrem sem login so em desenvolvimento; em producao pedem o token do Administrador.\n\nPermissoes por ator: o Administrador nao entra no fluxo das oportunidades; o Demandante ve so as oportunidades da empresa e, nos anexos, so o que a empresa enviou; o Pesquisador da equipe le os anexos, mas so o Supervisor e o Demandante enviam.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -353,7 +353,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]
@@ -596,6 +596,12 @@
                   "disabled": true
                 },
                 {
+                  "key": "sem_competencia",
+                  "value": "",
+                  "description": "true: so quem nao declarou competencia - os perfis invisiveis ao matching, os mesmos que /rede/resumo/ conta em sem_competencia",
+                  "disabled": true
+                },
+                {
                   "key": "page",
                   "value": "",
                   "description": "pagina",
@@ -604,7 +610,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]
@@ -917,7 +923,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]
@@ -1035,7 +1041,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]
@@ -1168,7 +1174,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]
@@ -2186,6 +2192,26 @@
           }
         },
         {
+          "name": "Compara o arquivo da base PIPE com a versao em uso (Administrador)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ia/criterios/arquivo/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ia",
+                "criterios",
+                "arquivo",
+                ""
+              ]
+            },
+            "description": "`GET /api/ia/criterios/arquivo/` - o arquivo da base PIPE contra a versao em uso.\n\nO Administrador ve o que ativar mudaria antes de confirmar. Arquivo ausente\nnao e erro aqui: a tela explica; o 409 fica para quem tenta ativar.\n\noperationId: ia_criterios_arquivo_retrieve"
+          }
+        },
+        {
           "name": "Saude da plataforma (Administrador)",
           "request": {
             "method": "GET",
@@ -2201,7 +2227,7 @@
                 ""
               ]
             },
-            "description": "`GET /api/ia/saude/` - desempenho, consumo de IA, fila e processo.\n\noperationId: ia_saude_retrieve"
+            "description": "`GET /api/ia/saude/` - o que a tela Saude le, um bloco por pergunta.\n\n- `desempenho`: tempo das ultimas 500 acoes da API, sem a espera pela IA\n  de provedor, contra o limite de 3 s.\n- `ia`: consumo do mes da IA de provedor, a que cobra: usos, falhas,\n  tokens, custo contra o teto e uma linha por provedor e modelo.\n- `comparacao`: o modelo que roda no proprio servidor e da a afinidade\n  com o tema no matching; conta as rodadas do mes que sairam sem ela.\n- `jobs`: a fila de tarefas em segundo plano.\n- `banco`: se o banco responde.\n\nCada bloco tem um `<bloco>_erro`: a falha de leitura de um nao derruba os\noutros.\n\noperationId: ia_saude_retrieve"
           }
         }
       ]
@@ -2281,7 +2307,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]
@@ -2406,7 +2432,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "itens por pagina",
+                  "description": "itens por pagina, no maximo 100",
                   "disabled": true
                 }
               ]

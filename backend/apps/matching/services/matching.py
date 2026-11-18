@@ -22,12 +22,14 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import F, OuterRef, Subquery
 from django.utils import timezone
 
 from apps.accounts.models import Usuario
 from apps.ai.models import StatusExecucao
 from apps.ai.services.apelidos import Apelidos
 from apps.ai.services.protocolos import ProvedorDeIA
+from apps.ai.services.sem_ia import sem_resposta_da_ia
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.competencies.models import CompetenciaNecessaria
@@ -130,6 +132,49 @@ def equipe_atual_de(oportunidade: Oportunidade) -> EquipePotencial:
     return equipe
 
 
+def equipe_mais_recente(oportunidade: OuterRef) -> Subquery:
+    """
+    A equipe atual de cada oportunidade, como subconsulta.
+
+    E a regra de `equipe_atual_de` - a ultima gerada - para quem conta varias
+    oportunidades numa consulta so. A chave desempata duas na mesma data.
+    """
+    return Subquery(
+        EquipePotencial.objects.filter(oportunidade=oportunidade)
+        .order_by('-data_geracao', '-pk')
+        .values('pk')[:1]
+    )
+
+
+def oportunidades_com_a_pessoa_na_equipe(membro: MembroRede) -> list[Oportunidade]:
+    """
+    As oportunidades em curso cuja equipe vigente inclui a pessoa (PB84).
+
+    Vigente e a ultima equipe gerada; a decidida (Continuar, Arquivada) ficou
+    como estava na decisao e nao pede ajuste. Quem o Supervisor ja tirou da
+    equipe tambem nao conta.
+    """
+    vigente = (
+        EquipePotencial.objects.filter(oportunidade=OuterRef('pk'))
+        .order_by('-data_geracao', '-id_equipe')
+        .values('id_equipe')[:1]
+    )
+
+    return list(
+        Oportunidade.objects.exclude(
+            situacao__in=(SituacaoOportunidade.CONTINUAR, SituacaoOportunidade.ARQUIVADA)
+        )
+        .annotate(equipe_vigente=Subquery(vigente))
+        .filter(
+            equipes_potenciais__id_equipe=F('equipe_vigente'),
+            equipes_potenciais__membros__membro=membro,
+            equipes_potenciais__membros__incluido=True,
+        )
+        .distinct()
+        .order_by('codigo')
+    )
+
+
 def membro_da_equipe(equipe: EquipePotencial, identificador: int) -> MembroEquipe:
     membro = equipe.membros.filter(id_membro_equipe=identificador).first()
 
@@ -156,9 +201,9 @@ class ExecutarMatchingService:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.registro import provedor_principal
+        from apps.ai.services.registro import provedor_com_reserva
 
-        return provedor_principal()
+        return provedor_com_reserva()
 
     def execute(
         self, *, oportunidade: Oportunidade, ator: Usuario
@@ -361,7 +406,7 @@ class ExecutarMatchingService:
             data=apelidos.restaurar_em(resultado.get('dados') or {})
         )
 
-        if resultado.get('fallback_usado') or not saida.is_valid():
+        if sem_resposta_da_ia(resultado) or not saida.is_valid():
             return {
                 **vazio,
                 'execucao_ia': resultado.get('execucao_ia'),

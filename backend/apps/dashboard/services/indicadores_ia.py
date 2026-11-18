@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, OuterRef, Q
 
 from apps.accounts.models import Usuario
 from apps.competencies.models import CompetenciaNecessaria, NivelImportancia
@@ -38,8 +38,13 @@ from apps.maturity.models import (
     PreAnaliseDimensao,
     Recomendacao,
 )
-from apps.ai.models import StatusExecucao
-from apps.maturity.services.preanalise import criterios_vigentes
+from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
+from apps.ai.services.saude import FALHA
+from apps.matching.services.matching import equipe_mais_recente
+from apps.maturity.services.preanalise import (
+    criterios_vigentes,
+    preanalise_mais_recente,
+)
 from apps.network.models import Disponibilidade, MembroRede
 from apps.opportunities.services.oportunidade import escopo_de
 
@@ -76,11 +81,16 @@ def indicadores_de_matching(usuario: Usuario) -> dict[str, Any]:
     competencias demandadas". Isso e a razao entre competencia necessaria e
     competencia que alguma equipe sugerida cobriu - as lacunas de equipe sao o
     complemento dela, e nao um numero solto.
+
+    As pessoas indicadas sao as da equipe mais recente de cada oportunidade,
+    como na Saude da IA: as equipes substituidas nunca mais serao validadas.
+    Rodadas executadas e equipes geradas contam atividade, e somam todas.
     """
     oportunidades = escopo_de(usuario).values('pk')
 
     indicacoes = MembroEquipe.objects.filter(
-        equipe__oportunidade__in=oportunidades
+        equipe__oportunidade__in=oportunidades,
+        equipe=equipe_mais_recente(OuterRef('equipe__oportunidade')),
     ).aggregate(
         total=Count('pk'),
         sugeridas=Count('pk', filter=Q(origem=OrigemIndicacao.IA)),
@@ -168,6 +178,11 @@ def indicadores_de_maturidade(usuario: Usuario) -> dict[str, Any]:
     O critério de aceite fala em "indicadores de maturidade"; o que o modelo
     tem de comparavel entre execucoes e o **nivel por dimensao** - jamais uma
     nota, que a baseline proibe (`CONTEXT.md` secao 4).
+
+    Lacunas e recomendacoes sao as da pre-analise mais recente de cada
+    proposta, como na Saude da IA. Os niveis por dimensao seguem contando
+    todas as execucoes: a tela pergunta "quantas vezes cada dimensao saiu
+    fragil".
     """
     oportunidades = escopo_de(usuario).values('pk')
 
@@ -194,14 +209,17 @@ def indicadores_de_maturidade(usuario: Usuario) -> dict[str, Any]:
     ).aggregate(**_apelidos('dim', 'dimensao', DimensaoMaturidade.choices))
 
     lacunas = Lacuna.objects.filter(
-        proposta__oportunidade__in=oportunidades, tipo=TipoLacuna.PRE_ANALISE
+        proposta__oportunidade__in=oportunidades,
+        tipo=TipoLacuna.PRE_ANALISE,
+        pre_analise=preanalise_mais_recente(OuterRef('proposta')),
     ).aggregate(
         total=Count('pk'),
         abertas=Count('pk', filter=Q(resolvida=False)),
     )
 
     recomendacoes = Recomendacao.objects.filter(
-        oportunidade__in=oportunidades
+        oportunidade__in=oportunidades,
+        pre_analise=preanalise_mais_recente(OuterRef('pre_analise__proposta')),
     ).aggregate(
         total=Count('pk'),
         acatadas=Count('pk', filter=Q(acatada=True)),
@@ -227,9 +245,50 @@ def indicadores_de_maturidade(usuario: Usuario) -> dict[str, Any]:
     }
 
 
+def indicadores_de_uso_da_ia(usuario: Usuario) -> dict[str, Any]:
+    """
+    Chamadas e falhas da IA por fluxo (PB105).
+
+    Sai do registro de chamadas (PB107), numa consulta so, e conta linhas:
+    nenhum campo de quem chamou chega aqui. Falha e o mesmo que o console de
+    saude conta: erro do provedor ou o caminho sem IA.
+    """
+    oportunidades = escopo_de(usuario).values('pk')
+    por_fluxo = {}
+
+    for indice, (valor, _rotulo) in enumerate(TipoExecucaoIA.choices):
+        do_fluxo = Q(tipo=valor)
+        por_fluxo[f'chamadas_{indice}'] = Count('pk', filter=do_fluxo)
+        por_fluxo[f'falhas_{indice}'] = Count('pk', filter=do_fluxo & FALHA)
+
+    totais = ExecucaoIA.objects.filter(
+        Q(oportunidade__in=oportunidades) | Q(oportunidade__isnull=True)
+    ).aggregate(
+        chamadas=Count('pk'),
+        falhas=Count('pk', filter=FALHA),
+        **por_fluxo,
+    )
+
+    return {
+        'houve_chamada': bool(totais['chamadas']),
+        'chamadas': totais['chamadas'],
+        'falhas': totais['falhas'],
+        'por_fluxo': [
+            {
+                'fluxo': valor,
+                'rotulo': rotulo,
+                'chamadas': totais[f'chamadas_{indice}'],
+                'falhas': totais[f'falhas_{indice}'],
+            }
+            for indice, (valor, rotulo) in enumerate(TipoExecucaoIA.choices)
+        ],
+    }
+
+
 def indicadores_de_ia(usuario: Usuario) -> dict[str, Any]:
-    """Os dois blocos, numa leitura so - e um `GET` so para a tela."""
+    """Os tres blocos, numa leitura so - e um `GET` so para a tela."""
     return {
         'matching': indicadores_de_matching(usuario),
         'maturidade': indicadores_de_maturidade(usuario),
+        'uso': indicadores_de_uso_da_ia(usuario),
     }

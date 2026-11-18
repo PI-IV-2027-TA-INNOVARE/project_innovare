@@ -32,6 +32,7 @@ from apps.accounts.models import Usuario
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.ai.services.custo import explicar_motivo
 from apps.ai.services.protocolos import ProvedorDeIA
+from apps.ai.services.sem_ia import sem_resposta_da_ia
 from apps.audit.models import CategoriaEvento
 from apps.audit.services import registrar_evento
 from apps.copilot.models import (
@@ -143,6 +144,17 @@ def _vazio(valor) -> bool:
         return not any((item or '').strip() for item in valor)
 
     return not (valor or '').strip()
+
+
+def versao_anterior(valores: dict[str, Any]) -> dict[str, Any]:
+    """
+    O que cada elemento tinha antes de mudar (PB88 / RN-IA02).
+
+    Vai no detalhe do evento da trilha, que nao e editado nem apagado: e o que
+    deixa a versao anterior consultavel no Historico. Elemento vazio nao tinha
+    versao.
+    """
+    return {elemento: valor for elemento, valor in valores.items() if not _vazio(valor)}
 
 
 def elementos_vazios(proposta: PropostaEstruturada) -> list[str]:
@@ -274,6 +286,35 @@ def sessao_atual_de(oportunidade: Oportunidade) -> SessaoCopiloto:
     return sessao
 
 
+def sintese_conferida(sessao: SessaoCopiloto | None) -> bool:
+    """
+    O Supervisor aceitou ou corrigiu o resumo desta sessao (PB87).
+
+    A marca e o evento `sintese_revisada` da propria sessao, que a trilha
+    guarda sem apagar; resumo vazio nao conta, porque nao orienta nada.
+    """
+    if sessao is None or not sessao.sintese.strip():
+        return False
+
+    from apps.audit.models import EventoAuditoria
+
+    return EventoAuditoria.objects.filter(
+        tipo='sintese_revisada',
+        entidade='sessao_copiloto',
+        entidade_id=str(sessao.id_sessao),
+    ).exists()
+
+
+def exigir_sintese_conferida(sessao: SessaoCopiloto | None) -> None:
+    """PB87: a estruturacao parte da sintese validada, e nao da entrada crua."""
+    if not sintese_conferida(sessao):
+        raise ConflitoDeEstado(
+            'Antes de estruturar, confira o resumo da entrada: aceite ou corrija o '
+            'resumo, porque é dele que o Copiloto parte.',
+            codigo='sintese_nao_conferida',
+        )
+
+
 def _exigir_aberta(sessao: SessaoCopiloto) -> None:
     if sessao.estado != EstadoSessao.ABERTA:
         raise ConflitoDeEstado(
@@ -325,9 +366,9 @@ class ComProvedor:
         if self._provedor is not None:
             return self._provedor
 
-        from apps.ai.services.registro import provedor_principal
+        from apps.ai.services.registro import provedor_com_reserva
 
-        return provedor_principal()
+        return provedor_com_reserva()
 
 
 class IniciarSessaoService(ComProvedor):
@@ -358,7 +399,7 @@ class IniciarSessaoService(ComProvedor):
             executado_por=ator.email,
         )
 
-        fallback_usado = bool(resultado.get('fallback_usado'))
+        fallback_usado = sem_resposta_da_ia(resultado)
         lida = SinteseIASerializer(data=resultado.get('dados') or {})
         sintese = ''
 
@@ -542,8 +583,9 @@ class EstruturarPropostaService(ComProvedor):
         from apps.copilot.serializers import SaidaCopilotoSerializer
 
         conferir_avanco(oportunidade, ESTRUTURACAO)
-        proposta = proposta_para_estruturar(oportunidade)
         sessao = sessao_aberta_de(oportunidade)
+        exigir_sintese_conferida(sessao)
+        proposta = proposta_para_estruturar(oportunidade)
         correlation_id = uuid.uuid4()
 
         resultado = self._resolver_provedor().estruturar_proposta(
@@ -558,7 +600,7 @@ class EstruturarPropostaService(ComProvedor):
         )
 
         execucao_ia = resultado.get('execucao_ia')
-        fallback_usado = bool(resultado.get('fallback_usado'))
+        fallback_usado = sem_resposta_da_ia(resultado)
         motivo_fallback = resultado.get('motivo_fallback') if fallback_usado else None
         saida = SaidaCopilotoSerializer(data=resultado.get('dados') or {})
         aceita = saida.is_valid()
@@ -888,6 +930,7 @@ class AceitarSugestaoService:
         else:
             valor = texto.strip()
 
+        anterior = versao_anterior({elemento: getattr(proposta, elemento)})
         setattr(proposta, elemento, valor)
         proposta.save()
 
@@ -898,7 +941,7 @@ class AceitarSugestaoService:
             entidade_id=proposta.id_proposta,
             oportunidade=oportunidade,
             ator=ator.email,
-            detalhe={'elemento': elemento},
+            detalhe={'elemento': elemento, 'anterior': anterior},
         )
         return proposta
 

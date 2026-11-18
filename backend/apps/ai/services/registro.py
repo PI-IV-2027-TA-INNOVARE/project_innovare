@@ -6,19 +6,24 @@ ao registro; o `.env` decide qual é, qual é o modelo e quais são os preços.
 Assim, trocar de provedor não exige editar os casos de uso - e a chave continua
 só no servidor.
 
-O registro também é o lugar do **modelo de reserva**. Quando o principal falha
-(provedor indisponível, erro ou resposta malformada), a operação tenta a reserva
-uma vez. O teto de gasto é a exceção: ele vale para todos os provedores, então
-estouro de limite não vira nova tentativa.
+O registro também é o lugar da **fila de reservas**. `AI_PROVEDOR_RESERVA` é uma
+lista separada por vírgula: quando o principal falha (provedor indisponível,
+erro ou resposta malformada), a operação tenta cada reserva uma vez, na ordem,
+e a primeira que responde encerra a fila. O teto de gasto é a exceção: ele vale
+para todos os provedores, então estouro de limite não vira nova tentativa.
 
-Para um provedor novo, basta um adaptador que cumpra `ProvedorDeIA` e uma linha
-no registro. Dependência nova e tratamento de dados pessoais continuam sendo
-portões de decisão (AGENTS.md 3.2).
+Há dois jeitos de um provedor entrar. O que tem SDK próprio, como o Gemini,
+entra por código: um adaptador que cumpra `ProvedorDeIA` e uma linha aqui. O
+compatível com a API da OpenAI (Groq, OpenRouter, Ollama...) entra pelo `.env`,
+no catálogo `AI_PROVEDORES_COMPATIVEIS`. Dependência nova e tratamento de dados
+pessoais continuam sendo portões de decisão (AGENTS.md 3.2).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Any, Callable
+from functools import partial
+from typing import Any, Callable, Sequence
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -44,12 +49,21 @@ class ProvedorRegistrado:
     modelo_setting: str
     preco_entrada_setting: str
     preco_saida_setting: str
+    exige: tuple[str, ...] = ()
+    gratuito_setting: str = ''
 
     def criar(self, **kwargs) -> ProvedorDeIA:
         return self.fabrica(**kwargs)
 
+    def gratuito(self) -> bool:
+        """Preco zero conferido, e nao tabela ausente: o custo e apurado como R$ 0,00."""
+        return bool(self.gratuito_setting and getattr(settings, self.gratuito_setting, False))
+
     def configurado(self) -> bool:
-        return bool(getattr(settings, self.chave_setting, ''))
+        return all(
+            getattr(settings, setting, '')
+            for setting in (self.chave_setting, *self.exige)
+        )
 
     def modelo(self) -> str:
         return str(getattr(settings, self.modelo_setting, '') or '')
@@ -74,12 +88,83 @@ def desregistrar(nome: str) -> None:
     _REGISTRO.pop(nome, None)
 
 
+NOME_DO_CATALOGO = re.compile(r'[a-z][a-z0-9_]{0,39}')
+
+
+def _lista(valor: str | Sequence[str] | None) -> list[str]:
+    """Texto separado por vírgula ou lista, sem espaços nem itens vazios."""
+    itens = valor.split(',') if isinstance(valor, str) else (valor or [])
+
+    return [str(item).strip() for item in itens if str(item).strip()]
+
+
+def _criar_compativel(**kwargs) -> ProvedorDeIA:
+    from apps.ai.services.compativel_openai import ProvedorCompativelComOpenAI
+
+    return ProvedorCompativelComOpenAI(**kwargs)
+
+
+def descritor_do_catalogo(nome: str) -> ProvedorRegistrado:
+    """
+    O provedor compatível com a OpenAI que o `.env` declara pelo nome.
+
+    As settings saem do prefixo: `groq` lê `GROQ_API_KEY`, `AI_GROQ_URL`,
+    `AI_GROQ_MODELO`, `AI_GROQ_ROTULO`, `AI_GROQ_CUSTO_*_BRL_POR_MILHAO` e
+    `AI_GROQ_GRATUITO`.
+    Nome fora do padrão ou repetido de um provedor do código é erro de
+    configuração: a falha aparece na subida, e não na primeira chamada.
+    """
+    if not NOME_DO_CATALOGO.fullmatch(nome):
+        raise ImproperlyConfigured(
+            f'Provedor de IA "{nome}" em AI_PROVEDORES_COMPATIVEIS: use letras '
+            'minúsculas, dígitos e sublinhado, começando por letra.'
+        )
+
+    if nome in _REGISTRO:
+        raise ImproperlyConfigured(
+            f'Provedor de IA "{nome}" em AI_PROVEDORES_COMPATIVEIS já existe no '
+            'registro. Escolha outro nome.'
+        )
+
+    prefixo = nome.upper()
+    chave = f'{prefixo}_API_KEY'
+    modelo = f'AI_{prefixo}_MODELO'
+    url = f'AI_{prefixo}_URL'
+
+    return ProvedorRegistrado(
+        nome=nome,
+        rotulo=str(getattr(settings, f'AI_{prefixo}_ROTULO', '') or nome),
+        fabrica=partial(
+            _criar_compativel,
+            nome=nome,
+            chave_setting=chave,
+            modelo_setting=modelo,
+            url_setting=url,
+        ),
+        chave_setting=chave,
+        modelo_setting=modelo,
+        preco_entrada_setting=f'AI_{prefixo}_CUSTO_ENTRADA_BRL_POR_MILHAO',
+        preco_saida_setting=f'AI_{prefixo}_CUSTO_SAIDA_BRL_POR_MILHAO',
+        exige=(url, modelo),
+        gratuito_setting=f'AI_{prefixo}_GRATUITO',
+    )
+
+
+def _todos() -> dict[str, ProvedorRegistrado]:
+    """Os do código e, depois deles, os do catálogo, lido a cada vez das settings."""
+    catalogo = _lista(getattr(settings, 'AI_PROVEDORES_COMPATIVEIS', ''))
+
+    return {**_REGISTRO, **{nome: descritor_do_catalogo(nome) for nome in catalogo}}
+
+
 def descritor(nome: str) -> ProvedorRegistrado:
     """O descritor do provedor, ou erro de configuração com nome e chave."""
+    todos = _todos()
+
     try:
-        return _REGISTRO[nome]
+        return todos[nome]
     except KeyError as erro:
-        conhecidos = ', '.join(sorted(_REGISTRO)) or 'nenhum'
+        conhecidos = ', '.join(sorted(todos)) or 'nenhum'
         raise ImproperlyConfigured(
             f'Provedor de IA "{nome}" não está registrado. '
             f'Registrados: {conhecidos}.'
@@ -88,26 +173,59 @@ def descritor(nome: str) -> ProvedorRegistrado:
 
 def descritores() -> tuple[ProvedorRegistrado, ...]:
     """Todos os provedores registrados, na ordem de registro."""
-    return tuple(_REGISTRO.values())
+    return tuple(_todos().values())
 
 
 def nome_do_principal() -> str:
     return str(getattr(settings, 'AI_PROVEDOR_PRINCIPAL', 'google') or 'google')
 
 
-def nome_da_reserva() -> str:
-    return str(getattr(settings, 'AI_PROVEDOR_RESERVA', '') or '')
+def nomes_das_reservas() -> list[str]:
+    return _lista(getattr(settings, 'AI_PROVEDOR_RESERVA', ''))
 
 
-def papel_do_provedor(nome: str) -> str:
-    """`principal`, `reserva` ou `registrado` - o que a tela de saúde mostra."""
-    if nome == nome_do_principal():
-        return 'principal'
+def _reservas_configuradas() -> list[tuple[ProvedorRegistrado, str | None]]:
+    """
+    A fila de reservas: cada descritor com o modelo que ele deve usar.
 
-    if nome == nome_da_reserva():
-        return 'reserva'
+    `AI_MODELO_RESERVA` vale para a primeira reserva - ou, sem provedor de
+    reserva, para o próprio principal com outro modelo. O modelo `None` é o
+    do `.env` do provedor. Par repetido, e o par do principal, não é reserva.
+    """
+    principal = descritor(nome_do_principal())
+    modelo_reserva = str(getattr(settings, 'AI_MODELO_RESERVA', '') or '')
+    nomes = nomes_das_reservas() or ([principal.nome] if modelo_reserva else [])
+    vistos = {(principal.nome, principal.modelo())}
+    fila = []
 
-    return 'registrado'
+    for posicao, nome in enumerate(nomes):
+        reserva = descritor(nome)
+        modelo = modelo_reserva if posicao == 0 and modelo_reserva else None
+        par = (reserva.nome, modelo or reserva.modelo())
+
+        if par in vistos:
+            continue
+
+        vistos.add(par)
+        fila.append((reserva, modelo))
+
+    return fila
+
+
+def papeis_configurados() -> dict[tuple[str, str], str]:
+    """
+    Os pares de provedor e modelo que a configuração põe para responder.
+
+    Na ordem em que respondem: o principal e depois a fila de reservas. A
+    regra da fila é a de `provedor_com_reserva`.
+    """
+    principal = descritor(nome_do_principal())
+    papeis = {(principal.nome, principal.modelo()): 'principal'}
+
+    for reserva, modelo in _reservas_configuradas():
+        papeis[(reserva.nome, modelo or reserva.modelo())] = 'reserva'
+
+    return papeis
 
 
 def provedor_principal(**kwargs) -> ProvedorDeIA:
@@ -115,70 +233,50 @@ def provedor_principal(**kwargs) -> ProvedorDeIA:
     return ProvedorComTetoDeCusto(descritor(nome_do_principal()).criar(**kwargs))
 
 
-def provedor_de_reserva(**kwargs) -> ProvedorDeIA | None:
-    """O provedor de reserva, ou `None` quando não há reserva configurada."""
-    nome = nome_da_reserva()
-
-    if not nome:
-        return None
-
-    return ProvedorComTetoDeCusto(descritor(nome).criar(**kwargs))
-
-
 def provedor_com_reserva(**kwargs) -> ProvedorDeIA:
     """
-    O principal com a reserva configurada, os dois sob o mesmo teto de gasto.
+    O principal com a fila de reservas, todos sob o mesmo teto de gasto.
 
     Sem reserva - nem provedor, nem modelo alternativo - devolve o principal
     sem o `ProvedorComReserva`: uma camada que não faz nada só esconde a
     chamada. O teto embrulha o conjunto uma vez, antes de qualquer chamada.
     """
-    principal_descritor = descritor(nome_do_principal())
-    principal = principal_descritor.criar(**kwargs)
-    reserva_nome = nome_da_reserva()
-    modelo_reserva = str(getattr(settings, 'AI_MODELO_RESERVA', '') or '')
+    principal = descritor(nome_do_principal()).criar(**kwargs)
+    fila = _reservas_configuradas()
 
-    if not reserva_nome and not modelo_reserva:
+    if not fila:
         return ProvedorComTetoDeCusto(principal)
 
-    reserva_descritor = (
-        descritor(reserva_nome) if reserva_nome else principal_descritor
+    reservas = [
+        reserva.criar(**({**kwargs, 'modelo': modelo} if modelo else kwargs))
+        for reserva, modelo in fila
+    ]
+
+    return ProvedorComTetoDeCusto(
+        ProvedorComReserva(principal=principal, reservas=reservas)
     )
-    reserva_kwargs = dict(kwargs)
-
-    if modelo_reserva:
-        reserva_kwargs['modelo'] = modelo_reserva
-
-    reserva = reserva_descritor.criar(**reserva_kwargs)
-
-    if (
-        not modelo_reserva
-        and reserva_descritor.nome == principal_descritor.nome
-        and getattr(reserva, 'modelo', None) == getattr(principal, 'modelo', None)
-    ):
-        return ProvedorComTetoDeCusto(principal)
-
-    return ProvedorComTetoDeCusto(ProvedorComReserva(principal=principal, reserva=reserva))
 
 
 class ProvedorComReserva:
     """
-    Executa no principal e, se ele falhar, tenta a reserva uma vez.
+    Executa no principal e, se ele falhar, tenta cada reserva uma vez, na ordem.
 
     A reserva só entra nas falhas do provedor. Limite de gasto e saída inválida
     de regra de negócio não são "tente outro modelo": o primeiro vale para
     todos, e a segunda não melhora com uma segunda opinião.
     """
 
-    def __init__(self, *, principal: ProvedorDeIA, reserva: ProvedorDeIA) -> None:
+    def __init__(
+        self, *, principal: ProvedorDeIA, reservas: Sequence[ProvedorDeIA]
+    ) -> None:
         self._principal = principal
-        self._reserva = reserva
+        self._reservas = list(reservas)
 
     @property
     def disponivel(self) -> bool:
-        return bool(
-            getattr(self._principal, 'disponivel', False)
-            or getattr(self._reserva, 'disponivel', False)
+        return any(
+            getattr(provedor, 'disponivel', False)
+            for provedor in (self._principal, *self._reservas)
         )
 
     def _deve_tentar_reserva(self, resultado: dict[str, Any]) -> bool:
@@ -206,13 +304,24 @@ class ProvedorComReserva:
         if resultado is not None and not self._deve_tentar_reserva(resultado):
             return resultado
 
-        resultado_reserva = getattr(self._reserva, operacao)(**kwargs)
+        ultima = self._reservas[-1]
 
-        if resultado_reserva.get('fallback_usado'):
-            return resultado_reserva
+        for reserva in self._reservas:
+            try:
+                resultado = getattr(reserva, operacao)(**kwargs)
+            except Exception:
+                if reserva is ultima:
+                    raise
+                continue
+
+            if reserva is ultima or not self._deve_tentar_reserva(resultado):
+                break
+
+        if resultado.get('fallback_usado'):
+            return resultado
 
         return {
-            **resultado_reserva,
+            **resultado,
             'fallback_usado': True,
             'motivo_fallback': MOTIVO_MODELO_DE_RESERVA,
         }
@@ -255,6 +364,10 @@ registrar(
 def precos_do_provedor(nome: str | None = None) -> tuple[float, float]:
     """Os preços do provedor, ou do principal quando o nome não é dado."""
     return descritor(nome or nome_do_principal()).precos()
+
+
+def provedor_gratuito(nome: str) -> bool:
+    return descritor(nome).gratuito()
 
 
 def provedor_configurado(nome: str | None = None) -> bool:

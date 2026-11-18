@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import { Icone, appIcons } from '../../../lib/icons'
+import { todasAsPaginas } from '../../../lib/paginas'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { ROLES } from '../../../lib/roles'
 import {
@@ -10,6 +11,8 @@ import {
   obterMeuPerfil,
 } from '../../../services/pdConnectApi'
 import {
+  FILTRO_EM_ANDAMENTO,
+  NOTAS_DOS_INDICADORES,
   agruparPorSituacao,
   daApi,
   resumoPorSituacao,
@@ -18,13 +21,16 @@ import {
 import { resumoDoDemandante } from '../problemas/problemasData'
 import { completudeDoPerfil, perfilDaApi } from '../rede/redeData'
 
-function Tile({ icon, label, value, tone, to }) {
+const DECISOES_NO_PAINEL = 3
+
+function Tile({ icon, label, value, nota, tone, to }) {
   const conteudo = (
     <>
       <Icone icon={icon} className="stat-card__icon" />
       <div>
         <p className="stat-card__label">{label}</p>
         <p className="stat-card__value">{value}</p>
+        {nota ? <p className="stat-card__nota">{nota}</p> : null}
       </div>
     </>
   )
@@ -43,7 +49,7 @@ function Tile({ icon, label, value, tone, to }) {
   )
 }
 
-function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
+function ListaDeOportunidades({ itens, vazio, base = '/oportunidades', mostraSituacao = true }) {
   if (itens.length === 0) {
     return <p className="painel-lista__vazio">{vazio}</p>
   }
@@ -59,9 +65,11 @@ function ListaDeOportunidades({ itens, vazio, base = '/oportunidades' }) {
                 {item.id} · atualizada {formatarUltimoAcesso(item.atualizadaEm).toLowerCase()}
               </span>
             </span>
-            <span className={`fluxo-badge fluxo-badge--${item.situacao}`}>
-              {situacaoLabel(item.situacao)}
-            </span>
+            {mostraSituacao ? (
+              <span className={`fluxo-badge fluxo-badge--${item.situacao}`}>
+                {situacaoLabel(item.situacao)}
+              </span>
+            ) : null}
           </Link>
         </li>
       ))}
@@ -74,7 +82,14 @@ function BlocoSupervisor({ oportunidades, resumoDaRede }) {
 
   const aguardando = oportunidades
     .filter((item) => item.situacao === 'aguardando_decisao')
-    .slice(0, 3)
+    .sort((a, b) => a.atualizadaEm - b.atualizadaEm)
+
+  const etapas = agruparPorSituacao(oportunidades)
+
+  const gruposDeEtapa = [
+    { titulo: 'Em andamento', etapas: etapas.filter((etapa) => !etapa.desfecho) },
+    { titulo: 'Decididas', etapas: etapas.filter((etapa) => etapa.desfecho) },
+  ].filter((grupo) => grupo.etapas.length > 0)
 
   const semCompetencia = resumoDaRede?.sem_competencia ?? 0
 
@@ -85,27 +100,31 @@ function BlocoSupervisor({ oportunidades, resumoDaRede }) {
           icon={appIcons.folder}
           label="Oportunidades"
           value={indicadores.total}
+          nota={NOTAS_DOS_INDICADORES.total}
           to="/oportunidades"
         />
         <Tile
           icon={appIcons.flow}
           label="Em andamento"
           value={indicadores.emAndamento}
+          nota={NOTAS_DOS_INDICADORES.emAndamento}
           tone="ok"
-          to="/oportunidades"
+          to={`/oportunidades?situacao=${FILTRO_EM_ANDAMENTO}`}
         />
         <Tile
           icon={appIcons.decision}
-          label="Aguardando sua decisão"
+          label="Aguardando decisão"
           value={indicadores.aguardandoDecisao}
+          nota={NOTAS_DOS_INDICADORES.aguardandoDecisao}
           to="/oportunidades?situacao=aguardando_decisao"
         />
         <Tile
           icon={appIcons.warning}
           label="Perfis invisíveis ao matching"
           value={semCompetencia}
+          nota="Sem competência declarada — o matching não os encontra"
           tone={semCompetencia > 0 ? 'alert' : undefined}
-          to="/rede"
+          to="/rede?sem_competencia=1"
         />
       </div>
 
@@ -115,19 +134,26 @@ function BlocoSupervisor({ oportunidades, resumoDaRede }) {
           <Link className="link-button" to="/oportunidades">Ver a fila</Link>
         </div>
 
-        {oportunidades.length > 0 ? (
-          <ul className="painel-etapas">
-            {agruparPorSituacao(oportunidades).map((situacao) => (
-              <li key={situacao.id}>
-                <Link className="painel-etapa" to={`/oportunidades?situacao=${situacao.id}`}>
-                  <span className={`fluxo-badge fluxo-badge--${situacao.id}`}>
-                    {situacao.label}
-                  </span>
-                  <span className="painel-etapa__total">{situacao.total}</span>
-                </Link>
-              </li>
+        {gruposDeEtapa.length > 0 ? (
+          <div className="painel-etapas-grupos">
+            {gruposDeEtapa.map((grupo) => (
+              <div key={grupo.titulo} className="painel-etapas-grupo">
+                <h3 className="painel-etapas-grupo__titulo">{grupo.titulo}</h3>
+                <ul className="painel-etapas">
+                  {grupo.etapas.map((situacao) => (
+                    <li key={situacao.id}>
+                      <Link className="painel-etapa" to={`/oportunidades?situacao=${situacao.id}`}>
+                        <span className={`fluxo-badge fluxo-badge--${situacao.id}`}>
+                          {situacao.label}
+                        </span>
+                        <span className="painel-etapa__total">{situacao.total}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         ) : (
           <p className="painel-lista__vazio">Nenhuma oportunidade na fila ainda.</p>
         )}
@@ -139,16 +165,24 @@ function BlocoSupervisor({ oportunidades, resumoDaRede }) {
 
       <section className="painel-secao">
         <div className="painel-secao__header">
-          <h2 className="painel-secao__titulo">Esperando sua decisão</h2>
+          <h2 className="painel-secao__titulo">Esperando decisão</h2>
           <Link className="link-button" to="/oportunidades?situacao=aguardando_decisao">
             Ver a fila
           </Link>
         </div>
 
         <ListaDeOportunidades
-          itens={aguardando}
+          itens={aguardando.slice(0, DECISOES_NO_PAINEL)}
           vazio="Nenhuma oportunidade aguardando decisão no momento."
+          mostraSituacao={false}
         />
+
+        {aguardando.length > DECISOES_NO_PAINEL ? (
+          <p className="painel-secao__nota">
+            Mostrando as {DECISOES_NO_PAINEL} que estão há mais tempo sem atualização,
+            de {aguardando.length} aguardando decisão.
+          </p>
+        ) : null}
       </section>
     </>
   )
@@ -267,12 +301,12 @@ export default function PainelPorPapel({ user }) {
 
     try {
       const [fila, resumo, meu] = await Promise.all([
-        listOportunidades(),
+        todasAsPaginas(listOportunidades),
         ehSupervisor ? obterResumoDaRede() : null,
         ehPesquisador ? obterMeuPerfil().catch(() => null) : null,
       ])
 
-      setOportunidades((fila.results || fila).map(daApi))
+      setOportunidades(fila.map(daApi))
 
       if (ehSupervisor) {
         setResumoDaRede(resumo)

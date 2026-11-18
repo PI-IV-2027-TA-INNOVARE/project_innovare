@@ -58,18 +58,32 @@ describe('LayoutDoRelatorio', () => {
     expect(within(painel).getByText('Aguardando decisão')).toBeInTheDocument()
   })
 
-  it('imprime e volta para a oportunidade pelo painel', async () => {
+  it('imprime pelo painel', async () => {
     const user = userEvent.setup()
     const imprimir = vi.spyOn(window, 'print').mockImplementation(() => {})
     renderizar()
 
-    await user.click(screen.getByRole('button', { name: 'Imprimir' }))
+    const painel = screen.getByRole('complementary', { name: 'Sumário e ações do relatório' })
+    await user.click(within(painel).getByRole('button', { name: 'Imprimir' }))
 
     expect(imprimir).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('link', { name: /voltar para a oportunidade/i })).toHaveAttribute(
-      'href',
-      '/oportunidades/OP-2026-001'
-    )
+  })
+
+  /**
+   * A volta era um link pequeno e cinza no fim do painel, abaixo do Imprimir:
+   * quem só consultava o relatório não achava por onde voltar. Agora é botão,
+   * acima do documento e fora do painel.
+   */
+  it('a volta para a oportunidade é um botão acima do documento', () => {
+    renderizar()
+
+    const voltar = screen.getByRole('link', { name: /voltar para a oportunidade/i })
+    const painel = screen.getByRole('complementary', { name: 'Sumário e ações do relatório' })
+
+    expect(voltar).toHaveAttribute('href', '/oportunidades/OP-2026-001')
+    expect(voltar).toHaveClass('admin-btn', 'admin-btn--outline')
+    expect(painel).not.toContainElement(voltar)
+    expect(voltar.compareDocumentPosition(painel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('gera ids de seção sem acento nem espaço', () => {

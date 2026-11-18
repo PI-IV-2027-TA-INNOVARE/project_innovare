@@ -123,6 +123,18 @@ const DADOS_IA = {
     recomendacoes_acatadas: 2,
     versao_criterios: 'V2',
   },
+  uso: {
+    houve_chamada: true,
+    chamadas: 7,
+    falhas: 2,
+    por_fluxo: [
+      { fluxo: 'copiloto', rotulo: 'Copiloto de estruturação', chamadas: 4, falhas: 1 },
+      { fluxo: 'competencias', rotulo: 'Derivação de competências', chamadas: 1, falhas: 0 },
+      { fluxo: 'matching', rotulo: 'Matching', chamadas: 0, falhas: 0 },
+      { fluxo: 'preanalise', rotulo: 'Pré-análise de maturidade', chamadas: 2, falhas: 1 },
+      { fluxo: 'embedding', rotulo: 'Cálculo de afinidade com o tema', chamadas: 0, falhas: 0 },
+    ],
+  },
 }
 
 beforeEach(() => {
@@ -198,6 +210,85 @@ describe('Indicadores essenciais', () => {
     renderizar()
 
     expect(await screen.findByText(/nenhuma oportunidade/i)).toBeInTheDocument()
+  })
+
+  describe('sem oportunidade no acompanhamento', () => {
+    const VAZIO = {
+      oportunidades: { total: 0, por_situacao: [], por_origem: [] },
+      decisoes: { total: 0, por_tipo: [] },
+      rede: null,
+    }
+
+    const vazio = () =>
+      screen.findByRole('region', { name: /nenhuma oportunidade no seu acompanhamento/i })
+
+    beforeEach(() => {
+      api.obterIndicadores = vi.fn().mockResolvedValue(VAZIO)
+    })
+
+    it('o Pesquisador lê como a oportunidade chega e vai para o perfil', async () => {
+      auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+
+      renderizar()
+      const regiao = await vazio()
+
+      expect(regiao).toHaveTextContent(/quando o matching sugere seu nome numa equipe/i)
+      expect(within(regiao).getByRole('link', { name: /completar meu perfil/i })).toHaveAttribute(
+        'href',
+        '/perfil',
+      )
+      expect(regiao).toHaveTextContent(/em que etapa elas estão e as decisões registradas/i)
+    })
+
+    it('o Demandante vai cadastrar o primeiro problema', async () => {
+      auth.user = { role: ROLES.DEMANDANTE, name: 'Vale Verde' }
+
+      renderizar()
+      const regiao = await vazio()
+
+      expect(within(regiao).getByRole('link', { name: /cadastrar problema/i })).toHaveAttribute(
+        'href',
+        '/problemas/novo',
+      )
+    })
+
+    it('o Supervisor vai registrar uma ideia interna e lê o que mais aparece para ele', async () => {
+      renderizar()
+      const regiao = await vazio()
+
+      expect(within(regiao).getByRole('link', { name: /nova ideia interna/i })).toHaveAttribute(
+        'href',
+        '/oportunidades/nova',
+      )
+      expect(regiao).toHaveTextContent(/rede interna, o matching, a maturidade das propostas e o uso da IA/i)
+    })
+
+    it('não mostra a hora de atualização de números que não existem', async () => {
+      renderizar()
+      await vazio()
+
+      expect(screen.queryByText(/atualizado às/i)).not.toBeInTheDocument()
+    })
+  })
+
+  it('com erro, oferece tentar de novo e mostra os números quando voltam', async () => {
+    api.obterIndicadores = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('fora do ar'))
+      .mockResolvedValue(DADOS)
+
+    renderizar()
+    await screen.findByRole('alert')
+    await userEvent.click(screen.getByRole('button', { name: /tentar de novo/i }))
+
+    expect(await screen.findByRole('region', { name: /oportunidades/i })).toBeInTheDocument()
+  })
+
+  it('pessoas indicadas e lacunas dizem que contam só a rodada mais recente', async () => {
+    renderizar()
+
+    expect(await screen.findByText(/da equipe mais recente de cada oportunidade/i)).toBeInTheDocument()
+    expect(screen.getByText(/da pré-análise mais recente de cada proposta/i)).toBeInTheDocument()
   })
 
   it('avisa quando os números não carregam', async () => {
@@ -542,7 +633,7 @@ describe('Indicadores de matching e maturidade (PB74, PB75)', () => {
     expect(within(matching).queryByText(TERMOS.semAfinidade)).not.toBeInTheDocument()
     expect(screen.getByText(TERMOS.semAfinidade)).not.toBeVisible()
 
-    await userEvent.click(screen.getByRole('button', { name: /como as rodadas correram/i }))
+    await userEvent.click(screen.getByRole('button', { name: /uso da ia/i }))
 
     expect(screen.getByText(TERMOS.semAfinidade)).toBeVisible()
     expect(screen.getByText('Pré-análises sem resultado')).toBeVisible()
@@ -555,11 +646,42 @@ describe('Indicadores de matching e maturidade (PB74, PB75)', () => {
 
     expect(matching.textContent).not.toMatch(/vocabulário|cadastrada na rede/i)
 
-    await userEvent.click(screen.getByRole('button', { name: /como as rodadas correram/i }))
+    await userEvent.click(screen.getByRole('button', { name: /uso da ia/i }))
 
     expect(valorDe(document.body, 'Ligadas a uma competência já cadastrada na rede')).toHaveTextContent(
       '2 de 4'
     )
+  })
+
+  /**
+   * PB105: o uso da IA (chamadas e falhas por fluxo) fica junto dos
+   * indicadores de oportunidades, matching e maturidade.
+   */
+  it('mostra as chamadas e as falhas da IA em cada fluxo', async () => {
+    renderizar()
+    await screen.findByRole('region', { name: /matching/i })
+
+    await userEvent.click(screen.getByRole('button', { name: /uso da ia/i }))
+
+    const grupo = screen.getByText('Chamadas à IA por fluxo').closest('.indicadores-grupo')
+
+    expect(valorDe(grupo, 'Chamadas à IA')).toHaveTextContent('7')
+    expect(valorDe(grupo, 'Copiloto de estruturação')).toHaveTextContent('4 chamadas · 1 falha')
+    expect(valorDe(grupo, 'Pré-análise de maturidade')).toHaveTextContent('2 chamadas · 1 falha')
+    expect(valorDe(grupo, 'Matching')).toHaveTextContent('0 chamadas · 0 falhas')
+  })
+
+  it('sem rodada, mas com chamada à IA, o bloco de uso aparece', async () => {
+    api.obterIndicadoresDeIA = vi.fn().mockResolvedValue({
+      matching: { houve_rodada: false },
+      maturidade: { houve_execucao: false },
+      uso: { ...DADOS_IA.uso, chamadas: 1, falhas: 0 },
+    })
+
+    renderizar()
+    await screen.findByRole('region', { name: /matching/i })
+
+    expect(screen.getByRole('button', { name: /uso da ia/i })).toBeInTheDocument()
   })
 
   it('a disponibilidade da rede fica junto da rede interna', async () => {
@@ -580,7 +702,7 @@ describe('Indicadores de matching e maturidade (PB74, PB75)', () => {
     const bloco = await screen.findByRole('region', { name: /matching/i })
 
     expect(within(bloco).getByText(/nenhuma rodada de matching/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /como as rodadas correram/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /uso da ia/i })).not.toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: /resumo/i })).queryByText('cobertura das competências')).not.toBeInTheDocument()
   })
 

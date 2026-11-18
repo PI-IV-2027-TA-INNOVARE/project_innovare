@@ -2,46 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BackLink from '../../../components/console/BackLink'
 import LayoutDoRelatorio, { SecaoDoRelatorio } from '../../../components/relatorio/LayoutDoRelatorio'
-import { PARCELAS_DA_NOTA, TERMOS } from '../../../lib/glossario'
+import ConteudoDaEquipe from '../../../components/relatorio/ConteudoDaEquipe'
+import { formatarData } from '../../../components/relatorio/partesDoRelatorio'
 import { obterRelatorioEquipe } from '../../../services/pdConnectApi'
 import './RelatorioPage.scss'
 
 const CODIGO_SEM_EQUIPE = 'equipe_inexistente'
-
-const ROTULOS_DAS_FEATURES = PARCELAS_DA_NOTA
-
-function formatarData(valor) {
-  if (!valor) return '—'
-
-  const data = new Date(valor)
-
-  return Number.isNaN(data.getTime())
-    ? '—'
-    : data.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
-
-function porcentagem(valor) {
-  if (valor === null || valor === undefined) return '—'
-
-  return `${Math.round(Number(valor) * 100)}%`
-}
-
-const Secao = SecaoDoRelatorio
-
-function Campo({ rotulo, children }) {
-  return (
-    <div className="relatorio-campo">
-      <dt className="relatorio-campo__rotulo">{rotulo}</dt>
-      <dd className="relatorio-campo__valor">{children || '—'}</dd>
-    </div>
-  )
-}
 
 export default function RelatorioEquipePage() {
   const { id } = useParams()
@@ -120,8 +86,6 @@ export default function RelatorioEquipePage() {
     { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
     { rotulo: 'Gerado em', valor: formatarData(relatorio.gerado_em) },
   ]
-  const execucao = equipe.execucao
-  const incluidos = equipe.membros.filter((membro) => membro.incluido)
 
   return (
     <LayoutDoRelatorio
@@ -146,95 +110,13 @@ export default function RelatorioEquipePage() {
           </p>
         </header>
 
-        {relatorio.como_foi_calculado?.length > 0 ? (
-          <Secao titulo="Como foi calculado">
-            {relatorio.como_foi_calculado.map((paragrafo) => (
-              <p key={paragrafo} className="relatorio-texto">{paragrafo}</p>
-            ))}
-          </Secao>
-        ) : null}
-
-        {execucao ? (
-          <Secao titulo="Rodada do matching">
-            <dl className="relatorio-campos">
-              <Campo rotulo="Estratégia">{execucao.estrategia}</Campo>
-              <Campo rotulo={TERMOS.revisaoDaIa}>{execucao.usou_rerank ? 'sim' : 'não'}</Campo>
-              <Campo rotulo={PARCELAS_DA_NOTA.semantico}>
-                {execucao.fallback_usado ? 'indisponível na rodada' : 'aplicada'}
-              </Campo>
-              <Campo rotulo="Executada por">{execucao.executado_por}</Campo>
-            </dl>
-
-            {execucao.pesos?.componentes ? (
-              <dl className="relatorio-campos">
-                {Object.entries(execucao.pesos.componentes).map(([nome, peso]) => (
-                  <Campo key={nome} rotulo={ROTULOS_DAS_FEATURES[nome] || nome}>
-                    peso {peso}
-                  </Campo>
-                ))}
-              </dl>
-            ) : null}
-          </Secao>
-        ) : null}
-
-        <Secao titulo="Composição sugerida">
-          {incluidos.length > 0 ? (
-            <dl className="relatorio-campos relatorio-campos--coluna">
-              {incluidos.map((membro) => (
-                <Campo
-                  key={membro.id_membro_equipe}
-                  rotulo={`${membro.nome} · ${membro.papel_rotulo} · aderência ${porcentagem(
-                    membro.score_compatibilidade,
-                  )}`}
-                >
-                  <span>
-                    {membro.titulacao ? `${membro.titulacao} · ` : ''}
-                    {membro.disponibilidade} · {membro.origem_rotulo}
-                    {membro.validada ? ' · validada' : ''}
-                  </span>
-
-                  {membro.match_reasons?.length > 0 ? (
-                    <ul className="relatorio-lista">
-                      {membro.match_reasons.map((motivo, indice) => (
-                        <li key={`${membro.id_membro_equipe}-${indice}`}>{motivo}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </Campo>
-              ))}
-            </dl>
-          ) : (
-            <p className="relatorio-vazio">
-              Nenhuma pessoa na composição atual. As lacunas abaixo dizem quais
-              competências ficaram sem cobertura.
-            </p>
-          )}
-        </Secao>
-
-        <Secao titulo="Competências comparadas">
-          {competencias.length > 0 ? (
-            <ul className="relatorio-lista">
-              {competencias.map((competencia) => (
-                <li key={competencia.id_competencia_necessaria}>
-                  {competencia.descricao} · {competencia.nivel_rotulo}
-                  {competencia.no_vocabulario ? ' · no vocabulário da rede' : ''}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="relatorio-vazio">Nenhuma competência necessária registrada.</p>
-          )}
-        </Secao>
-
-        {equipe.lacunas.length > 0 ? (
-          <Secao titulo="Lacunas da composição">
-            <ul className="relatorio-lista">
-              {equipe.lacunas.map((lacuna) => (
-                <li key={lacuna.id_lacuna_equipe}>{lacuna.descricao}</li>
-              ))}
-            </ul>
-          </Secao>
-        ) : null}
+        <ConteudoDaEquipe
+          equipe={equipe}
+          comoFoiCalculado={relatorio.como_foi_calculado || []}
+          competencias={competencias}
+          Bloco={SecaoDoRelatorio}
+          nivelDosGrupos="h3"
+        />
 
         <footer className="relatorio-documento__rodape">
           <Link to={`/oportunidades/${id}`}>{oportunidade.codigo}</Link> · AC2

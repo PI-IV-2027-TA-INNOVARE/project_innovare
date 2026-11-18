@@ -9,6 +9,8 @@ export const ROTULOS_DAS_DIMENSOES = {
 
 export const SEM_EVIDENCIA = 'Sem evidência na proposta'
 
+export const SEM_RECOMENDACAO = 'A pré-análise não trouxe recomendação para esta lacuna.'
+
 export function agruparPorLacuna(lacunas = [], recomendacoes = []) {
   const porLacuna = new Map(lacunas.map((lacuna) => [lacuna.id_lacuna, []]))
   const soltas = []
@@ -33,6 +35,12 @@ export function rotuloDoCriterio(item) {
   if (!item?.criterio_codigo) return SEM_EVIDENCIA
 
   return item.criterio_rotulo
-    ? `${item.criterio_codigo} · ${item.criterio_rotulo}`
+    ? `${item.criterio_rotulo} (${item.criterio_codigo})`
     : item.criterio_codigo
+}
+
+export function separarDescricao(descricao) {
+  const [titulo, ...pergunta] = descricao.split(' — ')
+
+  return { titulo, pergunta: pergunta.join(' — ') }
 }

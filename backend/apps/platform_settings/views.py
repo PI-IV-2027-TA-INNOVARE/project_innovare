@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.platform_settings.serializers import (
     ConfiguracaoSerializer,
+    ContatoSuporteLidoSerializer,
     ContatoSuporteSerializer,
     PrivacidadeSerializer,
     TemaPatchSerializer,
@@ -18,6 +19,7 @@ from apps.platform_settings.serializers import (
 from apps.platform_settings.services.contatos import (
     RestaurarContatosService,
     SubstituirContatosService,
+    contatos_com_origem,
     contatos_vigentes,
     encarregado_de_dados,
 )
@@ -107,13 +109,13 @@ class ContatosSuporteView(views.APIView):
 
         return [permissions.AllowAny()]
 
-    @extend_schema(responses=ContatoSuporteSerializer(many=True))
+    @extend_schema(responses=ContatoSuporteLidoSerializer(many=True))
     def get(self, request):
-        return Response(ContatoSuporteSerializer(contatos_vigentes(), many=True).data)
+        return Response(ContatoSuporteLidoSerializer(contatos_com_origem(), many=True).data)
 
     @extend_schema(
         request=ContatoSuporteSerializer(many=True),
-        responses=ContatoSuporteSerializer(many=True),
+        responses=ContatoSuporteLidoSerializer(many=True),
     )
     def put(self, request):
         contatos = ContatoSuporteSerializer(data=request.data, many=True, allow_empty=False)
@@ -123,10 +125,10 @@ class ContatosSuporteView(views.APIView):
             contatos=contatos.validated_data, ator=request.user
         )
 
-        return Response(ContatoSuporteSerializer(gravados, many=True).data)
+        return Response(ContatoSuporteLidoSerializer(gravados, many=True).data)
 
-    @extend_schema(request=None, responses=ContatoSuporteSerializer(many=True))
+    @extend_schema(request=None, responses=ContatoSuporteLidoSerializer(many=True))
     def delete(self, request):
         padrao = RestaurarContatosService().execute(ator=request.user)
 
-        return Response(ContatoSuporteSerializer(padrao, many=True).data)
+        return Response(ContatoSuporteLidoSerializer(padrao, many=True).data)

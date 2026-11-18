@@ -130,6 +130,60 @@ def _indicacoes(usuario: Usuario) -> list[dict[str, Any]]:
     ]
 
 
+NOMES_DAS_ENTIDADES = {
+    'usuario': 'Conta de outra pessoa',
+    'membro_rede': 'Perfil de outra pessoa na rede interna',
+    'oportunidade': 'Oportunidade',
+    'proposta_estruturada': 'Proposta estruturada',
+    'competencia_necessaria': 'Competência necessária',
+    'sessao_copiloto': 'Conversa com o Copiloto',
+    'mensagem_copiloto': 'Mensagem ao Copiloto',
+    'equipe_potencial': 'Equipe potencial',
+    'membro_equipe': 'Pessoa na equipe potencial',
+    'pre_analise_maturidade': 'Pré-análise',
+    'recomendacao_adequacao': 'Recomendação da pré-análise',
+    'ia': 'Uso da inteligência artificial',
+    'retencao': 'Guarda dos registros',
+}
+"""
+O que a copia diz no lugar do nome da tabela. O numero interno do banco nao
+sai: ele nada diz a quem le, e o de outra conta e dela.
+"""
+
+NOMES_DAS_CONFIGURACOES = {
+    'tema': 'Aparência da plataforma',
+    'contatos_suporte': 'Contatos de suporte',
+}
+
+
+def _sobre(evento: EventoAuditoria, usuario: Usuario, membro: MembroRede | None) -> str:
+    entidade = evento.entidade
+    referencia = str(evento.entidade_id)
+
+    if entidade == 'usuario' and referencia == str(usuario.pk):
+        return 'Sua conta'
+
+    if entidade == 'membro_rede' and membro is not None and referencia == str(membro.pk):
+        return 'Seu perfil na rede interna'
+
+    if entidade == 'configuracao':
+        return NOMES_DAS_CONFIGURACOES.get(referencia, 'Configuração da plataforma')
+
+    if entidade == 'criterio_referencia_pipe':
+        return f'Critérios PIPE, versão {referencia}'
+
+    if entidade == 'oportunidade':
+        codigo = evento.oportunidade.codigo if evento.oportunidade_id else referencia
+        return f'Oportunidade {codigo}'
+
+    nome = NOMES_DAS_ENTIDADES.get(entidade, 'Registro da plataforma')
+
+    if evento.oportunidade_id:
+        return f'{nome} da oportunidade {evento.oportunidade.codigo}'
+
+    return nome
+
+
 def copia_dos_dados(usuario: Usuario) -> dict[str, Any]:
     """
     Tudo o que o sistema guarda sobre a pessoa, em formato que ela le.
@@ -146,7 +200,11 @@ def copia_dos_dados(usuario: Usuario) -> dict[str, Any]:
         .prefetch_related('competencias', 'formacoes')
         .first()
     )
-    atividade = EventoAuditoria.objects.filter(conta_do_ator=usuario).order_by('ocorrido_em')
+    atividade = (
+        EventoAuditoria.objects.filter(conta_do_ator=usuario)
+        .select_related('oportunidade')
+        .order_by('ocorrido_em')
+    )
     sobre = (
         EventoAuditoria.objects.filter(_sobre_a_pessoa(usuario, membro))
         .exclude(conta_do_ator=usuario)
@@ -193,7 +251,7 @@ def copia_dos_dados(usuario: Usuario) -> dict[str, Any]:
             {
                 'quando': _data(evento.ocorrido_em),
                 'acao': rotulo_do_tipo(evento.tipo, evento.entidade),
-                'sobre': f'{evento.entidade} {evento.entidade_id}',
+                'sobre': _sobre(evento, usuario, membro),
             }
             for evento in atividade
         ],

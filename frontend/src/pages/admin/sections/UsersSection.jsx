@@ -9,7 +9,10 @@ import {
 } from '../../../components/console/ConsoleTable'
 import { BotaoPessoa, FichaDePessoa } from '../../../components/console/Pessoa'
 import { AdminToast, useToast } from '../../../components/console/toast'
+import RodapeDePaginacao from '../../../components/console/RodapeDePaginacao'
 import { Icone, appIcons } from '../../../lib/icons'
+import { paginar, useLinhasPorPagina } from '../../../lib/linhasPorPagina'
+import { todasAsPaginas } from '../../../lib/paginas'
 import UserFormModal from './users/UserFormModal'
 import {
   anonimizarConta,
@@ -40,8 +43,6 @@ const COLUNAS = [
   { id: 'ultimoAcesso', label: 'Último acesso', ordenavel: true },
   { id: 'acoes', label: 'Ações', ordenavel: false },
 ]
-
-const POR_PAGINA = [10, 25, 50]
 
 function temPedidoAberto(usuario) {
   return Boolean(usuario.exclusaoSolicitadaEm) && !usuario.anonimizada
@@ -78,7 +79,7 @@ export default function UsersSection() {
 
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
   const [pagina, setPagina] = useState(1)
-  const [porPagina, setPorPagina] = useState(10)
+  const [porPagina, setPorPagina] = useLinhasPorPagina('usuarios', 10)
 
   const [modal, setModal] = useState(null)
 
@@ -89,8 +90,7 @@ export default function UsersSection() {
     setErroCarga('')
 
     try {
-      const resposta = await listUsuarios()
-      setUsuarios((resposta.results || resposta).map(daApi))
+      setUsuarios((await todasAsPaginas(listUsuarios)).map(daApi))
     } catch (erro) {
       setErroCarga(erro.message || 'Não foi possível carregar as contas.')
     } finally {
@@ -136,10 +136,11 @@ export default function UsersSection() {
     return [...filtrados].sort((a, b) => comparar(a, b, ordem.campo) * fator)
   }, [filtrados, ordem])
 
-  const totalPaginas = Math.max(1, Math.ceil(ordenados.length / porPagina))
-  const paginaAtual = Math.min(pagina, totalPaginas)
-  const inicio = (paginaAtual - 1) * porPagina
-  const visiveis = ordenados.slice(inicio, inicio + porPagina)
+  const { visiveis, paginaAtual, totalPaginas, inicio, fim } = paginar(
+    ordenados,
+    pagina,
+    porPagina
+  )
 
   const temFiltro =
     Boolean(busca) || perfilFiltro !== 'todos' || statusFiltro !== 'todos' || soPedidos
@@ -665,78 +666,20 @@ export default function UsersSection() {
         </table>
       </div>
 
-      <nav className="pagination" aria-label="Paginação da lista de usuários">
-        <p className="pagination__summary">
-          {ordenados.length === 0
-            ? 'Nenhum registro'
-            : `Mostrando ${inicio + 1}–${Math.min(inicio + porPagina, ordenados.length)} de ${ordenados.length}`}
-          {ordenados.length !== usuarios.length ? ` (${usuarios.length} no total)` : ''}
-        </p>
-
-        <div className="pagination__controls">
-          <label className="pagination__size">
-            Linhas por página
-            <select
-              className="admin-input admin-input--compact"
-              value={porPagina}
-              onChange={(event) => setPorPagina(Number(event.target.value))}
-              aria-label="Linhas por página"
-            >
-              {POR_PAGINA.map((quantidade) => (
-                <option key={quantidade} value={quantidade}>{quantidade}</option>
-              ))}
-            </select>
-          </label>
-
-          <span className="pagination__page">Página {paginaAtual} de {totalPaginas}</span>
-
-          <div className="pagination__buttons">
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setPagina(1)}
-              disabled={paginaAtual === 1}
-              title="Primeira página"
-              aria-label="Primeira página"
-            >
-              <Icone icon={appIcons.first} />
-            </button>
-
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setPagina((atual) => Math.max(1, atual - 1))}
-              disabled={paginaAtual === 1}
-              title="Página anterior"
-              aria-label="Página anterior"
-            >
-              <Icone icon={appIcons.previous} />
-            </button>
-
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setPagina((atual) => Math.min(totalPaginas, atual + 1))}
-              disabled={paginaAtual === totalPaginas}
-              title="Próxima página"
-              aria-label="Próxima página"
-            >
-              <Icone icon={appIcons.next} />
-            </button>
-
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setPagina(totalPaginas)}
-              disabled={paginaAtual === totalPaginas}
-              title="Última página"
-              aria-label="Última página"
-            >
-              <Icone icon={appIcons.last} />
-            </button>
-          </div>
-        </div>
-      </nav>
+      <RodapeDePaginacao
+        rotulo="Paginação da lista de usuários"
+        total={ordenados.length}
+        inicio={inicio}
+        fim={fim}
+        pagina={paginaAtual}
+        totalPaginas={totalPaginas}
+        porPagina={porPagina}
+        onPagina={setPagina}
+        onPorPagina={setPorPagina}
+        complemento={
+          ordenados.length !== usuarios.length ? ` (${usuarios.length} no total)` : ''
+        }
+      />
 
       {modal?.tipo === 'novo' ? (
         <UserFormModal onSubmit={criarUsuario} onClose={() => setModal(null)} salvando={salvando} />
