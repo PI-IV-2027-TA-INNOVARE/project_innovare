@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { appIcons, Icone } from '../../lib/icons'
 import { lerPrivacidade } from '../../services/pdConnectApi'
 import './PrivacidadePage.scss'
 
-const ATUALIZADO_EM = '26/10/2026'
+const ATUALIZADO_EM = '20/11/2026'
 
 const RETENCAO_PADRAO = {
   eventos_conta_meses: 12,
@@ -21,7 +21,7 @@ const RESUMO = [
   {
     icone: appIcons.place,
     termo: 'Onde fica',
-    texto: 'O banco de dados fica no Brasil, em São Paulo.',
+    texto: 'Os dados e os documentos anexados ficam guardados no Brasil.',
   },
   {
     icone: appIcons.share,
@@ -32,6 +32,7 @@ const RESUMO = [
     icone: appIcons.export,
     termo: 'O que você controla',
     texto: 'Baixar uma cópia dos seus dados e pedir a exclusão da conta.',
+    levaAosDados: true,
   },
 ]
 
@@ -58,6 +59,15 @@ const BASES = [
   ],
 ]
 
+const DIREITOS = [
+  'Confirmar se tratamos seus dados',
+  'Acessar seus dados',
+  'Corrigir seus dados',
+  'Levar seus dados a outro serviço',
+  'Pedir anonimização ou exclusão',
+  'Saber com quem seus dados foram compartilhados',
+]
+
 const SECOES = [
   ['privacidade-quem', 'Quem é responsável'],
   ['privacidade-quais', 'O que guardamos'],
@@ -67,6 +77,53 @@ const SECOES = [
   ['privacidade-direitos', 'Seus direitos'],
   ['privacidade-encarregado', 'Encarregado de dados'],
 ]
+
+const DISTANCIA_DO_TOPO = 120
+
+const PAUSA_APOS_CLIQUE = 1200
+
+function secaoNaTela() {
+  const ultima = SECOES[SECOES.length - 1][0]
+  const raiz = document.documentElement
+  const noFim = window.scrollY > 0 && window.innerHeight + window.scrollY >= raiz.scrollHeight - 2
+
+  if (noFim) return ultima
+
+  return SECOES.reduce((atual, [id]) => {
+    const titulo = document.getElementById(id)
+
+    return titulo && titulo.getBoundingClientRect().top <= DISTANCIA_DO_TOPO ? id : atual
+  }, SECOES[0][0])
+}
+
+function emSequencia(nomes) {
+  if (nomes.length < 2) return nomes.join('')
+
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}`
+}
+
+function servicosDeHoje(servicos = []) {
+  const principal = servicos.find((servico) => servico.papel === 'principal')
+  const reservas = servicos
+    .filter((servico) => servico.papel === 'reserva')
+    .map((servico) => servico.nome)
+
+  if (principal && reservas.length === 1) {
+    return `Hoje, o serviço principal é o ${principal.nome}; quando ele não responde, entra o ${reservas[0]}.`
+  }
+
+  if (principal && reservas.length) {
+    return `Hoje, o serviço principal é o ${principal.nome}; quando ele não responde, entram ${emSequencia(reservas)}.`
+  }
+
+  if (principal) return `Hoje, o serviço usado é o ${principal.nome}.`
+
+  if (reservas.length === 1) return `Hoje, o serviço usado é o ${reservas[0]}.`
+
+  if (reservas.length) return `Hoje, os serviços usados são ${emSequencia(reservas)}.`
+
+  return ''
+}
 
 function Encarregado({ dados, carregando }) {
   if (carregando) {
@@ -104,6 +161,27 @@ export default function PrivacidadePage() {
   const { isAuthenticated } = useAuth()
   const [dados, setDados] = useState(null)
   const [carregando, setCarregando] = useState(true)
+  const [secaoAtual, setSecaoAtual] = useState(SECOES[0][0])
+  const [indiceAberto, setIndiceAberto] = useState(false)
+  const pausaAte = useRef(0)
+
+  useEffect(() => {
+    const acompanhar = () => {
+      if (Date.now() < pausaAte.current) return
+
+      setSecaoAtual(secaoNaTela())
+    }
+
+    window.addEventListener('scroll', acompanhar, { passive: true })
+
+    return () => window.removeEventListener('scroll', acompanhar)
+  }, [])
+
+  const irParaSecao = (id) => {
+    pausaAte.current = Date.now() + PAUSA_APOS_CLIQUE
+    setSecaoAtual(id)
+    setIndiceAberto(false)
+  }
 
   useEffect(() => {
     let ativo = true
@@ -125,6 +203,7 @@ export default function PrivacidadePage() {
   }, [])
 
   const retencao = dados?.retencao ?? RETENCAO_PADRAO
+  const hoje = servicosDeHoje(dados?.servicos_de_ia)
 
   return (
     <main className="privacidade">
@@ -153,19 +232,59 @@ export default function PrivacidadePage() {
                   </span>
                   {item.termo}
                 </dt>
-                <dd>{item.texto}</dd>
+                <dd>
+                  {item.texto}
+                  {item.levaAosDados && isAuthenticated ? (
+                    <Link className="privacidade__resumo-link" to="/perfil">
+                      Ir para Meus dados
+                      <Icone icon={appIcons.next} />
+                    </Link>
+                  ) : null}
+                  {item.levaAosDados && !isAuthenticated ? (
+                    <a
+                      className="privacidade__resumo-link"
+                      href="#privacidade-direitos"
+                      onClick={() => irParaSecao('privacidade-direitos')}
+                    >
+                      Como fazer
+                      <Icone icon={appIcons.next} />
+                    </a>
+                  ) : null}
+                </dd>
               </div>
             ))}
           </dl>
         </section>
 
         <div className="privacidade__corpo">
-          <nav className="privacidade__indice" aria-label="Nesta página">
+          <nav
+            className={`privacidade__indice${indiceAberto ? ' is-aberto' : ''}`}
+            aria-label="Nesta página"
+          >
             <p className="privacidade__indice-titulo" aria-hidden="true">Nesta página</p>
-            <ul>
+            <button
+              type="button"
+              className="privacidade__indice-alternar"
+              aria-expanded={indiceAberto}
+              aria-controls="privacidade-indice-lista"
+              onClick={() => setIndiceAberto((aberto) => !aberto)}
+            >
+              Nesta página
+              <Icone
+                icon={appIcons.disclosure}
+                className={`disclosure__chevron${indiceAberto ? ' is-open' : ''}`}
+              />
+            </button>
+            <ul id="privacidade-indice-lista" className="privacidade__indice-lista">
               {SECOES.map(([id, titulo]) => (
                 <li key={id}>
-                  <a href={`#${id}`}>{titulo}</a>
+                  <a
+                    href={`#${id}`}
+                    aria-current={secaoAtual === id ? 'location' : undefined}
+                    onClick={() => irParaSecao(id)}
+                  >
+                    {titulo}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -220,15 +339,18 @@ export default function PrivacidadePage() {
                 <div>
                   <dt>Serviços de IA</dt>
                   <dd>
-                    Os serviços ligados à plataforma (hoje, o Gemini, do Google) recebem os
-                    textos das propostas, as respostas ao Copiloto e o perfil profissional
-                    das pessoas sugeridas, sem nome, e-mail ou telefone. Eles podem processar
+                    Os serviços de IA ligados à plataforma recebem os textos das propostas, as
+                    respostas ao Copiloto e o perfil profissional das pessoas sugeridas, sem
+                    nome, e-mail ou telefone. {hoje ? `${hoje} ` : ''}Eles podem processar
                     esses textos fora do Brasil, o que é uma transferência internacional.
                   </dd>
                 </div>
                 <div>
-                  <dt>Banco de dados</dt>
-                  <dd>Guardado no Brasil, em São Paulo.</dd>
+                  <dt>Hospedagem</dt>
+                  <dd>
+                    Os dados e os documentos anexados ficam guardados no Brasil, na empresa que
+                    hospeda a plataforma.
+                  </dd>
                 </div>
                 <div>
                   <dt>E-mail</dt>
@@ -263,11 +385,15 @@ export default function PrivacidadePage() {
 
             <section aria-labelledby="privacidade-direitos">
               <h2 id="privacidade-direitos">Seus direitos</h2>
-              <p>
-                Você pode confirmar se tratamos seus dados, acessá-los, corrigi-los, levá-los
-                a outro serviço, pedir anonimização ou exclusão e saber com quem foram
-                compartilhados.
-              </p>
+              <p>Você pode:</p>
+              <ul className="privacidade__direitos">
+                {DIREITOS.map((direito) => (
+                  <li key={direito}>
+                    <Icone icon={appIcons.done} />
+                    {direito}
+                  </li>
+                ))}
+              </ul>
               {isAuthenticated ? (
                 <div className="privacidade__acao">
                   <Link className="btn btn-primary" to="/perfil">

@@ -1878,6 +1878,10 @@
   }
 }
 
+.oportunidade-conteudo > .perfil-card + .perfil-card {
+  margin-top: var(--admin-gap);
+}
+
 .oportunidade-conteudo .perfil-card__description {
   max-width: 75ch;
 }

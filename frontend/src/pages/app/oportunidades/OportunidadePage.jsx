@@ -288,6 +288,10 @@ export default function OportunidadePage() {
     }
   }
 
+  const acrescentarNaTrilha = (evento) => {
+    setEventos((atual) => [evento, ...atual])
+  }
+
   if (!FORMATO_DO_CODIGO.test(id)) {
     return <NaoEncontradaPage voltar={VOLTA_PARA_A_LISTA} />
   }
@@ -550,6 +554,8 @@ export default function OportunidadePage() {
             podeDecidir={ehSupervisor}
             onRegistrar={registrarDecisao}
             irPara={irPara}
+            observacoes={eventos.filter((evento) => evento.categoria === 'observacao')}
+            aoRegistrarObservacao={acrescentarNaTrilha}
           />
         ) : null}
 
@@ -569,8 +575,8 @@ export default function OportunidadePage() {
           <AbaHistorico
             codigo={id}
             historico={eventos}
-            podeRegistrar={ehSupervisor}
             podeSolicitarComplemento={ehSupervisor && registro.origem === 'externo'}
+            aoRegistrar={acrescentarNaTrilha}
           />
         ) : null}
       </div>

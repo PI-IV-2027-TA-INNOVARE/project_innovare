@@ -141,6 +141,11 @@ para arquivo. O backup é guardado só até o ensaio dar certo; cada ação fica
 
 ## Produção
 
+Numa VPS com Docker, o caminho pronto é o `deploy/compose.producao.yml`: nginx
+com HTTPS, API, Celery, Redis e renovação do certificado. O passo a passo está
+em [`../deploy/README.md`](../deploy/README.md). O que vem abaixo vale para quem
+montar o servidor de outro jeito.
+
 O `runserver` é só para desenvolvimento. Em produção quem atende é o gunicorn,
 com a configuração de `gunicorn.conf.py` (não roda no Windows):
 

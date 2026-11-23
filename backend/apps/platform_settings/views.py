@@ -8,6 +8,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, views
 from rest_framework.response import Response
 
+from apps.ai.services.registro import servicos_que_recebem_textos
 from apps.platform_settings.serializers import (
     ConfiguracaoSerializer,
     ContatoSuporteLidoSerializer,
@@ -69,10 +70,12 @@ class TemaView(views.APIView):
 
 class PrivacidadeView(views.APIView):
     """
-    `GET /api/privacidade/` - o contato do encarregado de dados, para o aviso.
+    `GET /api/privacidade/` - o que o aviso le da configuracao.
 
-    Publico como o aviso: quem ainda nao tem conta tambem precisa saber como
-    os dados sao tratados e com quem falar.
+    O contato do encarregado de dados, os prazos de retencao e os servicos de
+    IA ligados. Publico como o aviso: quem ainda nao tem conta tambem precisa
+    saber como os dados sao tratados, com quem sao compartilhados e com quem
+    falar.
     """
 
     permission_classes = [permissions.AllowAny]
@@ -88,6 +91,7 @@ class PrivacidadeView(views.APIView):
                         'eventos_conta_meses': settings.RETENCAO_EVENTOS_CONTA_MESES,
                         'anexos_apos_arquivamento_meses': settings.RETENCAO_ANEXOS_MESES,
                     },
+                    'servicos_de_ia': servicos_que_recebem_textos(),
                 }
             ).data
         )

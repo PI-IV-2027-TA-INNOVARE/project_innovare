@@ -411,7 +411,7 @@ class OportunidadeViewSet(viewsets.ModelViewSet):
         """
         Nota do Supervisor durante a avaliacao (PB65).
 
-        So escrita: a leitura e a aba Historico, porque a nota mora na trilha.
+        So escrita: a leitura vem do `historico`, porque a nota mora na trilha.
         Duas rotas para a mesma verdade divergem no primeiro mes.
         """
         serializer = ObservacaoSerializer(data=request.data)

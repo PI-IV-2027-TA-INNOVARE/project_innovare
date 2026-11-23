@@ -228,6 +228,25 @@ def papeis_configurados() -> dict[tuple[str, str], str]:
     return papeis
 
 
+def servicos_que_recebem_textos() -> list[dict[str, str]]:
+    """
+    Os serviços de IA que podem receber os textos, na ordem em que respondem.
+
+    É a lista do aviso de privacidade. Só entra quem tem chave: provedor sem
+    chave não recebe nada. O mesmo serviço com outro modelo aparece uma vez, no
+    primeiro papel em que entra.
+    """
+    servicos: dict[str, str] = {}
+
+    for (nome, _modelo), papel in papeis_configurados().items():
+        provedor = descritor(nome)
+
+        if provedor.configurado():
+            servicos.setdefault(provedor.rotulo, papel)
+
+    return [{'nome': rotulo, 'papel': papel} for rotulo, papel in servicos.items()]
+
+
 def provedor_principal(**kwargs) -> ProvedorDeIA:
     """O provedor principal, criado com a configuração do ambiente e com o teto de gasto."""
     return ProvedorComTetoDeCusto(descritor(nome_do_principal()).criar(**kwargs))

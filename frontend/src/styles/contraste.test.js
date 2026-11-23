@@ -402,6 +402,34 @@ describe('selos de situação na Auditoria — WCAG 2.2 AA', () => {
   }
 })
 
+/**
+ * Na lista de Usuários, Inativo era cinza e passava despercebido ao lado de
+ * Ativo. Ganhou a tinta de Alerta, e não o vermelho: o vermelho já é o
+ * Suspenso, e com os dois iguais o Administrador deixa de distinguir um do
+ * outro.
+ */
+describe('selo Inativo na lista de Usuários — WCAG 2.2 AA', () => {
+  const inicio = console_.indexOf('\n.status-badge {')
+  const selo = console_.slice(inicio, console_.indexOf('\n}', inicio))
+  const inativo = selo.match(
+    /&--inativo\s*\{[^}]*color:\s*var\(--accent-warning\)[^}]*background:\s*color-mix\(in srgb, var\(--accent-warning\) (\d+)%/
+  )
+
+  it('inativo é tinta de Alerta, diferente do vermelho do Suspenso', () => {
+    expect(inativo).not.toBeNull()
+    expect(selo).toMatch(/&--suspenso\s*\{[^}]*color:\s*var\(--accent-error\)/)
+  })
+
+  for (const tema of ['light', 'dark']) {
+    it(`o texto do selo Inativo entrega 4,5:1 no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const fundo = sobre(paleta.accentWarning, paleta.bgCard, Number(inativo[1]) / 100)
+
+      expect(contraste(paleta.accentWarning, fundo)).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL)
+    })
+  }
+})
+
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const folhas = readdirSync(RAIZ, { recursive: true })

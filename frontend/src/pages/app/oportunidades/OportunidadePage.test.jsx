@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   obterOportunidade: null,
   listarHistorico: null,
   registrarDecisao: null,
+  registrarObservacao: null,
+  solicitarComplemento: null,
   listarAnexos: null,
   obterProposta: null,
   obterEstadoCopiloto: null,
@@ -23,6 +25,8 @@ vi.mock('../../../services/pdConnectApi', () => ({
   obterOportunidade: (...args) => api.obterOportunidade(...args),
   listarHistorico: (...args) => api.listarHistorico(...args),
   registrarDecisao: (...args) => api.registrarDecisao(...args),
+  registrarObservacao: (...args) => api.registrarObservacao(...args),
+  solicitarComplemento: (...args) => api.solicitarComplemento(...args),
   listarAnexos: (...args) => api.listarAnexos(...args),
   enviarAnexo: vi.fn(),
   obterProposta: (...args) => api.obterProposta(...args),
@@ -351,6 +355,99 @@ describe('OportunidadePage — custo de abertura', () => {
     renderPagina()
 
     expect(await screen.findByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
+  })
+})
+
+describe('OportunidadePage — observação da avaliação', () => {
+  /**
+   * A etapa Decisão e a aba Histórico leem a mesma trilha da página. A nota
+   * registrada na Decisão precisa estar no Histórico sem recarregar, e a que
+   * já estava na trilha aparece na Decisão.
+   */
+  it('a observação registrada na Decisão aparece no Histórico', async () => {
+    api.registrarObservacao = vi.fn().mockResolvedValue({
+      ocorrido_em: '2026-09-22T10:00:00.000Z',
+      texto: 'Laudo do lote de verão confirma a contaminação.',
+      autor_nome: 'Rafael Antunes',
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.type(
+      await screen.findByLabelText('Nova observação'),
+      'Laudo do lote de verão confirma a contaminação.',
+    )
+    await user.click(screen.getByRole('button', { name: /registrar observação/i }))
+
+    expect(
+      await screen.findByText('Laudo do lote de verão confirma a contaminação.'),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /histórico/i }))
+
+    expect(
+      screen.getByText('Laudo do lote de verão confirma a contaminação.'),
+    ).toBeInTheDocument()
+    expect(api.listarHistorico).toHaveBeenCalledTimes(1)
+  })
+
+  it('a Decisão mostra a observação que já estava na trilha', async () => {
+    api.listarHistorico = vi.fn().mockResolvedValue({
+      results: [
+        {
+          ocorrido_em: '2026-09-18T10:00:00.000Z',
+          categoria: 'observacao',
+          tipo: 'observacao_registrada',
+          ator_nome: 'Rafael Antunes',
+          detalhe: { texto: 'Demandante confirmou o volume de lotes perdidos.' },
+        },
+        {
+          ocorrido_em: '2026-09-17T10:00:00.000Z',
+          categoria: 'oportunidade',
+          tipo: 'oportunidade_cadastrada',
+          ator_nome: 'Agroindústria Vale Verde',
+          detalhe: {},
+        },
+      ],
+    })
+
+    renderPagina()
+
+    const lista = await screen.findByRole('list', { name: 'Observações registradas' })
+
+    expect(within(lista).getAllByRole('listitem')).toHaveLength(1)
+    expect(lista).toHaveTextContent('Demandante confirmou o volume de lotes perdidos.')
+  })
+})
+
+describe('OportunidadePage — pedido de complementação', () => {
+  /**
+   * O pedido ficava só no estado da aba Histórico. Ao trocar de aba a aba
+   * desmontava, e o pedido sumia da trilha até a página recarregar, embora
+   * já estivesse gravado.
+   */
+  it('o pedido continua na trilha depois de trocar de aba', async () => {
+    api.solicitarComplemento = vi.fn().mockResolvedValue({
+      ocorrido_em: '2026-09-22T09:00:00.000Z',
+      mensagem: 'Faltam os laudos do lote.',
+      autor_nome: 'Rafael Antunes',
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole('button', { name: /histórico/i }))
+    await user.type(screen.getByLabelText(/solicitar complementação/i), 'Faltam os laudos do lote.')
+    await user.click(screen.getByRole('button', { name: /^solicitar$/i }))
+
+    expect(await screen.findByText(/faltam os laudos do lote/i)).toBeInTheDocument()
+
+    const etapas = screen.getByRole('navigation', { name: /etapas da oportunidade/i })
+
+    await user.click(within(etapas).getByRole('button', { name: /^decisão/i }))
+    await user.click(within(etapas).getByRole('button', { name: /histórico/i }))
+
+    expect(screen.getByText(/faltam os laudos do lote/i)).toBeInTheDocument()
+    expect(api.listarHistorico).toHaveBeenCalledTimes(1)
   })
 })
 

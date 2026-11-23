@@ -69,7 +69,14 @@ const pagina = (results = EVENTOS) => ({ count: results.length, results })
 
 const linhas = () => within(screen.getByRole('table')).getAllByRole('row').slice(1)
 
+const rodape = () => screen.getByRole('navigation', { name: 'Paginação da trilha' })
+
+const topo = () => screen.getByRole('navigation', { name: 'Paginação da trilha, no topo' })
+
+const rodapePronto = () => screen.findByRole('navigation', { name: 'Paginação da trilha' })
+
 beforeEach(() => {
+  window.localStorage.clear()
   api.obterFiltrosTrilha = vi.fn().mockResolvedValue(FILTROS)
   api.listarTrilha = vi.fn().mockResolvedValue(pagina())
 })
@@ -164,15 +171,23 @@ describe('Console — Auditoria', () => {
     expect(alvo).toHaveClass('trilha__alvo--removido')
   })
 
-  it('avisa que entradas e saídas ficam no filtro Conta e acesso', async () => {
+  /**
+   * O aviso dizia "entradas e saídas ficam fora" com linhas de "Entrada
+   * recusada" logo abaixo, e parecia errado. Só a entrada bem-sucedida e a
+   * saída saem da lista; a recusada fica, e o aviso diz isso.
+   */
+  it('avisa que só entradas bem-sucedidas e saídas ficam no filtro Conta e acesso', async () => {
     const user = userEvent.setup({ delay: null })
     render(<AuditoriaSection />)
 
-    expect(await screen.findByText(/entradas e saídas da plataforma/i)).toBeInTheDocument()
+    const aviso = await screen.findByText(/entradas bem-sucedidas e saídas da plataforma/i)
+    expect(aviso).toHaveTextContent(/entradas recusadas continuam aqui/i)
 
     await user.selectOptions(screen.getByLabelText(/categoria/i), 'conta')
 
-    expect(screen.queryByText(/entradas e saídas da plataforma/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/entradas bem-sucedidas e saídas da plataforma/i)
+    ).not.toBeInTheDocument()
   })
 
   it('diz quantos itens uma alteração de configuração mudou', async () => {
@@ -243,23 +258,58 @@ describe('Console — Auditoria', () => {
     )
   })
 
-  it('pede a primeira página e diz o total de eventos', async () => {
+  it('pede a primeira página, com 10 linhas, e diz o total de eventos', async () => {
     api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
     render(<AuditoriaSection />)
 
-    expect(await screen.findByText('119 eventos')).toBeInTheDocument()
-    expect(screen.getByText('Página 1 de 3')).toBeInTheDocument()
+    expect(await within(await rodapePronto()).findByText('Mostrando 1–2 de 119')).toBeInTheDocument()
+    expect(within(rodape()).getByText('Página 1 de 12')).toBeInTheDocument()
     expect(api.listarTrilha).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, page_size: 50 })
+      expect.objectContaining({ page: 1, page_size: 10 })
     )
   })
 
-  it('o total respeita o singular', async () => {
+  it('com um evento só, não deixa avançar', async () => {
     api.listarTrilha = vi.fn().mockResolvedValue({ count: 1, results: [EVENTOS[0]] })
     render(<AuditoriaSection />)
 
-    expect(await screen.findByText('1 evento')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /próxima página/i })).not.toBeInTheDocument()
+    expect(await within(await rodapePronto()).findByText('Mostrando 1–1 de 1')).toBeInTheDocument()
+    expect(within(rodape()).getByRole('button', { name: /próxima página/i })).toBeDisabled()
+  })
+
+  /**
+   * Como nas outras listas, quem usa escolhe quantas linhas ver, e a escolha
+   * fica lembrada. "Todos" não entra: a trilha passa de centenas de eventos e
+   * cresce todo dia, e o servidor entrega no máximo 100 por vez.
+   */
+  it('deixa escolher 25 ou 50 linhas, sem "Todos", e lembra a escolha', async () => {
+    const user = userEvent.setup({ delay: null })
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
+    const { unmount } = render(<AuditoriaSection />)
+    await screen.findByText('Entrada recusada')
+
+    const seletor = within(rodape()).getByLabelText('Linhas por página')
+    expect(within(seletor).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
+      '10',
+      '25',
+      '50',
+    ])
+
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
+    await within(rodape()).findByText('Página 2 de 12')
+    await user.selectOptions(seletor, '25')
+
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, page_size: 25 })
+      )
+    )
+
+    unmount()
+    render(<AuditoriaSection />)
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(expect.objectContaining({ page_size: 25 }))
+    )
   })
 
   it('leva às páginas seguintes, para nenhum evento antigo ficar fora de alcance', async () => {
@@ -268,12 +318,39 @@ describe('Console — Auditoria', () => {
     render(<AuditoriaSection />)
     await screen.findByText('Entrada recusada')
 
-    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
 
     await waitFor(() =>
       expect(api.listarTrilha).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
     )
-    expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument()
+    expect(await within(rodape()).findByText('Página 2 de 12')).toBeInTheDocument()
+  })
+
+  /**
+   * Com 50 linhas por página, o "Próxima" só existia no fim da lista e o
+   * Administrador rolava a página inteira para trocar. A navegação se repete
+   * acima da tabela; a escolha de linhas fica só embaixo, como nas outras
+   * listas, para não haver dois seletores iguais na tela.
+   */
+  it('repete a navegação acima da lista, para trocar de página sem rolar', async () => {
+    const user = userEvent.setup({ delay: null })
+    api.listarTrilha = vi.fn().mockResolvedValue({ count: 119, results: EVENTOS })
+    render(<AuditoriaSection />)
+    await screen.findByText('Entrada recusada')
+
+    expect(topo().compareDocumentPosition(screen.getByRole('table'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(within(topo()).getByText('Mostrando 1–2 de 119')).toBeInTheDocument()
+    expect(within(topo()).queryByLabelText('Linhas por página')).not.toBeInTheDocument()
+
+    await user.click(within(topo()).getByRole('button', { name: /próxima página/i }))
+
+    await waitFor(() =>
+      expect(api.listarTrilha).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    )
+    expect(await within(topo()).findByText('Página 2 de 12')).toBeInTheDocument()
+    expect(within(rodape()).getByText('Página 2 de 12')).toBeInTheDocument()
   })
 
   it('mudar um filtro volta para a primeira página', async () => {
@@ -282,8 +359,8 @@ describe('Console — Auditoria', () => {
     render(<AuditoriaSection />)
     await screen.findByText('Entrada recusada')
 
-    await user.click(screen.getByRole('button', { name: /próxima página/i }))
-    await screen.findByText('Página 2 de 3')
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
+    await within(rodape()).findByText('Página 2 de 12')
 
     await user.selectOptions(screen.getByLabelText(/categoria/i), 'conta')
 
@@ -300,8 +377,8 @@ describe('Console — Auditoria', () => {
     render(<AuditoriaSection />)
     await screen.findByText('Entrada recusada')
 
-    await user.click(screen.getByRole('button', { name: /próxima página/i }))
-    await screen.findByText('Página 2 de 3')
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
+    await within(rodape()).findByText('Página 2 de 12')
     await user.type(screen.getByLabelText(/buscar/i), 'Rafael')
     await user.click(screen.getByRole('button', { name: /aplicar/i }))
 
@@ -311,13 +388,13 @@ describe('Console — Auditoria', () => {
       )
     )
 
-    await user.click(screen.getByRole('button', { name: /próxima página/i }))
-    await screen.findByText('Página 2 de 3')
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
+    await within(rodape()).findByText('Página 2 de 12')
     await user.click(screen.getByRole('button', { name: /^limpar$/i }))
 
     await waitFor(() =>
       expect(api.listarTrilha).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 1, page_size: 50 })
+        expect.objectContaining({ page: 1, page_size: 10 })
       )
     )
     expect(api.listarTrilha.mock.lastCall[0]).not.toHaveProperty('busca')
@@ -334,8 +411,8 @@ describe('Console — Auditoria', () => {
     render(<AuditoriaSection />)
     await screen.findByText('Entrada recusada')
 
-    await user.click(screen.getByRole('button', { name: /próxima página/i }))
-    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
+    await user.click(within(rodape()).getByRole('button', { name: /próxima página/i }))
     await screen.findByText('Oportunidade cadastrada')
 
     responderPrimeira({ count: 119, results: [EVENTOS[0]] })

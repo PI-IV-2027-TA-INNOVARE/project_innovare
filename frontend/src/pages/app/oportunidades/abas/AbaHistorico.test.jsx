@@ -1,12 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import AbaHistorico from './AbaHistorico'
 
-const api = vi.hoisted(() => ({ registrarObservacao: null, solicitarComplemento: null }))
+const api = vi.hoisted(() => ({ solicitarComplemento: null }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
-  registrarObservacao: (...args) => api.registrarObservacao(...args),
   solicitarComplemento: (...args) => api.solicitarComplemento(...args),
 }))
 
@@ -23,73 +22,21 @@ function renderizar(props = {}) {
     <AbaHistorico
       codigo="OP-2026-014"
       historico={[CADASTRO]}
-      podeRegistrar
       {...props}
     />
   )
 }
 
-beforeEach(() => {
-  api.registrarObservacao = vi.fn().mockResolvedValue({
-    ocorrido_em: '2026-09-22T10:00:00.000Z',
-    texto: 'Laudo do lote de verão confirma a contaminação.',
-    autor_nome: 'Rafael Antunes',
-  })
-})
-
 describe('AbaHistorico — observação do Supervisor (PB65)', () => {
-  it('registra a observação e ela aparece na trilha', async () => {
-    const usuario = userEvent.setup({ delay: null })
-    renderizar()
+  /**
+   * A observação se registra na etapa Decisão, onde o Supervisor avalia. Dois
+   * campos para a mesma nota deixavam a dúvida de qual usar, e a nota escrita
+   * aqui sumia ao trocar de aba. A trilha segue mostrando todas.
+   */
+  it('a trilha mostra as observações, mas não oferece outro campo para elas', () => {
+    renderizar({ podeSolicitarComplemento: true })
 
-    await usuario.type(
-      screen.getByLabelText(/registrar observação/i),
-      'Laudo do lote de verão confirma a contaminação.'
-    )
-    await usuario.click(screen.getByRole('button', { name: /^Registrar$/i }))
-
-    await waitFor(() =>
-      expect(api.registrarObservacao).toHaveBeenCalledWith(
-        'OP-2026-014', 'Laudo do lote de verão confirma a contaminação.'
-      )
-    )
-
-    expect(
-      await screen.findByText('Laudo do lote de verão confirma a contaminação.')
-    ).toBeInTheDocument()
-  })
-
-  it('não registra observação vazia', async () => {
-    const usuario = userEvent.setup({ delay: null })
-    renderizar()
-
-    await usuario.click(screen.getByRole('button', { name: /^Registrar$/i }))
-
-    expect(api.registrarObservacao).not.toHaveBeenCalled()
-  })
-
-  it('mostra a recusa do servidor sem perder o texto digitado', async () => {
-    api.registrarObservacao = vi
-      .fn()
-      .mockRejectedValue(new Error('Texto curto demais.'))
-
-    const usuario = userEvent.setup({ delay: null })
-    renderizar()
-
-    const campo = screen.getByLabelText(/registrar observação/i)
-    await usuario.type(campo, 'Laudo confirma.')
-    await usuario.click(screen.getByRole('button', { name: /^Registrar$/i }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/curto demais/i)
-    expect(campo).toHaveValue('Laudo confirma.')
-  })
-
-  it('quem não conduz a oportunidade lê a trilha sem o campo', () => {
-    renderizar({ podeRegistrar: false })
-
-    expect(
-      screen.queryByLabelText(/registrar observação/i)
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/observação/i)).not.toBeInTheDocument()
   })
 
   it('a observação tem filtro próprio, separado do resto', async () => {
@@ -139,23 +86,30 @@ describe('AbaHistorico — pedido de complementação (PB26)', () => {
     )
   })
 
-  it('o pedido entra na trilha na hora, sem recarregar a página', async () => {
+  it('entrega o pedido para a trilha da página e limpa o campo', async () => {
     const user = userEvent.setup()
+    const aoRegistrar = vi.fn()
     api.solicitarComplemento = vi.fn().mockResolvedValue({
       ocorrido_em: '2026-09-22T09:00:00.000Z',
       mensagem: 'Faltam os laudos do lote.',
       autor_nome: 'Rafael Antunes',
     })
 
-    renderizar({ podeSolicitarComplemento: true })
+    renderizar({ podeSolicitarComplemento: true, aoRegistrar })
 
-    await user.type(
-      screen.getByLabelText(/solicitar complementação/i),
-      'Faltam os laudos do lote.'
-    )
+    const campo = screen.getByLabelText(/solicitar complementação/i)
+    await user.type(campo, 'Faltam os laudos do lote.')
     await user.click(screen.getByRole('button', { name: /^solicitar$/i }))
 
-    expect(await screen.findByText(/faltam os laudos do lote/i)).toBeInTheDocument()
+    expect(aoRegistrar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoria: 'oportunidade',
+        ator: 'Rafael Antunes',
+        em: Date.parse('2026-09-22T09:00:00.000Z'),
+        texto: expect.stringMatching(/faltam os laudos do lote/i),
+      }),
+    )
+    expect(campo).toHaveValue('')
   })
 
   it('diz que o pedido não é decisão e não move a etapa', () => {
@@ -186,11 +140,10 @@ describe('AbaHistorico — pedido de complementação (PB26)', () => {
     expect(screen.queryByLabelText(/solicitar complementação/i)).not.toBeInTheDocument()
   })
 
-  it('quem não é Supervisor não vê o pedido nem a observação', () => {
-    renderizar({ podeRegistrar: false, podeSolicitarComplemento: false })
+  it('quem não é Supervisor não vê o pedido', () => {
+    renderizar({ podeSolicitarComplemento: false })
 
     expect(screen.queryByLabelText(/solicitar complementação/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/registrar observação/i)).not.toBeInTheDocument()
   })
 })
 

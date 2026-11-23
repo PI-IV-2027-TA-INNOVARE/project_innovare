@@ -5,6 +5,7 @@ import { situacaoEncerrada } from '../etapas'
 import { DECISOES, decisaoLabel } from '../oportunidadesData'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
 import EtapaBloqueada from './EtapaBloqueada'
+import ObservacoesDaAvaliacao from './ObservacoesDaAvaliacao'
 
 function bloqueioDa(situacao) {
   if (situacao === 'aguardando_decisao') return null
@@ -61,12 +62,22 @@ export default function AbaDecisao({
   podeDecidir,
   onRegistrar,
   irPara,
+  observacoes = [],
+  aoRegistrarObservacao,
 }) {
   const [tipo, setTipo] = useState('')
   const [justificativa, setJustificativa] = useState('')
   const [erro, setErro] = useState('')
 
   const encerrada = situacaoEncerrada(situacao)
+
+  const observacoesDaAvaliacao = podeDecidir ? (
+    <ObservacoesDaAvaliacao
+      codigo={oportunidadeId}
+      observacoes={observacoes}
+      aoRegistrar={aoRegistrarObservacao}
+    />
+  ) : null
 
   const aviso = (
     <AvisoPropostaNaoRevisada
@@ -79,7 +90,12 @@ export default function AbaDecisao({
   )
 
   if (decisao && (!podeDecidir || encerrada)) {
-    return <DecisaoRegistrada decisao={decisao} titulo="Decisão registrada" aviso={aviso} />
+    return (
+      <>
+        <DecisaoRegistrada decisao={decisao} titulo="Decisão registrada" aviso={aviso} />
+        {observacoesDaAvaliacao}
+      </>
+    )
   }
 
   if (!podeDecidir) {
@@ -122,6 +138,8 @@ export default function AbaDecisao({
   return (
     <>
       {decisao ? <DecisaoRegistrada decisao={decisao} titulo="Última decisão" /> : null}
+
+      {observacoesDaAvaliacao}
 
       <section className="perfil-card">
         <header className="perfil-card__header">

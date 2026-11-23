@@ -1280,7 +1280,7 @@
                     ""
                   ]
                 },
-                "description": "Nota do Supervisor durante a avaliacao (PB65).\n\nSo escrita: a leitura e a aba Historico, porque a nota mora na trilha.\nDuas rotas para a mesma verdade divergem no primeiro mes.\n\noperationId: oportunidades_observacoes_create",
+                "description": "Nota do Supervisor durante a avaliacao (PB65).\n\nSo escrita: a leitura vem do `historico`, porque a nota mora na trilha.\nDuas rotas para a mesma verdade divergem no primeiro mes.\n\noperationId: oportunidades_observacoes_create",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"texto\": \"Conversar com o Demandante sobre o prazo da safra.\"\n}",

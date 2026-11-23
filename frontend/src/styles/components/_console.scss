@@ -716,27 +716,6 @@
   flex-wrap: wrap;
 }
 
-.paginacao {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: var(--admin-gap);
-}
-
-.paginacao__total,
-.paginacao__posicao {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-
-.paginacao__controles {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .admin-table-wrap {
   overflow-x: auto;
   background: var(--bg-card);
@@ -971,8 +950,8 @@
   }
 
   &--inativo {
-    color: var(--text-muted);
-    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--accent-warning);
+    background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
   }
 
   &--sem_acesso {
@@ -1242,6 +1221,11 @@
   gap: var(--admin-gap);
   margin-top: var(--admin-gap);
   flex-wrap: wrap;
+
+  &--topo {
+    margin-top: 0;
+    margin-bottom: var(--admin-gap);
+  }
 }
 
 .pagination__summary {
@@ -1891,6 +1875,22 @@
   @include cartoes-em-grade(2, $altura-igual: false);
 
   margin-top: var(--admin-pad);
+}
+
+.console-form__actions {
+  align-self: end;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  .admin-btn {
+    min-height: 46px;
+  }
+}
+
+.console-form--filtros {
+  margin-bottom: var(--admin-gap);
 }
 
 .console-form__switch {

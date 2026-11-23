@@ -482,6 +482,34 @@ describe('UsersSection — convite', () => {
     expect(screen.queryByRole('menuitem', { name: /reenviar convite/i })).not.toBeInTheDocument()
   })
 
+  /**
+   * Conta inativa ou suspensa não entra, mesmo que a pessoa crie a senha pelo
+   * convite. "Aguardando primeiro acesso" prometia um acesso que não vem, e o
+   * "Reenviar convite" mandava um link que terminava na entrada recusada. Sem
+   * senha e fora de Ativo, a linha diz "Nunca acessou" e o menu não oferece o
+   * convite; ao ativar, as duas coisas voltam.
+   */
+  it('conta inativa ou suspensa sem senha não fica aguardando nem recebe convite', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        { ...comoApi(USUARIOS_EXEMPLO[1]), situacao: 'inativo', ultimo_acesso: null, aguardando_primeiro_acesso: true },
+        { ...comoApi(USUARIOS_EXEMPLO[7]), situacao: 'suspenso', ultimo_acesso: null, aguardando_primeiro_acesso: true },
+      ],
+    })
+    await renderUsuarios()
+
+    for (const nome of ['Maria Ferreira', 'Rafael Antunes']) {
+      const linha = linhaDe(nome)
+      expect(within(linha).queryByText('Aguardando primeiro acesso')).not.toBeInTheDocument()
+      expect(within(linha).getByText('Nunca acessou')).toBeInTheDocument()
+
+      await user.click(within(linha).getByRole('button', { name: new RegExp(`ações para ${nome}`, 'i') }))
+      expect(screen.queryByRole('menuitem', { name: /reenviar convite/i })).not.toBeInTheDocument()
+      await user.keyboard('{Escape}')
+    }
+  })
+
   it('reenvia o convite pela API', async () => {
     const user = userEvent.setup()
     api.reenviarConvite.mockResolvedValue({ detail: 'Convite reenviado.' })

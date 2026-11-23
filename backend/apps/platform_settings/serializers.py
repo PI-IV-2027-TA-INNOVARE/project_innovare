@@ -145,10 +145,16 @@ class RetencaoSerializer(serializers.Serializer):
     anexos_apos_arquivamento_meses = serializers.IntegerField()
 
 
+class ServicoDeIASerializer(serializers.Serializer):
+    nome = serializers.CharField()
+    papel = serializers.ChoiceField(choices=('principal', 'reserva'))
+
+
 class PrivacidadeSerializer(serializers.Serializer):
     encarregado = EncarregadoSerializer(allow_null=True)
     contatos = ContatoSuporteSerializer(many=True)
     retencao = RetencaoSerializer()
+    servicos_de_ia = ServicoDeIASerializer(many=True)
 
 
 def secao_vazia(secao):

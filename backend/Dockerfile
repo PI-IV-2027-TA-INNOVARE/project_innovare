@@ -8,8 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # A API nao roda como root: quem explorar uma falha fica com um usuario sem
 # privilegio. A pasta do modelo e dele, porque e ele quem baixa o modelo abaixo.
+# As de anexos e de estaticos tambem: o volume novo herda o dono da pasta da
+# imagem, e sem ela nasceria do root e o collectstatic nao gravaria.
 RUN useradd --system --uid 10001 --home-dir /app pdconnect \
-    && mkdir -p /opt/huggingface /app/backend/media \
+    && mkdir -p /opt/huggingface /app/backend/media /app/backend/staticfiles \
     && chown -R pdconnect:pdconnect /opt/huggingface /app
 
 WORKDIR /app/backend

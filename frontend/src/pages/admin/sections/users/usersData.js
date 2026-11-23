@@ -156,7 +156,8 @@ export function daApi(registro) {
     telefone: registro.telefone || '',
     semEmpresa: demandante && !registro.instituicao,
     ultimoAcesso: registro.ultimo_acesso ? Date.parse(registro.ultimo_acesso) : null,
-    aguardandoPrimeiroAcesso: Boolean(registro.aguardando_primeiro_acesso),
+    aguardandoPrimeiroAcesso:
+      Boolean(registro.aguardando_primeiro_acesso) && registro.situacao === 'ativo',
     exclusaoSolicitadaEm: registro.exclusao_solicitada_em
       ? Date.parse(registro.exclusao_solicitada_em)
       : null,

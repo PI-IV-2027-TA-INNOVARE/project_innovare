@@ -16,29 +16,33 @@ export default function RodapeDePaginacao({
   onPagina,
   onPorPagina,
   complemento = '',
+  noTopo = false,
+  comTodas = true,
 }) {
   return (
-    <nav className="pagination" aria-label={rotulo}>
+    <nav className={noTopo ? 'pagination pagination--topo' : 'pagination'} aria-label={rotulo}>
       <p className="pagination__summary">
         {total === 0 ? 'Nenhum registro' : `Mostrando ${inicio + 1}–${fim} de ${total}`}
         {complemento}
       </p>
 
       <div className="pagination__controls">
-        <label className="pagination__size">
-          Linhas por página
-          <select
-            className="admin-input admin-input--compact"
-            value={porPagina}
-            onChange={(event) => onPorPagina(Number(event.target.value))}
-            aria-label="Linhas por página"
-          >
-            {OPCOES_DE_LINHAS.map((quantidade) => (
-              <option key={quantidade} value={quantidade}>{quantidade}</option>
-            ))}
-            <option value={TODAS_AS_LINHAS}>Todos</option>
-          </select>
-        </label>
+        {noTopo ? null : (
+          <label className="pagination__size">
+            Linhas por página
+            <select
+              className="admin-input admin-input--compact"
+              value={porPagina}
+              onChange={(event) => onPorPagina(Number(event.target.value))}
+              aria-label="Linhas por página"
+            >
+              {OPCOES_DE_LINHAS.map((quantidade) => (
+                <option key={quantidade} value={quantidade}>{quantidade}</option>
+              ))}
+              {comTodas ? <option value={TODAS_AS_LINHAS}>Todos</option> : null}
+            </select>
+          </label>
+        )}
 
         <span className="pagination__page">Página {pagina} de {totalPaginas}</span>
 

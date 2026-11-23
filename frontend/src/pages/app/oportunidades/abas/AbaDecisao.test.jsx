@@ -1,12 +1,21 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaDecisao from './AbaDecisao'
 
-const api = vi.hoisted(() => ({ obterProposta: null }))
+const estilos = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'OportunidadesPage.scss'),
+  'utf8',
+)
+
+const api = vi.hoisted(() => ({ obterProposta: null, registrarObservacao: null }))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
   obterProposta: (...args) => api.obterProposta(...args),
+  registrarObservacao: (...args) => api.registrarObservacao(...args),
 }))
 
 const PROPOSTA_REVISADA = {
@@ -21,11 +30,34 @@ const DECISAO_REGISTRADA = {
   em: Date.parse('2026-09-20T13:00:00.000Z'),
 }
 
+const OBSERVACAO_ANTIGA = {
+  id: 'o1',
+  em: Date.parse('2026-09-18T10:00:00.000Z'),
+  categoria: 'observacao',
+  ator: 'Rafael Antunes',
+  texto: 'Demandante confirmou o volume de lotes perdidos.',
+}
+
+const OBSERVACAO_RECENTE = {
+  id: 'o2',
+  em: Date.parse('2026-09-19T10:00:00.000Z'),
+  categoria: 'observacao',
+  ator: 'Rafael Antunes',
+  texto: 'Equipe cobre a microbiologia, falta quem conheça a usina.',
+}
+
 let onRegistrar
+let aoRegistrarObservacao
 
 beforeEach(() => {
   onRegistrar = vi.fn()
+  aoRegistrarObservacao = vi.fn()
   api.obterProposta = vi.fn().mockResolvedValue(PROPOSTA_REVISADA)
+  api.registrarObservacao = vi.fn().mockResolvedValue({
+    ocorrido_em: '2026-09-22T10:00:00.000Z',
+    texto: 'Laudo do lote de verão confirma a contaminação.',
+    autor_nome: 'Rafael Antunes',
+  })
 })
 
 function renderizar(props = {}) {
@@ -35,6 +67,7 @@ function renderizar(props = {}) {
       podeDecidir
       situacao="aguardando_decisao"
       onRegistrar={onRegistrar}
+      aoRegistrarObservacao={aoRegistrarObservacao}
       {...props}
     />
   )
@@ -42,6 +75,146 @@ function renderizar(props = {}) {
 
 const justificativa = () => screen.getByLabelText('Justificativa')
 const registrar = () => screen.getByRole('button', { name: /registrar decisão/i })
+const novaObservacao = () => screen.getByLabelText('Nova observação')
+const registrarObservacao = () => screen.getByRole('button', { name: /registrar observação/i })
+
+/**
+ * No caso de uso da decisão o Supervisor registra observações enquanto
+ * analisa e só depois decide. Elas ficavam só na aba Histórico, longe da
+ * decisão que ajudam a fundamentar. Na etapa Decisão o Supervisor lê o que já
+ * anotou enquanto escreve a justificativa. A observação continua na trilha:
+ * a lista vem do mesmo histórico da página, e a nova volta para ele.
+ */
+describe('AbaDecisao — observações da avaliação (PB65)', () => {
+  it('mostra as observações já registradas, a mais recente primeiro', () => {
+    renderizar({ observacoes: [OBSERVACAO_ANTIGA, OBSERVACAO_RECENTE] })
+
+    const itens = within(screen.getByRole('list', { name: 'Observações registradas' }))
+      .getAllByRole('listitem')
+
+    expect(itens).toHaveLength(2)
+    expect(itens[0]).toHaveTextContent(OBSERVACAO_RECENTE.texto)
+    expect(itens[1]).toHaveTextContent(OBSERVACAO_ANTIGA.texto)
+  })
+
+  it('sem observação ainda, diz isso em vez de deixar a área vazia', () => {
+    renderizar()
+
+    expect(screen.getByText(/nenhuma observação registrada/i)).toBeInTheDocument()
+  })
+
+  it('registra a observação e a entrega para o histórico da página', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.type(novaObservacao(), '  Laudo do lote de verão confirma a contaminação.  ')
+    await user.click(registrarObservacao())
+
+    expect(api.registrarObservacao).toHaveBeenCalledWith(
+      'OP-2026-001',
+      'Laudo do lote de verão confirma a contaminação.',
+    )
+    expect(aoRegistrarObservacao).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoria: 'observacao',
+        ator: 'Rafael Antunes',
+        texto: 'Laudo do lote de verão confirma a contaminação.',
+        em: Date.parse('2026-09-22T10:00:00.000Z'),
+      }),
+    )
+    expect(novaObservacao()).toHaveValue('')
+  })
+
+  it('não registra observação vazia', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.type(novaObservacao(), '   ')
+
+    expect(registrarObservacao()).toBeDisabled()
+    expect(api.registrarObservacao).not.toHaveBeenCalled()
+  })
+
+  it('mostra a recusa da API sem perder o texto digitado', async () => {
+    api.registrarObservacao = vi.fn().mockRejectedValue(new Error('Texto curto demais.'))
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.type(novaObservacao(), 'Laudo confirma.')
+    await user.click(registrarObservacao())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/curto demais/i)
+    expect(novaObservacao()).toHaveValue('Laudo confirma.')
+    expect(aoRegistrarObservacao).not.toHaveBeenCalled()
+  })
+
+  it('observação não é decisão: registrar uma não registra a outra', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.click(screen.getByRole('radio', { name: /continuar/i }))
+    await user.type(novaObservacao(), 'Equipe validada em reunião.')
+    await user.click(registrarObservacao())
+
+    expect(api.registrarObservacao).toHaveBeenCalledTimes(1)
+    expect(onRegistrar).not.toHaveBeenCalled()
+    expect(justificativa()).toHaveValue('')
+  })
+
+  it('diz que a observação não muda a etapa e que a empresa não a vê', () => {
+    renderizar()
+
+    expect(novaObservacao()).toHaveAccessibleDescription(
+      /não muda a etapa.*empresa demandante não vê/i,
+    )
+  })
+
+  it('vale também antes da pré-análise, quando a decisão ainda está travada', () => {
+    renderizar({ situacao: 'matching' })
+
+    expect(screen.getByRole('radio', { name: /continuar/i })).toBeDisabled()
+    expect(novaObservacao()).toBeEnabled()
+  })
+
+  it('depois de Continuar o Supervisor ainda lê as observações', () => {
+    renderizar({
+      decisao: DECISAO_REGISTRADA,
+      situacao: 'continuar',
+      observacoes: [OBSERVACAO_ANTIGA],
+    })
+
+    expect(screen.getByText(OBSERVACAO_ANTIGA.texto)).toBeInTheDocument()
+  })
+
+  it('quem não decide não vê as observações nem o campo', () => {
+    renderizar({ podeDecidir: false, observacoes: [OBSERVACAO_ANTIGA] })
+
+    expect(screen.queryByText(OBSERVACAO_ANTIGA.texto)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Nova observação')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A etapa empilha cartões: a última decisão, as observações e o registro da
+   * decisão. Sem regra de espaço entre irmãos eles saíam colados, borda com
+   * borda, como se fossem um cartão só. A suíte roda sem CSS, então a regra é
+   * conferida na folha de estilo.
+   */
+  it('os cartões empilhados da etapa ficam separados', () => {
+    renderizar({
+      situacao: 'revisar',
+      decisao: { ...DECISAO_REGISTRADA, tipo: 'revisar' },
+      irPara: vi.fn(),
+    })
+
+    expect(document.querySelectorAll('body > div > .perfil-card')).toHaveLength(3)
+
+    const inicio = estilos.indexOf('\n.oportunidade-conteudo > .perfil-card + .perfil-card {')
+    const bloco = estilos.slice(inicio, estilos.indexOf('\n}', inicio))
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).toMatch(/margin-top:\s*var\(--admin-gap\)/)
+  })
+})
 
 describe('AbaDecisao — quem pode decidir', () => {
   it('oferece os tres encaminhamentos da baseline, e nada mais', () => {
