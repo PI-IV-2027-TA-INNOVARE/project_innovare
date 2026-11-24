@@ -96,7 +96,7 @@ const PRONTA_PARA_ESTRUTURAR = { ...SEM_SESSAO, sessao: COM_SESSAO.sessao }
 
 async function abrirElementoDa(texto) {
   const elemento = (await screen.findByText(texto)).closest('details')
-  await userEvent.click(elemento.querySelector('summary'))
+  if (!elemento.open) await userEvent.click(elemento.querySelector('summary'))
   return elemento
 }
 
@@ -173,29 +173,21 @@ describe('AbaCopiloto', () => {
   })
 
   /**
-   * "Abrir sessão" era um passo que ninguém sabia que existia: a caixa de
-   * resposta só aparecia depois dele, e "Estruturar" funcionava sem ele. A
-   * sessão continua existindo no servidor, mas abre sozinha na primeira
-   * resposta.
+   * Responder antes de conferir o resumo gravava as respostas, mas "Enviar e
+   * atualizar a proposta" não atualizava nada: parava num aviso pedindo o
+   * resumo. Agora as perguntas aparecem para leitura e os campos só abrem
+   * depois do resumo conferido.
    */
-  it('abre a conversa sozinho na primeira resposta', async () => {
+  it('sem o resumo conferido, as perguntas aparecem e os campos esperam', async () => {
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    await userEvent.type(
-      await screen.findByLabelText(/outra informação para o copiloto/i),
-      'A perda média é de 4% do lote.',
-    )
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    const elemento = await abrirElementoDa('Qual problema real você quer resolver?')
 
-    await waitFor(() =>
-      expect(api.responderCopiloto).toHaveBeenCalledWith(
-        'OP-2026-001',
-        'A perda média é de 4% do lote.',
-        {},
-      ),
-    )
-    expect(api.iniciarSessaoCopiloto).toHaveBeenCalledWith('OP-2026-001')
-    expect(screen.queryByRole('button', { name: /abrir sessão/i })).toBeNull()
+    expect(within(elemento).getByLabelText('Qual problema real você quer resolver?')).toBeDisabled()
+    expect(screen.getByLabelText(/outra informação para o copiloto/i)).toBeDisabled()
+    expect(screen.getByText(/para responder, confira antes o resumo da entrada/i)).toBeInTheDocument()
+    expect(screen.getByText('Primeiro confira o resumo da entrada.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /enviar|estruturar/i })).toBeNull()
   })
 
   it('não reabre a conversa que já está em andamento', async () => {
@@ -204,7 +196,7 @@ describe('AbaCopiloto', () => {
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
     await userEvent.type(await screen.findByLabelText(/outra informação para o copiloto/i), 'Mais contexto.')
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /enviar a resposta e estruturar/i }))
 
     await waitFor(() => expect(api.responderCopiloto).toHaveBeenCalled())
     expect(api.iniciarSessaoCopiloto).not.toHaveBeenCalled()
@@ -288,7 +280,7 @@ describe('AbaCopiloto', () => {
       await screen.findByLabelText(/outra informação para o copiloto/i),
       'A perda média é de 4% do lote.',
     )
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /enviar a resposta e estruturar/i }))
 
     await waitFor(() => expect(api.estruturarComCopiloto).toHaveBeenCalledWith('OP-2026-001'))
     expect(await screen.findByText(/o copiloto preencheu metodologia/i)).toBeInTheDocument()
@@ -303,7 +295,7 @@ describe('AbaCopiloto', () => {
     const campo = within(elemento).getByLabelText('Qual problema real você quer resolver?')
 
     await userEvent.type(campo, 'Perda de lotes de suco.')
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /enviar a resposta e estruturar/i }))
 
     await waitFor(() =>
       expect(api.responderCopiloto).toHaveBeenCalledWith('OP-2026-001', 'Perda de lotes de suco.', {
@@ -347,7 +339,7 @@ describe('AbaCopiloto', () => {
 
     expect(screen.getByText('2 respostas prontas para enviar.')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /enviar as 2 respostas e estruturar/i }))
 
     await waitFor(() => expect(api.estruturarComCopiloto).toHaveBeenCalledTimes(1))
     expect(api.responderCopiloto).toHaveBeenCalledTimes(2)
@@ -361,14 +353,32 @@ describe('AbaCopiloto', () => {
     })
   })
 
-  it('diz que nenhuma pergunta é obrigatória e só envia depois de algo escrito', async () => {
-    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
+  /**
+   * Eram dois botões para a mesma rodada: "Estruturar" no topo, para quem não
+   * respondia, e "Enviar e atualizar a proposta" no fim, desativado até
+   * alguém escrever. Agora é um botão só, na barra do fim, que estrutura com
+   * ou sem resposta e diz qual dos dois vai fazer.
+   */
+  it('sem resposta escrita, o mesmo botão estrutura e diz com o que', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
     expect(await screen.findByText(/nenhuma é obrigatória/i)).toBeInTheDocument()
-    expect(screen.getByText('Nenhuma resposta escrita ainda.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /enviar e atualizar a proposta/i })).toBeDisabled()
+    expect(
+      screen.getByText('Nenhuma resposta escrita: o Copiloto usa a descrição e o resumo.'),
+    ).toBeInTheDocument()
+
+    const barra = screen.getByRole('group', { name: 'Ações da etapa' })
+    const estruturar = within(barra).getByRole('button', { name: /estruturar com o copiloto/i })
+
+    expect(estruturar).not.toHaveClass('admin-btn--outline')
+    expect(screen.getAllByRole('button', { name: /estruturar/i })).toHaveLength(1)
+
+    await userEvent.click(estruturar)
+
+    await waitFor(() => expect(api.estruturarComCopiloto).toHaveBeenCalledWith('OP-2026-001'))
+    expect(api.responderCopiloto).not.toHaveBeenCalled()
   })
 
   it('apagar o texto tira a resposta do envio', async () => {
@@ -382,11 +392,15 @@ describe('AbaCopiloto', () => {
     await userEvent.type(campo, 'Rascunho.')
     expect(screen.getByText('1 resposta pronta para enviar.')).toBeInTheDocument()
     expect(within(elemento).getByText(/1 resposta pronta/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /enviar a resposta e estruturar/i })).toBeEnabled()
 
     await userEvent.clear(campo)
 
-    expect(screen.getByText('Nenhuma resposta escrita ainda.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /enviar e atualizar a proposta/i })).toBeDisabled()
+    expect(
+      screen.getByText('Nenhuma resposta escrita: o Copiloto usa a descrição e o resumo.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /enviar/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /estruturar o que falta/i })).toBeEnabled()
     expect(api.responderCopiloto).not.toHaveBeenCalled()
   })
 
@@ -404,7 +418,7 @@ describe('AbaCopiloto', () => {
 
     await userEvent.type(campo, 'Perda de lotes.')
     await userEvent.type(screen.getByLabelText(/outra informação para o copiloto/i), 'O lote tem 2 t.')
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /enviar as 2 respostas e estruturar/i }))
 
     expect(await screen.findByText(/1 de 2 respostas registradas/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/outra informação para o copiloto/i)).toHaveValue('O lote tem 2 t.')
@@ -452,15 +466,22 @@ describe('AbaCopiloto', () => {
   })
 
   /**
-   * PB87: a estruturacao parte do resumo validado. Sem conversa, ou com o
-   * resumo ainda nao conferido, o botao de estruturar espera.
+   * PB87: a estruturação parte do resumo validado. O botão cheio do topo era
+   * "Estruturar com o Copiloto", desativado até o resumo ser conferido, com o
+   * motivo só no `title`, que não aparece no celular. O que destravava a
+   * tela, "Ler a entrada", era um botão de contorno mais abaixo. Agora a
+   * única ação principal é a que a pessoa precisa fazer.
    */
-  it('sem conversa, a estruturação espera o resumo da entrada', async () => {
+  it('sem conversa, a ação principal é ler a entrada', async () => {
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    expect(
-      await screen.findByRole('button', { name: /estruturar com o copiloto/i }),
-    ).toBeDisabled()
+    const ler = await screen.findByRole('button', { name: /ler a entrada/i })
+
+    expect(ler).not.toHaveClass('admin-btn--outline')
+    expect(screen.queryByRole('button', { name: /estruturar/i })).toBeNull()
+    for (const botao of screen.getAllByRole('button')) {
+      expect(botao).not.toHaveAttribute('title')
+    }
   })
 
   it('com o resumo ainda não conferido, oferece usar o resumo e só então estrutura', async () => {
@@ -472,8 +493,8 @@ describe('AbaCopiloto', () => {
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    expect(await screen.findByRole('button', { name: /estruturar o que falta/i })).toBeDisabled()
-    expect(screen.getByText(/confira o resumo antes de estruturar/i)).toBeInTheDocument()
+    expect(await screen.findByText(/confira o resumo antes de estruturar/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /estruturar o que falta/i })).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: /usar este resumo/i }))
 
@@ -483,23 +504,77 @@ describe('AbaCopiloto', () => {
         COM_SESSAO.sessao.sintese,
       ),
     )
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /estruturar o que falta/i })).toBeEnabled(),
-    )
+    expect(await screen.findByRole('button', { name: /estruturar o que falta/i })).toBeEnabled()
   })
 
-  it('responder com o resumo ainda não conferido registra a resposta sem estruturar', async () => {
-    const naoConferida = { ...COM_SESSAO, sessao: { ...COM_SESSAO.sessao, sintese_conferida: false } }
-    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(naoConferida)
+  /**
+   * Sem IA, a conversa abre com o resumo vazio. O botão dizia "Corrigir o
+   * resumo" e era de contorno, embora fosse a única coisa a fazer.
+   */
+  it('sem resumo escrito, a ação principal é escrever o resumo', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...COM_SESSAO,
+      sessao: { ...COM_SESSAO.sessao, sintese: '', sintese_conferida: false },
+    })
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    await userEvent.type(await screen.findByLabelText(/outra informação para o copiloto/i), 'Mais contexto.')
-    await userEvent.click(screen.getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    const escrever = await screen.findByRole('button', { name: /escrever o resumo/i })
 
-    await waitFor(() => expect(api.responderCopiloto).toHaveBeenCalled())
-    expect(api.estruturarComCopiloto).not.toHaveBeenCalled()
-    expect(await screen.findByText(/resposta registrada/i)).toBeInTheDocument()
+    expect(escrever).not.toHaveClass('admin-btn--outline')
+    expect(screen.queryByRole('button', { name: /corrigir o resumo/i })).toBeNull()
+  })
+
+  /**
+   * A lista "como usar" tinha três passos e não dizia em qual a pessoa
+   * estava, dentro de uma tela que já mostra sete etapas.
+   */
+  it.each([
+    ['sem conversa', SEM_SESSAO, 0],
+    ['com o resumo conferido', PRONTA_PARA_ESTRUTURAR, 1],
+    ['com algo já escrito', COM_SESSAO, 2],
+  ])('os passos marcam o feito e o atual: %s', async (_, estado, atual) => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(estado)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const passos = await screen.findByRole('list', { name: /como usar o copiloto/i })
+    const itens = within(passos).getAllByRole('listitem')
+
+    expect(itens).toHaveLength(3)
+    itens.forEach((item, indice) => {
+      if (indice === atual) expect(item).toHaveAttribute('aria-current', 'step')
+      else expect(item).not.toHaveAttribute('aria-current')
+
+      if (indice < atual) expect(item).toHaveTextContent(/feito/i)
+      else expect(item).not.toHaveTextContent(/feito/i)
+    })
+  })
+
+  /**
+   * Os oito elementos vinham fechados, todos com "Ainda não há texto na
+   * proposta", que o título "Falta escrever" já dizia, e as perguntas ficavam
+   * a oito cliques. Agora o primeiro elemento com pergunta já vem aberto.
+   */
+  it('com o resumo conferido, o primeiro elemento com pergunta já vem aberto', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const primeiro = (await screen.findByText('Qual problema real você quer resolver?')).closest('details')
+    const abertos = document.querySelectorAll('.copiloto__elementos details[open]')
+
+    expect(primeiro).toHaveAttribute('open')
+    expect(abertos).toHaveLength(1)
+    expect(screen.queryByText(/ainda não há texto na proposta/i)).toBeNull()
+  })
+
+  it('sem o resumo conferido, nenhum elemento abre sozinho', async () => {
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await screen.findByText('Qual problema real você quer resolver?')
+
+    expect(document.querySelectorAll('.copiloto__elementos details[open]')).toHaveLength(0)
   })
 
   it('sem conversa, oferece ler a entrada antes de estruturar', async () => {
@@ -669,7 +744,7 @@ describe('AbaCopiloto', () => {
       screen.queryByRole('button', { name: /estruturar o que falta/i }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /enviar e atualizar a proposta/i }),
+      screen.queryByRole('button', { name: /enviar|estruturar/i }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /encerrar conversa/i }),
@@ -867,9 +942,23 @@ describe('AbaCopiloto', () => {
 
     expect(reavaliar).toHaveClass('admin-btn--outline')
     expect(continuar).not.toHaveClass('admin-btn--outline')
+    expect(within(barra).queryByRole('button', { name: /enviar/i })).toBeNull()
 
     await userEvent.click(continuar)
     expect(irPara).toHaveBeenCalledWith('proposta')
+  })
+
+  it('com o texto escrito mas o resumo não conferido, reavaliar espera o resumo', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...COMPLETA_COM_PONTO,
+      sessao: { ...COMPLETA_COM_PONTO.sessao, sintese_conferida: false },
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" irPara={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: /usar este resumo/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reavaliar a proposta/i })).toBeNull()
+    expect(screen.getByRole('list', { name: /como usar o copiloto/i })).toBeInTheDocument()
   })
 
   it('com resposta escrita, enviar vira o principal e continuar fica secundário', async () => {
@@ -884,7 +973,7 @@ describe('AbaCopiloto', () => {
 
     const barra = screen.getByRole('group', { name: 'Ações da etapa' })
 
-    expect(within(barra).getByRole('button', { name: /enviar e atualizar a proposta/i }))
+    expect(within(barra).getByRole('button', { name: /enviar a resposta e reavaliar/i }))
       .not.toHaveClass('admin-btn--outline')
     expect(within(barra).getByRole('button', { name: /continuar para proposta estruturada/i }))
       .toHaveClass('admin-btn--outline')

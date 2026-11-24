@@ -1249,14 +1249,57 @@
   }
 }
 
-.copiloto__como {
+.copiloto__passos {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin: 0;
-  padding-left: 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.copiloto__passo {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   font-size: 0.875rem;
   line-height: 1.55;
   color: var(--text-muted);
+
+  &--agora {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+}
+
+.copiloto__passo-marca {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 999px;
+
+  .copiloto__passo--agora & {
+    color: var(--text-on-accent, #fff);
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .copiloto__passo--feito & {
+    color: var(--accent-green);
+    border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
+  }
+}
+
+.copiloto__resumo--agora {
+  padding: 14px 16px;
+  border: 1px solid var(--admin-card-border);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-md, 10px);
 }
 
 .copiloto__bloco-cabeca {
@@ -1277,6 +1320,12 @@
 
   .barra-de-acoes {
     margin-top: 0;
+  }
+
+  .admin-input:disabled {
+    background: var(--bg-input-muted);
+    border-color: var(--border-soft);
+    cursor: not-allowed;
   }
 }
 

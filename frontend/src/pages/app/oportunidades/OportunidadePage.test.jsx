@@ -569,6 +569,30 @@ describe('OportunidadePage — andamento das etapas', () => {
     ).toBeInTheDocument()
   })
 
+  /**
+   * Quem saía de Contexto para o Copiloto lia "etapa 2 de 7, que ainda não
+   * começou" e um convite a voltar, mas é no Copiloto que a etapa começa.
+   */
+  it('na etapa logo depois da atual, diz que é a próxima', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'entrada' })
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      sessao: null,
+      mensagens: [],
+      perguntas: [],
+      lacunas: [],
+      elementos_vazios: [],
+      base_disponivel: true,
+    })
+
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Copiloto/ }))
+
+    expect(
+      screen.getByText('Você está vendo a etapa 2 de 7, a próxima. Etapa atual: 1, Contexto.'),
+    ).toBeInTheDocument()
+  })
+
   it('numa oportunidade arquivada, a linha diz só a posição', async () => {
     api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'arquivada' })
 

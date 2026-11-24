@@ -69,7 +69,9 @@ function posicaoDa(etapa, andamento) {
     return { texto: partes.join(' · '), atual: null }
   }
 
-  const comoEsta = estado === CONCLUIDA ? 'já concluída' : 'que ainda não começou'
+  let comoEsta = 'que ainda não começou'
+  if (estado === CONCLUIDA) comoEsta = 'já concluída'
+  else if (etapa.numero === atual.numero + 1) comoEsta = 'a próxima'
 
   return {
     texto: `Você está vendo a etapa ${etapa.numero} de ${ETAPAS.length}, ${comoEsta}. Etapa atual: ${atual.numero}, ${atual.label}.`,
