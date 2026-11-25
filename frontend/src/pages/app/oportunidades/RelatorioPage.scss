@@ -181,6 +181,12 @@
   color: var(--text-muted);
 }
 
+.relatorio-nao-escrito {
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .relatorio-subsecao {
   margin-top: calc(var(--admin-gap) * 1.5);
 }

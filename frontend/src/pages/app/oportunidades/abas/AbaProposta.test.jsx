@@ -277,6 +277,22 @@ describe('AbaProposta — edição', () => {
   })
 
   /**
+   * A barra de etapas só marca a Proposta como em andamento quando ela tem
+   * texto; salvar avisa a página para a barra acompanhar.
+   */
+  it('avisa a página depois de salvar', async () => {
+    const aoSalvar = vi.fn()
+
+    render(<AbaProposta oportunidadeId="OP-2026-001" aoSalvar={aoSalvar} />)
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+    await userEvent.type(campo, ' Com controle.')
+    await userEvent.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(aoSalvar).toHaveBeenCalledTimes(1))
+  })
+
+  /**
    * A grade de cartões em duas colunas dos formulários de cadastro punha a
    * legenda sozinha na coluna da esquerda e os campos na da direita.
    */

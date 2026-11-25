@@ -10,6 +10,7 @@ import {
   definirPrioridade,
   listarHistorico,
   obterOportunidade,
+  obterProposta,
   registrarDecisao as registrarDecisaoNaApi,
 } from '../../../services/pdConnectApi'
 import AnexosOportunidade from '../../../components/AnexosOportunidade'
@@ -28,6 +29,7 @@ import {
   ETAPAS,
   REGISTROS,
   andamentoDasEtapas,
+  etapaASeguir,
   etapaDaSituacao,
   etapaPorId,
 } from './etapas'
@@ -37,6 +39,7 @@ import {
   eventoDaApi,
   origemLabel,
   prioridadeLabel,
+  propostaTemTexto,
   situacaoLabel,
 } from './oportunidadesData'
 import './OportunidadesPage.scss'
@@ -79,12 +82,13 @@ function posicaoDa(etapa, andamento) {
   }
 }
 
-function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
+function BotaoAba({ item, ativa, bloqueada, onClick, andamento, aSeguir = false }) {
   const classes = [
     'oportunidade-aba',
     ativa ? 'is-active' : '',
     andamento === CONCLUIDA ? 'is-concluida' : '',
     andamento === EM_ANDAMENTO ? 'is-em-andamento' : '',
+    aSeguir ? 'is-futura' : '',
   ]
 
   return (
@@ -97,7 +101,9 @@ function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
     >
       {item.numero ? (
         <span className="oportunidade-aba__numero" aria-hidden="true">
-          {andamento === CONCLUIDA ? <Icone icon={appIcons.done} /> : item.numero}
+          {andamento === CONCLUIDA ? <Icone icon={appIcons.done} /> : null}
+          {aSeguir ? <Icone icon={appIcons.lock} /> : null}
+          {andamento !== CONCLUIDA && !aSeguir ? item.numero : null}
         </span>
       ) : (
         <Icone icon={item.icon} className="oportunidade-aba__icon" />
@@ -105,6 +111,7 @@ function BotaoAba({ item, ativa, bloqueada, onClick, andamento }) {
       {item.label}
       {andamento === CONCLUIDA ? <span className="sr-only"> concluída</span> : null}
       {andamento === EM_ANDAMENTO ? <span className="sr-only"> em andamento</span> : null}
+      {aSeguir ? <span className="sr-only"> a seguir</span> : null}
     </button>
   )
 }
@@ -122,6 +129,7 @@ export default function OportunidadePage() {
   const [erroCarga, setErroCarga] = useState('')
   const [abaAtiva, setAbaAtiva] = useState('contexto')
   const [abaOcupada, setAbaOcupada] = useState(false)
+  const [propostaComTexto, setPropostaComTexto] = useState(true)
   const [rascunhoPendente, setRascunhoPendente] = useState('')
   const [campoEmFoco, setCampoEmFoco] = useState(null)
   const [matchingEmCurso, setMatchingEmCurso] = useState(false)
@@ -143,14 +151,16 @@ export default function OportunidadePage() {
     setErroCarga('')
 
     try {
-      const [dados, trilha] = await Promise.all([
+      const [dados, trilha, proposta] = await Promise.all([
         obterOportunidade(id),
         listarHistorico(id).catch(() => []),
+        obterProposta(id).catch(() => null),
       ])
 
       const carregado = daApi(dados)
 
       setRegistro(carregado)
+      setPropostaComTexto(propostaTemTexto(proposta))
       setEventos((trilha.results || trilha).map(eventoDaApi))
       if (!silencioso) setAbaAtiva(etapaDaSituacao(carregado.situacao))
     } catch (falha) {
@@ -341,7 +351,7 @@ export default function OportunidadePage() {
 
   const aba = ABAS.find((item) => item.id === abaAtiva) || ABAS[0]
   const decisao = registro.decisao
-  const andamento = andamentoDasEtapas(registro.situacao)
+  const andamento = andamentoDasEtapas(registro.situacao, { propostaComTexto })
   const etapaAtiva = etapaPorId(abaAtiva)
   const posicao = etapaAtiva ? posicaoDa(etapaAtiva, andamento) : null
 
@@ -431,6 +441,7 @@ export default function OportunidadePage() {
                 bloqueada={abaOcupada && item.id !== abaAtiva}
                 onClick={() => trocarAba(item.id)}
                 andamento={andamento[item.id]}
+                aSeguir={etapaASeguir(item, registro.situacao, andamento)}
               />
             </li>
           ))}
@@ -494,7 +505,9 @@ export default function OportunidadePage() {
           <AbaContexto
             oportunidade={registro}
             podeConduzir={ehSupervisor}
+            podeSolicitarComplemento={ehSupervisor && registro.origem === 'externo'}
             irPara={irPara}
+            aoRegistrar={acrescentarNaTrilha}
           />
         ) : null}
 
@@ -515,6 +528,7 @@ export default function OportunidadePage() {
             situacao={registro.situacao}
             irPara={irPara}
             aoAlterar={alterouProposta}
+            aoSalvar={atualizarEmSegundoPlano}
             campoEmFoco={campoEmFoco}
             aoFocarCampo={focouCampo}
           />
@@ -574,12 +588,7 @@ export default function OportunidadePage() {
         ) : null}
 
         {abaAtiva === 'historico' ? (
-          <AbaHistorico
-            codigo={id}
-            historico={eventos}
-            podeSolicitarComplemento={ehSupervisor && registro.origem === 'externo'}
-            aoRegistrar={acrescentarNaTrilha}
-          />
+          <AbaHistorico historico={eventos} />
         ) : null}
       </div>
 

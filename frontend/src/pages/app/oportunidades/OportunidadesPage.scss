@@ -186,6 +186,7 @@
 }
 
 .oportunidade-abas {
+  position: relative;
   display: flex;
   gap: 4px;
   overflow-x: auto;
@@ -483,6 +484,71 @@
   list-style: none;
 }
 
+.trilha-dias {
+  display: grid;
+  gap: var(--admin-gap);
+}
+
+.trilha-dia__titulo {
+  padding-bottom: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--admin-card-border);
+}
+
+.chip__total {
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: 999px;
+}
+
+.complemento {
+  display: grid;
+  gap: 8px;
+  margin-top: var(--admin-gap);
+  padding-top: var(--admin-gap);
+  border-top: 1px solid var(--admin-card-border);
+
+  .roteiro__subtitulo {
+    margin-bottom: 0;
+  }
+}
+
+.complemento__abrir {
+  justify-self: start;
+}
+
+.complemento__forma {
+  display: grid;
+  gap: 10px;
+}
+
+.complemento__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.complemento__enviado {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+
+  svg {
+    color: var(--accent-green);
+  }
+}
+
 .trilha__item {
   position: relative;
   display: grid;
@@ -681,6 +747,21 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
+}
+
+.copiloto__fala-cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+
+  .copiloto__autor {
+    margin-bottom: 0;
+  }
 }
 
 .copiloto__conteudo,
@@ -1085,6 +1166,19 @@
 .oportunidade-aba.is-em-andamento:not(.is-active) .oportunidade-aba__numero {
   color: var(--accent-primary-text);
   border: 2px solid var(--accent-primary);
+}
+
+.oportunidade-aba.is-futura:not(.is-active) {
+  font-weight: 500;
+
+  .oportunidade-aba__numero {
+    border-style: dashed;
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
+  }
 }
 
 .oportunidade-abas__posicao {
@@ -1537,6 +1631,70 @@
   line-height: 1.6;
   color: var(--text-primary);
   white-space: pre-line;
+}
+
+.copiloto__resumo-campos {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 10px;
+
+  > div {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  dt {
+    padding-top: 2px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  dd {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-line;
+  }
+}
+
+@media (max-width: 560px) {
+  .copiloto__resumo-campos > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+.copiloto__entrada {
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--admin-card-border);
+  border-radius: var(--radius-md, 10px);
+}
+
+.copiloto__respondida {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+    color: var(--accent-green);
+  }
+}
+
+.copiloto__enviadas-total {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .copiloto__resumo-forma {

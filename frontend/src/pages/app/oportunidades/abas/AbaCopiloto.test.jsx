@@ -100,6 +100,24 @@ async function abrirElementoDa(texto) {
   return elemento
 }
 
+const OUTRA_INFORMACAO = /mais alguma coisa que o copiloto deve saber/i
+
+async function escreverOutraInformacao(texto) {
+  const abrir = await screen.findByRole('button', { name: /adicionar outra informação/i })
+  await userEvent.click(abrir)
+  const campo = screen.getByLabelText(OUTRA_INFORMACAO)
+  await userEvent.type(campo, texto)
+  return campo
+}
+
+const SINTESE_COM_FALTAS = [
+  'Problema: Estender a validade sem mudar a fórmula.',
+  'Contexto: A validade atual foi definida sem estudo formal.',
+  'O que falta:',
+  '- Qual o produto?',
+  '- Qual o prazo de validade atual?',
+].join('\n')
+
 const COMPLETA_COM_PONTO = {
   ...COM_SESSAO,
   elementos_vazios: [],
@@ -184,7 +202,7 @@ describe('AbaCopiloto', () => {
     const elemento = await abrirElementoDa('Qual problema real você quer resolver?')
 
     expect(within(elemento).getByLabelText('Qual problema real você quer resolver?')).toBeDisabled()
-    expect(screen.getByLabelText(/outra informação para o copiloto/i)).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /adicionar outra informação/i })).toBeNull()
     expect(screen.getByText(/para responder, confira antes o resumo da entrada/i)).toBeInTheDocument()
     expect(screen.getByText('Primeiro confira o resumo da entrada.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /enviar|estruturar/i })).toBeNull()
@@ -195,7 +213,7 @@ describe('AbaCopiloto', () => {
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    await userEvent.type(await screen.findByLabelText(/outra informação para o copiloto/i), 'Mais contexto.')
+    await escreverOutraInformacao('Mais contexto.')
     await userEvent.click(screen.getByRole('button', { name: /enviar a resposta e estruturar/i }))
 
     await waitFor(() => expect(api.responderCopiloto).toHaveBeenCalled())
@@ -276,10 +294,7 @@ describe('AbaCopiloto', () => {
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    await userEvent.type(
-      await screen.findByLabelText(/outra informação para o copiloto/i),
-      'A perda média é de 4% do lote.',
-    )
+    await escreverOutraInformacao('A perda média é de 4% do lote.')
     await userEvent.click(screen.getByRole('button', { name: /enviar a resposta e estruturar/i }))
 
     await waitFor(() => expect(api.estruturarComCopiloto).toHaveBeenCalledWith('OP-2026-001'))
@@ -417,11 +432,11 @@ describe('AbaCopiloto', () => {
     const campo = within(elemento).getByLabelText('Qual problema real você quer resolver?')
 
     await userEvent.type(campo, 'Perda de lotes.')
-    await userEvent.type(screen.getByLabelText(/outra informação para o copiloto/i), 'O lote tem 2 t.')
+    await escreverOutraInformacao('O lote tem 2 t.')
     await userEvent.click(screen.getByRole('button', { name: /enviar as 2 respostas e estruturar/i }))
 
     expect(await screen.findByText(/1 de 2 respostas registradas/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/outra informação para o copiloto/i)).toHaveValue('O lote tem 2 t.')
+    expect(screen.getByLabelText(OUTRA_INFORMACAO)).toHaveValue('O lote tem 2 t.')
     expect(campo).toHaveValue('')
     expect(api.estruturarComCopiloto).not.toHaveBeenCalled()
   })
@@ -432,14 +447,11 @@ describe('AbaCopiloto', () => {
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" aoAlterar={aoAlterar} />)
 
-    await userEvent.type(
-      await screen.findByLabelText(/outra informação para o copiloto/i),
-      'Mais contexto.',
-    )
+    await escreverOutraInformacao('Mais contexto.')
 
     expect(aoAlterar).toHaveBeenLastCalledWith(true)
 
-    await userEvent.clear(screen.getByLabelText(/outra informação para o copiloto/i))
+    await userEvent.clear(screen.getByLabelText(OUTRA_INFORMACAO))
 
     expect(aoAlterar).toHaveBeenLastCalledWith(false)
   })
@@ -493,7 +505,7 @@ describe('AbaCopiloto', () => {
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
 
-    expect(await screen.findByText(/confira o resumo antes de estruturar/i)).toBeInTheDocument()
+    expect(await screen.findByText(/confira antes de seguir/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /estruturar o que falta/i })).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: /usar este resumo/i }))
@@ -575,6 +587,212 @@ describe('AbaCopiloto', () => {
     await screen.findByText('Qual problema real você quer resolver?')
 
     expect(document.querySelectorAll('.copiloto__elementos details[open]')).toHaveLength(0)
+  })
+
+  /**
+   * O resumo vinha como texto corrido, com "Problema:" e "- " digitados, e
+   * "Usar este resumo" morava numa faixa amarela de alerta, longe de
+   * "Corrigir". Conferir é passo normal: os campos têm rótulo e as duas ações
+   * ficam juntas, depois do texto.
+   */
+  it('o resumo a conferir mostra os campos com rótulo e as duas ações juntas', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...PRONTA_PARA_ESTRUTURAR,
+      sessao: { ...COM_SESSAO.sessao, sintese: SINTESE_COM_FALTAS, sintese_conferida: false },
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const usar = await screen.findByRole('button', { name: /está certo, usar este resumo/i })
+    const resumo = usar.closest('.copiloto__resumo')
+    const campos = within(resumo).getAllByRole('term').map((termo) => termo.textContent)
+
+    expect(campos).toEqual(['Problema', 'Contexto', 'O que falta'])
+    expect(within(resumo).getByText('Estender a validade sem mudar a fórmula.')).toBeInTheDocument()
+    expect(within(resumo).getByText(/2 perguntas, logo abaixo em sobre a entrada/i)).toBeInTheDocument()
+    expect(within(resumo).queryByText(/^Problema:/)).toBeNull()
+    expect(usar.closest('.admin-callout')).toBeNull()
+    expect(usar.parentElement).toContainElement(
+      within(resumo).getByRole('button', { name: /corrigir o resumo/i }),
+    )
+  })
+
+  /**
+   * As perguntas mais úteis, as que o Copiloto não achou na entrada (qual o
+   * produto, qual o prazo atual), ficavam só no texto do resumo, sem campo.
+   * Agora são as primeiras perguntas, e a resposta leva a pergunta junto.
+   */
+  it('responde as perguntas do que falta na entrada, com a pergunta junto', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...PRONTA_PARA_ESTRUTURAR,
+      sessao: { ...COM_SESSAO.sessao, sintese: SINTESE_COM_FALTAS },
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const entrada = await screen.findByRole('list', { name: 'Sobre a entrada' })
+    await userEvent.type(within(entrada).getByLabelText('Qual o prazo de validade atual?'), '45 dias.')
+    await userEvent.click(screen.getByRole('button', { name: /enviar a resposta e estruturar/i }))
+
+    await waitFor(() =>
+      expect(api.responderCopiloto).toHaveBeenCalledWith(
+        'OP-2026-001',
+        '[Entrada] Qual o prazo de validade atual?\nResposta: 45 dias.',
+        {},
+      ),
+    )
+    expect(document.querySelectorAll('.copiloto__elementos details[open]')).toHaveLength(0)
+  })
+
+  it('a pergunta da entrada já respondida mostra a resposta, sem campo', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...PRONTA_PARA_ESTRUTURAR,
+      sessao: { ...COM_SESSAO.sessao, sintese: SINTESE_COM_FALTAS },
+      mensagens: [
+        {
+          id_mensagem: 2,
+          autor: 'humano',
+          autor_rotulo: 'Humano',
+          conteudo: '[Entrada] Qual o produto?\nResposta: Iogurte natural.',
+        },
+      ],
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const entrada = await screen.findByRole('list', { name: 'Sobre a entrada' })
+    const respondida = within(entrada).getByText('Qual o produto?').closest('li')
+
+    expect(respondida).toHaveTextContent('Respondida: Iogurte natural.')
+    expect(within(respondida).queryByRole('textbox')).toBeNull()
+    expect(within(entrada).getByLabelText('Qual o prazo de validade atual?')).toBeEnabled()
+  })
+
+  /**
+   * "Encerrar conversa" voltava a aba ao começo sem avisar: o resumo
+   * conferido e as respostas enviadas deixavam de valer, e a mensagem dizia
+   * só que a proposta continuava editável. O uso real é pedir ao Copiloto que
+   * leia a entrada outra vez, e agora o botão diz isso e pede confirmação.
+   */
+  it('ler a entrada de novo pede confirmação e abre uma conversa nova', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /ler a entrada de novo/i }))
+
+    expect(confirmar).toHaveBeenCalledWith(expect.stringMatching(/as respostas já enviadas deixam de ser usadas/i))
+    await waitFor(() => expect(api.iniciarSessaoCopiloto).toHaveBeenCalledWith('OP-2026-001'))
+    expect(api.concluirSessaoCopiloto.mock.invocationCallOrder[0]).toBeLessThan(
+      api.iniciarSessaoCopiloto.mock.invocationCallOrder[0],
+    )
+    expect(screen.queryByRole('button', { name: /encerrar conversa/i })).toBeNull()
+    confirmar.mockRestore()
+  })
+
+  it('sem confirmar, a conversa continua como está', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /ler a entrada de novo/i }))
+
+    expect(api.concluirSessaoCopiloto).not.toHaveBeenCalled()
+    expect(api.iniciarSessaoCopiloto).not.toHaveBeenCalled()
+    confirmar.mockRestore()
+  })
+
+  it('sem resumo, porque o Copiloto não leu a entrada, oferece tentar de novo', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...COM_SESSAO,
+      sessao: { ...COM_SESSAO.sessao, sintese: '', sintese_conferida: false },
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByText(/o copiloto não conseguiu ler a entrada/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /ler a entrada de novo/i })).toBeInTheDocument()
+  })
+
+  /**
+   * PB91 pede que o Supervisor, ao voltar, consulte as rodadas anteriores. A
+   * lista mostrava só as respostas dele: o que o Copiloto disse em cada rodada
+   * tinha saído da tela, e nenhuma linha dizia quando. Agora a conversa vem
+   * inteira, cada fala com o autor e a data.
+   */
+  it('a conversa mostra as rodadas dos dois lados, com autor e data (PB91)', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      ...COM_SESSAO,
+      mensagens: [
+        {
+          id_mensagem: 1,
+          autor: 'copiloto',
+          autor_rotulo: 'Copiloto',
+          conteudo: 'Li a entrada e resumi o problema, o contexto e o que falta.',
+          criado_em: '2026-11-20T13:05:00Z',
+        },
+        {
+          id_mensagem: 2,
+          autor: 'humano',
+          autor_rotulo: 'Humano',
+          conteudo: '[Metodologia] Que controles o método terá?\nResposta: Positivo e negativo.',
+          criado_em: '2026-11-20T13:10:00Z',
+        },
+        {
+          id_mensagem: 3,
+          autor: 'humano',
+          autor_rotulo: 'Humano',
+          conteudo: 'O lote tem 2 t.',
+          criado_em: '2026-11-20T13:11:00Z',
+        },
+        {
+          id_mensagem: 4,
+          autor: 'copiloto',
+          autor_rotulo: 'Copiloto',
+          conteudo: 'Rodada concluída: 1 elemento preenchido e 0 lacunas em aberto.',
+          criado_em: '2026-11-20T13:12:00Z',
+        },
+      ],
+    })
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    const conversa = (await screen.findByRole('heading', { name: 'Conversa com o Copiloto' })).closest('details')
+    const falas = within(conversa).getAllByRole('listitem')
+
+    expect(falas).toHaveLength(4)
+    expect(falas[0]).toHaveTextContent('Copiloto')
+    expect(falas[0]).toHaveTextContent('Li a entrada e resumi')
+    expect(falas[1]).toHaveTextContent('Supervisor')
+    expect(falas[1]).toHaveTextContent('Metodologia: Que controles o método terá?')
+    expect(falas[1]).toHaveTextContent('Positivo e negativo.')
+    expect(falas[2]).toHaveTextContent('Outra informação')
+    expect(falas[3]).toHaveTextContent('Rodada concluída')
+
+    for (const fala of falas) {
+      expect(within(fala).getByText(/^\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/)).toHaveAttribute('datetime')
+    }
+  })
+
+  /**
+   * "Outra informação para o Copiloto" não dizia para onde o texto ia, e
+   * quem não entende um campo não o usa. Agora ele é uma pergunta, diz que
+   * vai junto com as respostas e só abre quando a pessoa pede.
+   */
+  it('a informação extra é uma pergunta que abre quando a pessoa pede', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(PRONTA_PARA_ESTRUTURAR)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByRole('button', { name: /adicionar outra informação/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(OUTRA_INFORMACAO)).toBeNull()
+
+    const campo = await escreverOutraInformacao('O varejo pede 60 dias.')
+
+    expect(campo).toHaveAccessibleDescription(/vai junto com as respostas/i)
+    expect(screen.getByText(/o copiloto escreve os elementos mesmo sem respostas/i)).toBeInTheDocument()
   })
 
   it('sem conversa, oferece ler a entrada antes de estruturar', async () => {
@@ -747,7 +965,7 @@ describe('AbaCopiloto', () => {
       screen.queryByRole('button', { name: /enviar|estruturar/i }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /encerrar conversa/i }),
+      screen.queryByRole('button', { name: /ler a entrada de novo/i }),
     ).not.toBeInTheDocument()
     expect(screen.getByText(/lotes perdidos por contaminação/i)).toBeInTheDocument()
   })
@@ -966,10 +1184,7 @@ describe('AbaCopiloto', () => {
 
     render(<AbaCopiloto oportunidadeId="OP-2026-001" irPara={vi.fn()} />)
 
-    await userEvent.type(
-      await screen.findByLabelText(/outra informação para o copiloto/i),
-      'Mais contexto.',
-    )
+    await escreverOutraInformacao('Mais contexto.')
 
     const barra = screen.getByRole('group', { name: 'Ações da etapa' })
 

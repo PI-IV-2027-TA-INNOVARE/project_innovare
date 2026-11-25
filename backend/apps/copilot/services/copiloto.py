@@ -477,26 +477,26 @@ class IniciarSessaoService(ComProvedor):
         pendentes: int,
     ) -> str:
         situacao = (
-            f'Elementos da proposta ainda sem conteúdo: {pendentes} de {len(ELEMENTOS)}.'
+            f'Elementos da proposta ainda sem texto: {pendentes} de {len(ELEMENTOS)}.'
         )
 
         if sintese:
             return (
-                'Sessão aberta. Li a entrada e resumi o problema, o contexto e o que '
-                'falta: corrija o resumo se algo não estiver certo, porque ele orienta '
-                f'a estruturação. {situacao}'
+                'Li a entrada e resumi o problema, o contexto e o que falta. Confira '
+                'o resumo e corrija o que não estiver certo, porque é dele que parto '
+                f'para escrever a proposta. {situacao}'
             )
 
         if fallback_usado:
             return (
-                'Sessão aberta. Não foi possível resumir a entrada agora: '
+                'Não consegui resumir a entrada agora: '
                 f'{explicar_motivo(motivo_fallback)}. Se quiser, escreva o resumo você '
                 f'mesmo. {situacao}'
             )
 
         return (
-            'Sessão aberta. A IA não conseguiu resumir a entrada; se quiser, escreva o '
-            f'resumo você mesmo. {situacao}'
+            'Não consegui resumir a entrada. Se quiser, escreva o resumo você mesmo. '
+            f'{situacao}'
         )
 
 

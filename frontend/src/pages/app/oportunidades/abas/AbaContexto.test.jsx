@@ -162,3 +162,27 @@ describe('AbaContexto — como conduzir', () => {
     expect(screen.queryByText(/matching ainda não executado/i)).not.toBeInTheDocument()
   })
 })
+
+describe('AbaContexto — pedido de complementação (PB26)', () => {
+  /**
+   * O pedido ficava no topo do Histórico. É sobre a entrada, e fica onde o
+   * Supervisor lê a entrada.
+   */
+  it('o Supervisor pede complementação na própria entrada', () => {
+    render(
+      <AbaContexto
+        oportunidade={{ ...BASE, id: 'OP-2026-014' }}
+        podeConduzir
+        podeSolicitarComplemento
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /pedir complementação/i })).toBeInTheDocument()
+  })
+
+  it('ideia interna ou quem não conduz não vê o pedido', () => {
+    renderizar()
+
+    expect(screen.queryByRole('button', { name: /pedir complementação/i })).toBeNull()
+  })
+})

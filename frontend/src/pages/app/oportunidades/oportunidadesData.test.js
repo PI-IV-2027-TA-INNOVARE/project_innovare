@@ -73,15 +73,41 @@ describe('eventoDaApi — observação do Supervisor (PB65)', () => {
 })
 
 describe('eventoDaApi — situação e prioridade', () => {
-  it('diz para qual situação a oportunidade foi', () => {
+  /**
+   * "Situação: Em estruturação." usava um nome que não aparece em lugar
+   * nenhum da barra de etapas. Agora o evento diz a etapa, como a barra.
+   */
+  it.each([
+    ['estruturacao', 'A oportunidade passou para a etapa 2, Copiloto.'],
+    ['matching', 'A oportunidade passou para a etapa 5, Equipe potencial.'],
+    ['aguardando_decisao', 'A oportunidade passou para a etapa 7, Decisão.'],
+    ['revisar', 'A oportunidade voltou para revisão da proposta.'],
+    ['arquivada', 'Situação: Arquivada.'],
+  ])('diz para qual etapa a oportunidade foi: %s', (para, texto) => {
     const evento = eventoDaApi({
       ocorrido_em: '2026-10-26T12:00:00Z',
       categoria: 'oportunidade',
       tipo: 'situacao_atualizada',
-      detalhe: { de: 'entrada', para: 'estruturacao' },
+      detalhe: { de: 'entrada', para },
     }, 0)
 
-    expect(evento.texto).toBe('Situação: Em estruturação.')
+    expect(evento.texto).toBe(texto)
+  })
+
+  it.each([
+    ['sessao_iniciada', 'O Copiloto leu a entrada.'],
+    ['sessao_concluida', 'Conversa com o Copiloto encerrada.'],
+    ['sintese_revisada', 'Resumo da entrada conferido.'],
+  ])('o evento do Copiloto diz o que aconteceu, sem jargão: %s', (tipo, texto) => {
+    const evento = eventoDaApi({
+      ocorrido_em: '2026-10-26T12:00:00Z',
+      categoria: 'copiloto',
+      tipo,
+      tipo_rotulo: 'Sessão do Copiloto iniciada',
+      detalhe: {},
+    }, 0)
+
+    expect(evento.texto).toBe(texto)
   })
 
   it('diz a prioridade nova, com acento', () => {

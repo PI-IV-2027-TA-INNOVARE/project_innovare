@@ -246,6 +246,7 @@ export default function AbaProposta({
   situacao,
   irPara,
   aoAlterar,
+  aoSalvar,
   campoEmFoco,
   aoFocarCampo,
 }) {
@@ -375,6 +376,7 @@ export default function AbaProposta({
       setProposta(await atualizarProposta(oportunidadeId, payload))
       setAlterado(false)
       showToast('Proposta salva e marcada como revisada por você.')
+      aoSalvar?.()
     } catch (falha) {
       showToast(falha?.message || 'Não foi possível salvar a proposta.', 'error')
     } finally {

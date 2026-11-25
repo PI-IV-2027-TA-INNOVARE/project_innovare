@@ -258,8 +258,9 @@ describe('OportunidadePage — do Copiloto ao elemento da proposta', () => {
     renderPagina()
 
     await userEvent.click(await screen.findByRole('button', { name: /^copiloto/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /adicionar outra informação/i }))
     await userEvent.type(
-      await screen.findByLabelText(/outra informação para o copiloto/i),
+      screen.getByLabelText(/mais alguma coisa que o copiloto deve saber/i),
       'Mais contexto.',
     )
     await userEvent.click(screen.getByRole('button', { name: /^contexto/i }))
@@ -267,7 +268,7 @@ describe('OportunidadePage — do Copiloto ao elemento da proposta', () => {
     expect(confirmar).toHaveBeenCalledWith(
       expect.stringMatching(/respostas ao copiloto que não foram enviadas/i),
     )
-    expect(screen.getByLabelText(/outra informação para o copiloto/i)).toHaveValue('Mais contexto.')
+    expect(screen.getByLabelText(/mais alguma coisa que o copiloto deve saber/i)).toHaveValue('Mais contexto.')
 
     confirmar.mockRestore()
   })
@@ -422,11 +423,12 @@ describe('OportunidadePage — observação da avaliação', () => {
 
 describe('OportunidadePage — pedido de complementação', () => {
   /**
-   * O pedido ficava só no estado da aba Histórico. Ao trocar de aba a aba
-   * desmontava, e o pedido sumia da trilha até a página recarregar, embora
-   * já estivesse gravado.
+   * O pedido ficava só no estado da aba onde era feito. Ao trocar de aba a
+   * aba desmontava, e o pedido sumia da trilha até a página recarregar,
+   * embora já estivesse gravado. Agora ele é feito em Contexto e aparece no
+   * Histórico sem recarregar.
    */
-  it('o pedido continua na trilha depois de trocar de aba', async () => {
+  it('o pedido feito em Contexto aparece no Histórico', async () => {
     api.solicitarComplemento = vi.fn().mockResolvedValue({
       ocorrido_em: '2026-09-22T09:00:00.000Z',
       mensagem: 'Faltam os laudos do lote.',
@@ -435,18 +437,19 @@ describe('OportunidadePage — pedido de complementação', () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.click(await screen.findByRole('button', { name: /histórico/i }))
-    await user.type(screen.getByLabelText(/solicitar complementação/i), 'Faltam os laudos do lote.')
-    await user.click(screen.getByRole('button', { name: /^solicitar$/i }))
+    const etapas = await screen.findByRole('navigation', { name: /etapas da oportunidade/i })
 
-    expect(await screen.findByText(/faltam os laudos do lote/i)).toBeInTheDocument()
+    await user.click(within(etapas).getByRole('button', { name: /^contexto/i }))
+    await user.click(screen.getByRole('button', { name: /pedir complementação/i }))
+    await user.type(screen.getByLabelText(/que informação falta na entrada/i), 'Faltam os laudos do lote.')
+    await user.click(screen.getByRole('button', { name: /enviar o pedido/i }))
 
-    const etapas = screen.getByRole('navigation', { name: /etapas da oportunidade/i })
+    expect(await screen.findByText(/pedido enviado/i)).toBeInTheDocument()
 
-    await user.click(within(etapas).getByRole('button', { name: /^decisão/i }))
     await user.click(within(etapas).getByRole('button', { name: /histórico/i }))
 
     expect(screen.getByText(/faltam os laudos do lote/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/que informação falta na entrada/i)).toBeNull()
     expect(api.listarHistorico).toHaveBeenCalledTimes(1)
   })
 })
@@ -502,16 +505,71 @@ describe('OportunidadePage — andamento das etapas', () => {
     expect(await screen.findByRole('button', { name: /Competências.*concluída/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Contexto.*concluída/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Equipe potencial.*em andamento/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Decisão$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Decisão ?a seguir$/ })).toBeInTheDocument()
   })
 
-  it('em estruturação, Copiloto e Proposta estão em andamento juntos', async () => {
+  /**
+   * As etapas que ainda não começaram tinham a mesma cara das outras. Agora
+   * ficam apagadas e com cadeado, mas continuam abrindo: travar a aba
+   * esconderia o motivo, e a etapa diz lá dentro o que falta antes dela.
+   */
+  it('as etapas que ainda não começaram ficam marcadas, mas abrem', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'competencias' })
+
+    renderPagina()
+
+    const equipe = await screen.findByRole('button', { name: /^Equipe potencial ?a seguir$/ })
+
+    expect(equipe).toHaveClass('is-futura')
+    expect(equipe).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Pré-análise ?a seguir$/ })).toHaveClass('is-futura')
+    expect(screen.getByRole('button', { name: /^Competências ?em andamento$/ })).not.toHaveClass('is-futura')
+    expect(screen.getByRole('button', { name: /^Contexto ?concluída$/ })).not.toHaveClass('is-futura')
+
+    await userEvent.click(equipe)
+    expect(equipe).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('em revisão, nenhuma etapa fica marcada como a seguir', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'revisar' })
+
+    renderPagina()
+
+    await screen.findByRole('button', { name: /^Competências/ })
+    expect(document.querySelectorAll('.oportunidade-aba.is-futura')).toHaveLength(0)
+  })
+
+  /**
+   * Copiloto e Proposta apareciam "em andamento" juntos desde o começo, e a
+   * pessoa não sabia por qual começar. A proposta só entra em andamento
+   * quando tem algum texto.
+   */
+  it('em estruturação, sem texto na proposta, só o Copiloto está em andamento', async () => {
     api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
 
     renderPagina()
 
     expect(await screen.findByRole('button', { name: /Copiloto.*em andamento/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Proposta estruturada.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Proposta estruturada ?a seguir$/ })).toBeInTheDocument()
+  })
+
+  it('em estruturação, com texto na proposta, Copiloto e Proposta estão em andamento juntos', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: '',
+      hipotese: '',
+      objetivo_geral: '',
+      objetivos_especificos: ['Medir a perda'],
+      metodologia: '',
+      resultados_esperados: '',
+      caracterizacao_inovacao: '',
+      infraestrutura_recursos: '',
+    })
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /Proposta estruturada.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Copiloto.*em andamento/ })).toBeInTheDocument()
   })
 
   it('oportunidade arquivada não mostra andamento', async () => {

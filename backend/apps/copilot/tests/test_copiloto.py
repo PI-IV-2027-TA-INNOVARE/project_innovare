@@ -121,6 +121,19 @@ class EstadoDaAbaTests(CopilotoBaseTests):
             oportunidade=self.oportunidade
         ).exists())
 
+    def test_a_abertura_fala_como_a_tela_sem_o_termo_sessao(self):
+        """
+        PB91: a conversa volta a aparecer inteira na aba, e a abertura dizia
+        "Sessao aberta.", um termo que a tela nao usa em lugar nenhum.
+        """
+        self.iniciar_sessao()
+
+        abertura = MensagemCopiloto.objects.get(autor=AutorMensagem.COPILOTO, ordem=1)
+
+        self.assertNotIn('Sessão', abertura.conteudo)
+        self.assertTrue(abertura.conteudo.startswith('Li a entrada'))
+        self.assertIn('8 de 8', abertura.conteudo)
+
     def test_duas_sessoes_abertas_e_conflito(self):
         """Uma conversa por vez: duas sessoes abertas dividiriam o contexto."""
         self.client.post(self.url())

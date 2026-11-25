@@ -38,6 +38,7 @@ vi.mock('../../../services/pdConnectApi', () => ({
   listarCompetencias: (...args) => api.listarCompetencias(...args),
   obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
   obterPreAnalise: (...args) => api.obterPreAnalise(...args),
+  obterProposta: vi.fn(() => Promise.reject(new Error('Sem proposta.'))),
   iniciarSessaoCopiloto: vi.fn(),
   responderCopiloto: vi.fn(),
   estruturarComCopiloto: vi.fn(),
@@ -801,7 +802,7 @@ describe('OportunidadePage', () => {
     expect(screen.getByText('Oportunidade cadastrada.')).toBeInTheDocument()
     expect(screen.getByText('matching executado')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Matching' }))
+    await user.click(screen.getByRole('button', { name: /^Equipe potencial, / }))
 
     expect(screen.queryByText('Oportunidade cadastrada.')).not.toBeInTheDocument()
     expect(screen.getByText('matching executado')).toBeInTheDocument()

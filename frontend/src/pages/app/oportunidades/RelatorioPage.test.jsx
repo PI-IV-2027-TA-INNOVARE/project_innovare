@@ -128,23 +128,81 @@ describe('RelatorioPage', () => {
    * servidor mandou. Sumir com a secao faria o leitor concluir que ela nao
    * existe no produto.
    */
-  it('declara as seções pendentes com o motivo que veio do servidor', async () => {
+  /**
+   * As seções vazias iam para "Ainda não disponível", no fim, depois do
+   * Histórico, enquanto a Decisão vazia ficava no meio. Agora cada seção fica
+   * no lugar da sua etapa, com uma linha dizendo o que falta.
+   */
+  it('cada seção pendente fica no seu lugar, com o motivo que veio do servidor', async () => {
     renderRelatorio()
     await esperarRelatorio()
 
-    const pendentes = screen.getByRole('region', { name: /ainda não disponível/i })
-    const secoes = within(pendentes).getAllByRole('term').map((no) => no.textContent)
+    expect(screen.queryByRole('region', { name: /ainda não disponível/i })).toBeNull()
 
-    expect(secoes).toEqual([
+    for (const { secao, motivo } of RELATORIO.pendentes) {
+      const titulo = {
+        proposta_estruturada: 'Proposta estruturada',
+        competencias_necessarias: 'Competências necessárias',
+        equipe_potencial: 'Equipe potencial',
+        pre_analise: 'Pré-análise de maturidade',
+      }[secao]
+
+      expect(within(screen.getByRole('region', { name: titulo })).getByText(motivo)).toBeInTheDocument()
+    }
+  })
+
+  it('as seções seguem a ordem das etapas, com anexos e histórico no fim', async () => {
+    renderRelatorio()
+    await esperarRelatorio()
+
+    const titulos = screen.getAllByRole('heading', { level: 2 }).map((titulo) => titulo.textContent)
+
+    expect(titulos).toEqual([
+      'Visão geral',
+      'Entrada',
       'Proposta estruturada',
       'Competências necessárias',
       'Equipe potencial',
       'Pré-análise de maturidade',
+      'Decisão',
+      'Anexos',
+      'Histórico',
     ])
+  })
 
-    expect(
-      within(pendentes).getByText(/ainda não foi iniciada para esta oportunidade/i)
-    ).toBeInTheDocument()
+  /**
+   * A proposta sem texto aparecia como oito travessões e "versão 1", e quem
+   * lia não sabia se era vazio ou erro.
+   */
+  it('a proposta sem texto vira uma linha só', async () => {
+    api.obterRelatorioOportunidade = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      proposta: {
+        problema_pesquisa: '',
+        hipotese: '',
+        objetivo_geral: '',
+        objetivos_especificos: [],
+        metodologia: '',
+        resultados_esperados: '',
+        caracterizacao_inovacao: '',
+        infraestrutura_recursos: '',
+        versao: 1,
+        revisada_por_humano: false,
+      },
+      pendentes: RELATORIO.pendentes.filter((item) => item.secao !== 'proposta_estruturada'),
+    })
+
+    renderRelatorio()
+    await esperarRelatorio()
+
+    const proposta = screen.getByRole('region', { name: 'Proposta estruturada' })
+
+    expect(within(proposta).getByText('A proposta ainda não tem texto.')).toBeInTheDocument()
+    expect(within(proposta).queryByText('—')).toBeNull()
+    expect(within(proposta).queryByText(/versão 1/)).toBeNull()
+
+    const geral = screen.getByRole('region', { name: 'Visão geral' })
+    expect(within(geral).queryByText('Proposta', { selector: 'dt' })).toBeNull()
   })
 
   it('mostra a proposta quando ela existe, e aí não a lista como pendente', async () => {
@@ -174,10 +232,13 @@ describe('RelatorioPage', () => {
       .toBeInTheDocument()
     expect(screen.getByText('Isolar cepas')).toBeInTheDocument()
 
-    const pendentes = screen.getByRole('region', { name: /ainda não disponível/i })
-    const secoes = within(pendentes).getAllByRole('term').map((no) => no.textContent)
+    const proposta = screen.getByRole('region', { name: 'Proposta estruturada' })
+    const valor = (rotulo) => within(proposta).getByText(rotulo, { selector: 'dt' }).nextElementSibling
 
-    expect(secoes).not.toContain('Proposta estruturada')
+    expect(within(proposta).queryByText(/ainda não foi iniciada/i)).toBeNull()
+    expect(valor('Hipótese')).toHaveTextContent('Não escrito')
+    expect(valor('Resultados esperados')).toHaveTextContent('Não escrito')
+    expect(within(proposta).queryByText('—')).toBeNull()
   })
 
   it('manda o documento para a impressora sem sair da tela', async () => {
@@ -296,7 +357,7 @@ describe('RelatorioPage', () => {
     const linhas = trilha.getAllByRole('listitem').map((linha) => linha.textContent)
 
     expect(linhas[0]).toMatch(/oportunidade cadastrada\./i)
-    expect(linhas[1]).toMatch(/situação: em estruturação\..*sistema/i)
+    expect(linhas[1]).toMatch(/passou para a etapa 2, copiloto\..*sistema/i)
     expect(linhas[2]).toMatch(/competência adicionada\..*rafael antunes/i)
     expect(trilha.queryByText(/competencia_adicionada|__sistema__/)).not.toBeInTheDocument()
   })
@@ -449,7 +510,12 @@ describe('RelatorioPage', () => {
       ...RELATORIO,
       oportunidade: { ...RELATORIO.oportunidade, responsavel_nome: null },
       decisao: null,
-      proposta: { versao: 3, revisada_por_humano: true, revisor_nome: 'Rafael Antunes' },
+      proposta: {
+        problema_pesquisa: 'Perda de lotes.',
+        versao: 3,
+        revisada_por_humano: true,
+        revisor_nome: 'Rafael Antunes',
+      },
       competencias: [
         { id_competencia_necessaria: 1, descricao: 'A', nivel_importancia: 'essencial' },
         { id_competencia_necessaria: 2, descricao: 'B', nivel_importancia: 'desejavel' },
@@ -489,8 +555,9 @@ describe('RelatorioPage', () => {
 
     expect(within(geral).getByText(/documento parcial: a decisão ainda não foi registrada/i))
       .toBeInTheDocument()
-    expect(linha('Decisão')).toHaveTextContent('Pendente')
-    expect(linha('Responsável')).toHaveTextContent('Não definido')
+    expect(linha('Andamento')).toHaveTextContent('Etapa 7 de 7, Decisão')
+    expect(within(geral).queryByText('Decisão', { selector: 'dt' })).toBeNull()
+    expect(within(geral).queryByText('Responsável', { selector: 'dt' })).toBeNull()
     expect(linha('Proposta')).toHaveTextContent('Revisada por Rafael Antunes, versão 3')
     expect(linha('Competências')).toHaveTextContent('2 competências, 1 essencial')
     expect(linha('Equipe potencial')).toHaveTextContent('2 pessoas · 1 lacuna de competência · validada')
@@ -509,6 +576,35 @@ describe('RelatorioPage', () => {
     expect(
       within(preAnalise).getAllByText(/^(Frágil|Em desenvolvimento|Consolidada)$/).map((selo) => selo.textContent),
     ).toEqual(['Frágil', 'Em desenvolvimento', 'Consolidada'])
+  })
+
+  /**
+   * A visão geral de um documento parcial era uma lista do que não existe:
+   * "Pendente", "Não definido", "Nenhuma identificada", "Matching não
+   * executado". Agora ela diz em que etapa a oportunidade está e o que falta,
+   * e só lista o que já tem conteúdo.
+   */
+  it('no começo do fluxo, a visão geral diz a etapa e o que falta, sem a lista do que não existe', async () => {
+    api.obterRelatorioOportunidade = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      oportunidade: { ...RELATORIO.oportunidade, situacao: 'estruturacao', situacao_rotulo: 'Em estruturação' },
+      decisao: null,
+      proposta: null,
+    })
+
+    renderRelatorio()
+    await esperarRelatorio()
+
+    const geral = screen.getByRole('region', { name: 'Visão geral' })
+    const linha = (rotulo) => within(geral).getByText(rotulo, { selector: 'dt' }).nextElementSibling
+    const rotulos = within(geral).getAllByRole('term').map((termo) => termo.textContent)
+
+    expect(rotulos).toEqual(['Andamento', 'Ainda por fazer'])
+    expect(linha('Andamento')).toHaveTextContent('Etapa 2 de 7, Copiloto')
+    expect(linha('Ainda por fazer')).toHaveTextContent(
+      'Proposta estruturada, Competências, Equipe potencial, Pré-análise, Decisão',
+    )
+    expect(within(geral).queryByText(/matching|nenhuma|não definido|pendente/i)).toBeNull()
   })
 
   it('com a decisão registrada, a visão geral não fala em documento parcial', async () => {

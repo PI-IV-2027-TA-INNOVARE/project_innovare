@@ -1,30 +1,26 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import AbaHistorico from './AbaHistorico'
-
-const api = vi.hoisted(() => ({ solicitarComplemento: null }))
-
-vi.mock('../../../../services/pdConnectApi', () => ({
-  solicitarComplemento: (...args) => api.solicitarComplemento(...args),
-}))
 
 const CADASTRO = {
   id: 'e1',
-  em: Date.parse('2026-09-01T10:00:00.000Z'),
+  em: Date.parse('2026-09-01T13:00:00.000Z'),
   categoria: 'oportunidade',
   ator: 'Agroindústria Vale Verde',
   texto: 'Problema externo cadastrado.',
 }
 
+const OBSERVACAO = {
+  id: 'e2',
+  em: Date.parse('2026-09-02T13:00:00.000Z'),
+  categoria: 'observacao',
+  ator: 'Rafael Antunes',
+  texto: 'Conversa com o demandante esclareceu o lote.',
+}
+
 function renderizar(props = {}) {
-  return render(
-    <AbaHistorico
-      codigo="OP-2026-014"
-      historico={[CADASTRO]}
-      {...props}
-    />
-  )
+  return render(<AbaHistorico historico={[CADASTRO]} {...props} />)
 }
 
 describe('AbaHistorico — observação do Supervisor (PB65)', () => {
@@ -34,116 +30,107 @@ describe('AbaHistorico — observação do Supervisor (PB65)', () => {
    * aqui sumia ao trocar de aba. A trilha segue mostrando todas.
    */
   it('a trilha mostra as observações, mas não oferece outro campo para elas', () => {
-    renderizar({ podeSolicitarComplemento: true })
+    renderizar()
 
     expect(screen.queryByLabelText(/observação/i)).not.toBeInTheDocument()
   })
 
   it('a observação tem filtro próprio, separado do resto', async () => {
     const usuario = userEvent.setup({ delay: null })
-    renderizar({
-      historico: [
-        CADASTRO,
-        {
-          id: 'e2',
-          em: Date.parse('2026-09-02T10:00:00.000Z'),
-          categoria: 'observacao',
-          ator: 'Rafael Antunes',
-          texto: 'Conversa com o demandante esclareceu o lote.',
-        },
-      ],
-    })
+    renderizar({ historico: [CADASTRO, OBSERVACAO] })
 
-    await usuario.click(screen.getByRole('button', { name: 'Observações' }))
+    await usuario.click(screen.getByRole('button', { name: /^Observações/ }))
 
-    expect(
-      screen.getByText('Conversa com o demandante esclareceu o lote.')
-    ).toBeInTheDocument()
+    expect(screen.getByText('Conversa com o demandante esclareceu o lote.')).toBeInTheDocument()
     expect(screen.queryByText('Problema externo cadastrado.')).not.toBeInTheDocument()
   })
 })
 
-describe('AbaHistorico — pedido de complementação (PB26)', () => {
-  it('o Supervisor pede complementação sem passar pela Decisão', async () => {
-    const user = userEvent.setup()
-    api.solicitarComplemento = vi.fn().mockResolvedValue({
-      ocorrido_em: '2026-09-22T09:00:00.000Z',
-      mensagem: 'Faltam os laudos do lote.',
-      autor_nome: 'Rafael Antunes',
+describe('AbaHistorico — registro só de leitura', () => {
+  /**
+   * O pedido de complementação ficava no topo, logo abaixo de "nada aqui é
+   * editado ou apagado". Foi para a aba Contexto, onde está a entrada.
+   */
+  it('não tem formulário: o pedido de complementação fica em Contexto', () => {
+    renderizar()
+
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /solicitar|pedir/i })).toBeNull()
+  })
+})
+
+describe('AbaHistorico — filtros', () => {
+  /**
+   * Eram oito filtros para três eventos, quase todos levando a "Nenhum
+   * evento". Agora só aparecem as categorias que têm eventos, com a conta.
+   */
+  it('mostra só as categorias que têm eventos, com a conta de cada uma', () => {
+    renderizar({ historico: [CADASTRO, { ...CADASTRO, id: 'e3' }, OBSERVACAO] })
+
+    const filtros = screen.getByRole('group', { name: /filtrar o histórico/i })
+    const nomes = within(filtros).getAllByRole('button').map((botao) => botao.getAttribute('aria-label'))
+
+    expect(nomes).toEqual(['Tudo, 3 eventos', 'Oportunidade, 2 eventos', 'Observações, 1 evento'])
+  })
+
+  it('com uma categoria só, não mostra filtro', () => {
+    renderizar()
+
+    expect(screen.queryByRole('group', { name: /filtrar o histórico/i })).toBeNull()
+  })
+
+  /**
+   * "Matching" e "Copiloto IA" não são os nomes que a pessoa vê nas etapas.
+   */
+  it('usa os nomes das etapas, sem jargão', () => {
+    renderizar({
+      historico: [
+        { ...CADASTRO, id: 'e4', categoria: 'matching', texto: 'Equipe potencial gerada.' },
+        { ...CADASTRO, id: 'e5', categoria: 'copiloto', texto: 'O Copiloto leu a entrada.' },
+      ],
     })
 
-    renderizar({ podeSolicitarComplemento: true })
+    const filtros = screen.getByRole('group', { name: /filtrar o histórico/i })
 
-    await user.type(
-      screen.getByLabelText(/solicitar complementação/i),
-      'Faltam os laudos do lote.'
-    )
-    await user.click(screen.getByRole('button', { name: /^solicitar$/i }))
+    expect(within(filtros).getByRole('button', { name: /^Equipe potencial/ })).toBeInTheDocument()
+    expect(within(filtros).getByRole('button', { name: /^Copiloto, / })).toBeInTheDocument()
+    expect(screen.queryByText(/matching/i)).toBeNull()
+    expect(screen.queryByText(/copiloto ia/i)).toBeNull()
+  })
+})
 
-    expect(api.solicitarComplemento).toHaveBeenCalledWith(
-      'OP-2026-014',
-      'Faltam os laudos do lote.'
-    )
+describe('AbaHistorico — datas', () => {
+  /**
+   * Num registro permanente, "Há 28 dias" sozinho não basta para conferir
+   * quando algo aconteceu. Os eventos vêm agrupados pelo dia, com a data, e
+   * cada um traz a hora.
+   */
+  it('agrupa os eventos por dia, do mais recente, com data e hora', () => {
+    renderizar({ historico: [CADASTRO, OBSERVACAO, { ...OBSERVACAO, id: 'e6', em: OBSERVACAO.em + 60_000 }] })
+
+    const dias = screen.getAllByRole('heading', { level: 3 }).map((titulo) => titulo.textContent)
+
+    expect(dias).toEqual(['02/09/2026', '01/09/2026'])
+
+    const primeiroDia = screen.getByRole('list', { name: '02/09/2026' })
+    expect(within(primeiroDia).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(primeiroDia).getAllByText(/^\d{2}:\d{2}$/)).toHaveLength(2)
   })
 
-  it('entrega o pedido para a trilha da página e limpa o campo', async () => {
-    const user = userEvent.setup()
-    const aoRegistrar = vi.fn()
-    api.solicitarComplemento = vi.fn().mockResolvedValue({
-      ocorrido_em: '2026-09-22T09:00:00.000Z',
-      mensagem: 'Faltam os laudos do lote.',
-      autor_nome: 'Rafael Antunes',
+  it('chama de hoje e ontem os dias mais próximos', () => {
+    const agora = Date.now()
+
+    renderizar({
+      historico: [
+        { ...CADASTRO, id: 'h', em: agora },
+        { ...OBSERVACAO, id: 'o', em: agora - 24 * 60 * 60 * 1000 },
+      ],
     })
 
-    renderizar({ podeSolicitarComplemento: true, aoRegistrar })
+    const dias = screen.getAllByRole('heading', { level: 3 }).map((titulo) => titulo.textContent)
 
-    const campo = screen.getByLabelText(/solicitar complementação/i)
-    await user.type(campo, 'Faltam os laudos do lote.')
-    await user.click(screen.getByRole('button', { name: /^solicitar$/i }))
-
-    expect(aoRegistrar).toHaveBeenCalledWith(
-      expect.objectContaining({
-        categoria: 'oportunidade',
-        ator: 'Rafael Antunes',
-        em: Date.parse('2026-09-22T09:00:00.000Z'),
-        texto: expect.stringMatching(/faltam os laudos do lote/i),
-      }),
-    )
-    expect(campo).toHaveValue('')
-  })
-
-  it('diz que o pedido não é decisão e não move a etapa', () => {
-    renderizar({ podeSolicitarComplemento: true })
-
-    expect(screen.getByText(/não é decisão e não muda a etapa/i)).toBeInTheDocument()
-  })
-
-  it('mostra o erro da API e mantém o texto para tentar de novo', async () => {
-    const user = userEvent.setup()
-    api.solicitarComplemento = vi.fn().mockRejectedValue(
-      new Error('Esta oportunidade nao tem Demandante Externo.')
-    )
-
-    renderizar({ podeSolicitarComplemento: true })
-
-    const campo = screen.getByLabelText(/solicitar complementação/i)
-    await user.type(campo, 'Faltam os laudos.')
-    await user.click(screen.getByRole('button', { name: /^solicitar$/i }))
-
-    expect(await screen.findByText(/nao tem Demandante Externo/i)).toBeInTheDocument()
-    expect(campo).toHaveValue('Faltam os laudos.')
-  })
-
-  it('ideia interna não oferece o pedido: não há a quem pedir', () => {
-    renderizar({ podeSolicitarComplemento: false })
-
-    expect(screen.queryByLabelText(/solicitar complementação/i)).not.toBeInTheDocument()
-  })
-
-  it('quem não é Supervisor não vê o pedido', () => {
-    renderizar({ podeSolicitarComplemento: false })
-
-    expect(screen.queryByLabelText(/solicitar complementação/i)).not.toBeInTheDocument()
+    expect(dias[0]).toMatch(/^Hoje, \d{2}\/\d{2}\/\d{4}$/)
+    expect(dias[1]).toMatch(/^Ontem, \d{2}\/\d{2}\/\d{4}$/)
   })
 })
 

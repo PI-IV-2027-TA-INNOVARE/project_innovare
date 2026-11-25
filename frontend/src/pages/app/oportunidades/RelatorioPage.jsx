@@ -15,14 +15,21 @@ import {
   porGravidade,
 } from '../../../components/relatorio/partesDoRelatorio'
 import { obterRelatorioOportunidade } from '../../../services/pdConnectApi'
-import { eventoDaApi } from './oportunidadesData'
+import {
+  EM_ANDAMENTO,
+  ETAPAS,
+  andamentoDasEtapas,
+  etapaASeguir,
+  situacaoEncerrada,
+} from './etapas'
+import { elementoTemTexto, eventoDaApi, propostaTemTexto } from './oportunidadesData'
 import './RelatorioPage.scss'
 
-const ROTULOS_DAS_SECOES = {
-  proposta_estruturada: 'Proposta estruturada',
-  competencias_necessarias: 'Competências necessárias',
-  equipe_potencial: 'Equipe potencial',
-  pre_analise: 'Pré-análise de maturidade',
+const SEM_CONTEUDO = {
+  proposta_estruturada: 'A proposta ainda não tem texto.',
+  competencias_necessarias: 'As competências necessárias ainda não foram identificadas.',
+  equipe_potencial: 'A equipe potencial ainda não foi gerada.',
+  pre_analise: 'A pré-análise de maturidade ainda não foi feita.',
 }
 
 const ELEMENTOS_DA_PROPOSTA = [
@@ -44,6 +51,18 @@ function formatarTamanho(bytes) {
 }
 
 const Secao = SecaoDoRelatorio
+
+function SecaoPendente({ titulo, motivo }) {
+  return (
+    <Secao titulo={titulo}>
+      <p className="relatorio-vazio">{motivo}</p>
+    </Secao>
+  )
+}
+
+function NaoEscrito() {
+  return <span className="relatorio-nao-escrito">Não escrito</span>
+}
 
 const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
 
@@ -80,6 +99,23 @@ function MaturidadePorNivel({ dimensoes }) {
   )
 }
 
+function andamentoDoRelatorio(oportunidade, proposta) {
+  const situacao = oportunidade.situacao
+
+  if (situacaoEncerrada(situacao)) return { atual: null, aSeguir: [] }
+
+  const andamento = andamentoDasEtapas(situacao, { propostaComTexto: propostaTemTexto(proposta) })
+  const etapa = ETAPAS.find((item) => andamento[item.id] === EM_ANDAMENTO)
+  let atual = oportunidade.situacao_rotulo || null
+  if (situacao === 'revisar') atual = 'Voltou para revisão da proposta'
+  else if (etapa) atual = `Etapa ${etapa.numero} de ${ETAPAS.length}, ${etapa.label}`
+
+  return {
+    atual,
+    aSeguir: ETAPAS.filter((item) => etapaASeguir(item, situacao, andamento)).map((item) => item.label),
+  }
+}
+
 function VisaoGeral({ oportunidade, decisao, proposta, competencias, equipe, analise }) {
   const essenciais = competencias.filter(
     (competencia) => competencia.nivel_importancia === 'essencial',
@@ -89,8 +125,9 @@ function VisaoGeral({ oportunidade, decisao, proposta, competencias, equipe, ana
   const dimensoes = analise?.dimensoes || []
   const recomendacoes = analise?.recomendacoes || []
   const acatadas = recomendacoes.filter((recomendacao) => recomendacao.acatada).length
+  const { atual, aSeguir } = andamentoDoRelatorio(oportunidade, proposta)
 
-  let maturidade = 'Pré-análise não executada'
+  let maturidade = null
   if (dimensoes.length > 0) maturidade = <MaturidadePorNivel dimensoes={dimensoes} />
   else if (analise) maturidade = analise.status_rotulo || 'Sem resultado'
 
@@ -101,29 +138,32 @@ function VisaoGeral({ oportunidade, decisao, proposta, competencias, equipe, ana
       ) : null}
 
       <dl className="relatorio-campos">
-        <Campo rotulo="Decisão">{decisao ? decisao.tipo_rotulo : 'Pendente'}</Campo>
-        <Campo rotulo="Responsável">{oportunidade.responsavel_nome || 'Não definido'}</Campo>
-        <Campo rotulo="Proposta">{situacaoDaProposta(proposta)}</Campo>
-        <Campo rotulo="Competências">
-          {competencias.length > 0
-            ? `${plural(competencias.length, 'competência', 'competências')}, ${plural(essenciais, 'essencial', 'essenciais')}`
-            : 'Nenhuma identificada'}
-        </Campo>
-        <Campo rotulo="Equipe potencial">
-          {equipe
-            ? [
-                plural(incluidos.length, 'pessoa', 'pessoas'),
-                plural(equipe.lacunas.length, 'lacuna de competência', 'lacunas de competência'),
-                validada ? 'validada' : 'não validada',
-              ].join(' · ')
-            : 'Matching não executado'}
-        </Campo>
-        <Campo rotulo="Maturidade">{maturidade}</Campo>
-        <Campo rotulo="Recomendações">
-          {recomendacoes.length > 0
-            ? `${acatadas} de ${recomendacoes.length} ${recomendacoes.length === 1 ? 'acatada' : 'acatadas'}`
-            : 'Nenhuma'}
-        </Campo>
+        {atual ? <Campo rotulo="Andamento">{atual}</Campo> : null}
+        {aSeguir.length > 0 ? <Campo rotulo="Ainda por fazer">{aSeguir.join(', ')}</Campo> : null}
+        {decisao ? <Campo rotulo="Decisão">{decisao.tipo_rotulo}</Campo> : null}
+        {propostaTemTexto(proposta) ? (
+          <Campo rotulo="Proposta">{situacaoDaProposta(proposta)}</Campo>
+        ) : null}
+        {competencias.length > 0 ? (
+          <Campo rotulo="Competências">
+            {`${plural(competencias.length, 'competência', 'competências')}, ${plural(essenciais, 'essencial', 'essenciais')}`}
+          </Campo>
+        ) : null}
+        {equipe ? (
+          <Campo rotulo="Equipe potencial">
+            {[
+              plural(incluidos.length, 'pessoa', 'pessoas'),
+              plural(equipe.lacunas.length, 'lacuna de competência', 'lacunas de competência'),
+              validada ? 'validada' : 'não validada',
+            ].join(' · ')}
+          </Campo>
+        ) : null}
+        {maturidade ? <Campo rotulo="Maturidade">{maturidade}</Campo> : null}
+        {recomendacoes.length > 0 ? (
+          <Campo rotulo="Recomendações">
+            {`${acatadas} de ${recomendacoes.length} ${recomendacoes.length === 1 ? 'acatada' : 'acatadas'}`}
+          </Campo>
+        ) : null}
       </dl>
 
       {analise?.sintese ? (
@@ -209,6 +249,8 @@ export default function RelatorioPage() {
     pendentes,
   } = relatorio
   const eventos = historico.map(eventoDaApi).sort((a, b) => a.em - b.em)
+  const motivo = (secao) =>
+    pendentes.find((item) => item.secao === secao)?.motivo || SEM_CONTEUDO[secao]
   const identificacao = [
     { rotulo: 'Código', valor: oportunidade.codigo },
     { rotulo: 'Situação', valor: oportunidade.situacao_rotulo },
@@ -263,24 +305,32 @@ export default function RelatorioPage() {
           <p className="relatorio-texto">{oportunidade.contexto || '—'}</p>
         </Secao>
 
-        {proposta ? (
+        {propostaTemTexto(proposta) ? (
           <Secao titulo="Proposta estruturada">
             <dl className="relatorio-campos relatorio-campos--coluna">
               {ELEMENTOS_DA_PROPOSTA.map(([campo, rotulo]) => (
                 <Fragment key={campo}>
                   <Campo rotulo={rotulo}>
-                    {proposta[campo] ? <TextoFormatado texto={proposta[campo]} /> : null}
+                    {elementoTemTexto(proposta[campo]) ? (
+                      <TextoFormatado texto={proposta[campo]} />
+                    ) : (
+                      <NaoEscrito />
+                    )}
                   </Campo>
 
                   {campo === 'objetivo_geral' ? (
                     <Campo rotulo="Objetivos específicos">
-                      {proposta.objetivos_especificos?.length > 0 ? (
+                      {elementoTemTexto(proposta.objetivos_especificos) ? (
                         <ul className="relatorio-lista">
-                          {proposta.objetivos_especificos.map((objetivo) => (
-                            <li key={objetivo}>{objetivo}</li>
-                          ))}
+                          {proposta.objetivos_especificos
+                            .filter((objetivo) => String(objetivo ?? '').trim())
+                            .map((objetivo) => (
+                              <li key={objetivo}>{objetivo}</li>
+                            ))}
                         </ul>
-                      ) : null}
+                      ) : (
+                        <NaoEscrito />
+                      )}
                     </Campo>
                   ) : null}
                 </Fragment>
@@ -289,7 +339,9 @@ export default function RelatorioPage() {
 
             <p className="relatorio-nota">{notaDaRevisao(proposta)}</p>
           </Secao>
-        ) : null}
+        ) : (
+          <SecaoPendente titulo="Proposta estruturada" motivo={motivo('proposta_estruturada')} />
+        )}
 
         {competencias.length > 0 ? (
           <Secao titulo="Competências necessárias">
@@ -302,7 +354,9 @@ export default function RelatorioPage() {
               ))}
             </ul>
           </Secao>
-        ) : null}
+        ) : (
+          <SecaoPendente titulo="Competências necessárias" motivo={motivo('competencias_necessarias')} />
+        )}
 
         {equipe ? (
           <Secao titulo="Equipe potencial">
@@ -317,7 +371,9 @@ export default function RelatorioPage() {
               Bloco={SubsecaoDoRelatorio}
             />
           </Secao>
-        ) : null}
+        ) : (
+          <SecaoPendente titulo="Equipe potencial" motivo={motivo('equipe_potencial')} />
+        )}
 
         {analise ? (
           <Secao titulo="Pré-análise de maturidade">
@@ -331,7 +387,26 @@ export default function RelatorioPage() {
               Bloco={SubsecaoDoRelatorio}
             />
           </Secao>
-        ) : null}
+        ) : (
+          <SecaoPendente titulo="Pré-análise de maturidade" motivo={motivo('pre_analise')} />
+        )}
+
+        <Secao titulo="Decisão">
+          {decisao ? (
+            <dl className="relatorio-campos relatorio-campos--coluna">
+              <Campo rotulo="Desfecho">{decisao.tipo_rotulo}</Campo>
+              <Campo rotulo="Justificativa">{decisao.justificativa}</Campo>
+              <Campo rotulo="Registrada por">{decisao.autor_nome}</Campo>
+              <Campo rotulo="Registrada em">
+                {formatarData(decisao.registrada_em)}
+              </Campo>
+            </dl>
+          ) : (
+            <p className="relatorio-vazio">
+              A decisão ainda não foi registrada para esta oportunidade.
+            </p>
+          )}
+        </Secao>
 
         <Secao titulo="Anexos">
           {anexos.length > 0 ? (
@@ -352,23 +427,6 @@ export default function RelatorioPage() {
           )}
         </Secao>
 
-        <Secao titulo="Decisão">
-          {decisao ? (
-            <dl className="relatorio-campos relatorio-campos--coluna">
-              <Campo rotulo="Desfecho">{decisao.tipo_rotulo}</Campo>
-              <Campo rotulo="Justificativa">{decisao.justificativa}</Campo>
-              <Campo rotulo="Registrada por">{decisao.autor_nome}</Campo>
-              <Campo rotulo="Registrada em">
-                {formatarData(decisao.registrada_em)}
-              </Campo>
-            </dl>
-          ) : (
-            <p className="relatorio-vazio">
-              A decisão ainda não foi registrada para esta oportunidade.
-            </p>
-          )}
-        </Secao>
-
         <Secao titulo="Histórico">
           {eventos.length > 0 ? (
             <ol className="relatorio-trilha">
@@ -384,21 +442,6 @@ export default function RelatorioPage() {
             <p className="relatorio-vazio">Nenhum evento registrado.</p>
           )}
         </Secao>
-
-        {pendentes.length > 0 ? (
-          <Secao titulo="Ainda não disponível">
-            <dl className="relatorio-campos relatorio-campos--coluna">
-              {pendentes.map((item) => (
-                <Campo
-                  key={item.secao}
-                  rotulo={ROTULOS_DAS_SECOES[item.secao] || item.secao}
-                >
-                  {item.motivo}
-                </Campo>
-              ))}
-            </dl>
-          </Secao>
-        ) : null}
 
         <footer className="relatorio-documento__rodape">
           <Link to={`/oportunidades/${id}`}>{oportunidade.codigo}</Link> · AC2

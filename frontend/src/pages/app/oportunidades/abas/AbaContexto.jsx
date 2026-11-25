@@ -2,6 +2,7 @@ import { useId } from 'react'
 import { formatarUltimoAcesso } from '../../../../lib/people'
 import { ETAPAS, etapaDaSituacao, etapaPorId, situacaoEncerrada } from '../etapas'
 import { ORIGENS, origemLabel, situacaoLabel } from '../oportunidadesData'
+import PedidoDeComplemento from './PedidoDeComplemento'
 import ProximoPasso from './ProximoPasso'
 
 function Andamento({ situacao, podeConduzir, irPara, etapa }) {
@@ -43,7 +44,13 @@ function Andamento({ situacao, podeConduzir, irPara, etapa }) {
   )
 }
 
-export default function AbaContexto({ oportunidade, podeConduzir = false, irPara }) {
+export default function AbaContexto({
+  oportunidade,
+  podeConduzir = false,
+  podeSolicitarComplemento = false,
+  irPara,
+  aoRegistrar,
+}) {
   const idDasSeguintes = useId()
   const origem = ORIGENS.find((item) => item.id === oportunidade.origem)
   const encerrada = situacaoEncerrada(oportunidade.situacao)
@@ -82,6 +89,10 @@ export default function AbaContexto({ oportunidade, podeConduzir = false, irPara
               <dd>{formatarUltimoAcesso(oportunidade.criadaEm)}</dd>
             </div>
           </dl>
+
+          {podeSolicitarComplemento && !encerrada ? (
+            <PedidoDeComplemento codigo={oportunidade.id} aoRegistrar={aoRegistrar} />
+          ) : null}
         </div>
       </section>
 

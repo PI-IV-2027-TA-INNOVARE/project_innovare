@@ -1,3 +1,5 @@
+import { etapaDaSituacao, etapaPorId, situacaoEncerrada } from './etapas'
+
 export const ORIGENS = Object.freeze([
   { id: 'externo', label: 'Problema externo', descricao: 'Trazido por um Demandante Externo.' },
   { id: 'interna', label: 'Ideia interna', descricao: 'Cadastrada por um Supervisor.' },
@@ -209,6 +211,18 @@ export const ROTULOS_DOS_ELEMENTOS = Object.freeze({
   infraestrutura_recursos: 'Infraestrutura e recursos',
 })
 
+export function elementoTemTexto(valor) {
+  if (Array.isArray(valor)) return valor.some((item) => String(item ?? '').trim())
+
+  return Boolean(String(valor ?? '').trim())
+}
+
+export function propostaTemTexto(proposta) {
+  if (!proposta) return false
+
+  return Object.keys(ROTULOS_DOS_ELEMENTOS).some((elemento) => elementoTemTexto(proposta[elemento]))
+}
+
 function versaoAnterior(anterior = {}) {
   return Object.entries(anterior).map(([elemento, valor]) => ({
     elemento,
@@ -219,6 +233,9 @@ function versaoAnterior(anterior = {}) {
 
 const TEXTO_DO_EVENTO = Object.freeze({
   oportunidade_cadastrada: 'Oportunidade cadastrada.',
+  sessao_iniciada: 'O Copiloto leu a entrada.',
+  sessao_concluida: 'Conversa com o Copiloto encerrada.',
+  sintese_revisada: 'Resumo da entrada conferido.',
   proposta_atualizada: 'Proposta estruturada atualizada.',
   sugestao_aceita: 'Sugestão do Copiloto aceita na proposta.',
   contexto_atualizado: 'Contexto atualizado pelo Núcleo de P&D.',
@@ -240,9 +257,19 @@ export function decisaoDaApi(ultima) {
   }
 }
 
+function textoDaSituacao(situacao) {
+  if (situacao === 'revisar') return 'A oportunidade voltou para revisão da proposta.'
+
+  const etapa = situacaoEncerrada(situacao) ? null : etapaPorId(etapaDaSituacao(situacao))
+
+  return etapa
+    ? `A oportunidade passou para a etapa ${etapa.numero}, ${etapa.label}.`
+    : `Situação: ${situacaoLabel(situacao)}.`
+}
+
 function textoComDetalhe(tipo, detalhe) {
   if (tipo === 'situacao_atualizada' && detalhe.para) {
-    return `Situação: ${situacaoLabel(detalhe.para)}.`
+    return textoDaSituacao(detalhe.para)
   }
 
   if (tipo === 'prioridade_definida' && detalhe.para) {

@@ -220,9 +220,9 @@ ENTIDADES: dict[str, Entidade] = {
         lambda recomendacao: recomendacao.oportunidade.codigo,
     ),
     'sessao_copiloto': Entidade(
-        'Sessão do Copiloto',
+        'Conversa com o Copiloto',
         _sessoes,
-        lambda _sessao: 'Sessão do Copiloto',
+        lambda _sessao: 'Conversa com o Copiloto',
         lambda sessao: sessao.oportunidade.codigo,
     ),
     'mensagem_copiloto': Entidade(

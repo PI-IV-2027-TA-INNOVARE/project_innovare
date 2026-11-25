@@ -19,6 +19,13 @@ import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
 import EsperaIA from './EsperaIA'
 import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
+import {
+  ehDaEntrada,
+  lerMensagem,
+  lerResumo,
+  respostaDaEntrada,
+  respostasDaEntrada,
+} from './resumoDaEntrada'
 import '../OportunidadesPage.scss'
 
 const TOTAL_DE_ELEMENTOS = Object.keys(ROTULOS_DOS_ELEMENTOS).length
@@ -107,7 +114,42 @@ function Passos({ feitos }) {
   )
 }
 
-function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoSalvar }) {
+function CamposDoResumo({ texto }) {
+  const resumo = lerResumo(texto)
+  const campos = [
+    ['Problema', resumo.problema],
+    ['Contexto', resumo.contexto],
+  ].filter(([, valor]) => valor)
+
+  if (campos.length === 0 && resumo.faltas.length === 0) {
+    return <p className="copiloto__resumo-texto">{texto}</p>
+  }
+
+  return (
+    <>
+      {resumo.livre ? <p className="copiloto__resumo-texto">{resumo.livre}</p> : null}
+      <dl className="copiloto__resumo-campos">
+        {campos.map(([rotulo, valor]) => (
+          <div key={rotulo}>
+            <dt>{rotulo}</dt>
+            <dd>{valor}</dd>
+          </div>
+        ))}
+        {resumo.faltas.length > 0 ? (
+          <div>
+            <dt>O que falta</dt>
+            <dd>
+              {plural(resumo.faltas.length, 'pergunta', 'perguntas')}, logo abaixo em Sobre a
+              entrada.
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </>
+  )
+}
+
+function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoReler, aoSalvar }) {
   const [editando, setEditando] = useState(false)
   const [texto, setTexto] = useState('')
 
@@ -142,6 +184,25 @@ function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoSalvar }) {
     if (await aoSalvar(texto.trim())) setEditando(false)
   }
 
+  const corrigir = (rotulo, classe) => (
+    <button type="button" className={classe} onClick={abrirEdicao} disabled={ocupado}>
+      <Icone icon={appIcons.edit} />
+      {rotulo}
+    </button>
+  )
+
+  const lerDeNovo = (
+    <button
+      type="button"
+      className="admin-btn admin-btn--outline"
+      onClick={aoReler}
+      disabled={ocupado}
+    >
+      <Icone icon={appIcons.sync} />
+      Ler a entrada de novo
+    </button>
+  )
+
   if (sessao.sintese && sessao.sintese_conferida && !editando) {
     return (
       <details className="copiloto__bloco copiloto__resumo copiloto__detalhes">
@@ -155,18 +216,16 @@ function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoSalvar }) {
         </summary>
 
         <div className="copiloto__elemento-corpo">
-          <p className="copiloto__resumo-texto">{sessao.sintese}</p>
-          <p className="copiloto__nota">É deste resumo que o Copiloto parte ao estruturar.</p>
+          <CamposDoResumo texto={sessao.sintese} />
+          <p className="copiloto__nota">
+            É deste resumo que o Copiloto parte ao estruturar. Se a entrada mudou, peça
+            que ele a leia de novo.
+          </p>
           {podeConduzir ? (
-            <button
-              type="button"
-              className="admin-btn admin-btn--sm admin-btn--outline copiloto__editar"
-              onClick={abrirEdicao}
-              disabled={ocupado}
-            >
-              <Icone icon={appIcons.edit} />
-              Corrigir o resumo
-            </button>
+            <div className="copiloto__acoes">
+              {corrigir('Corrigir o resumo', 'admin-btn admin-btn--outline')}
+              {lerDeNovo}
+            </div>
           ) : null}
         </div>
       </details>
@@ -176,81 +235,84 @@ function ResumoDaEntrada({ sessao, podeConduzir, ocupado, aoLer, aoSalvar }) {
   const semResumo = !sessao.sintese
   const aConferir = podeConduzir && !sessao.sintese_conferida
 
-  return (
-    <div className={`copiloto__bloco copiloto__resumo${aConferir ? ' copiloto__resumo--agora' : ''}`}>
-      <div className="copiloto__bloco-cabeca">
-        <h3 className="copiloto__subtitulo">Resumo da entrada</h3>
-        {podeConduzir && !editando ? (
+  let conteudo = <CamposDoResumo texto={sessao.sintese} />
+  if (editando) {
+    conteudo = (
+      <form className="copiloto__resumo-forma" onSubmit={salvar}>
+        <label className="admin-field">
+          <span className="admin-field__label">Resumo da entrada</span>
+          <textarea
+            className="admin-input admin-input--area"
+            rows={8}
+            value={texto}
+            onChange={(event) => setTexto(event.target.value)}
+          />
+          <span className="admin-field__hint">
+            O Copiloto usa este resumo para escrever a proposta. Em O que falta, cada
+            linha que começa com um traço vira uma pergunta em Sobre a entrada.
+          </span>
+        </label>
+        <div className="copiloto__acoes">
+          <button type="submit" className="admin-btn" disabled={ocupado}>
+            <Icone icon={appIcons.save} />
+            Salvar o resumo
+          </button>
           <button
             type="button"
-            className={`admin-btn admin-btn--sm${semResumo ? '' : ' admin-btn--outline'}`}
-            onClick={abrirEdicao}
+            className="admin-btn admin-btn--outline"
+            onClick={() => setEditando(false)}
             disabled={ocupado}
           >
-            <Icone icon={appIcons.edit} />
-            {semResumo ? 'Escrever o resumo' : 'Corrigir o resumo'}
+            Cancelar
           </button>
-        ) : null}
+        </div>
+      </form>
+    )
+  } else if (semResumo) {
+    conteudo = (
+      <p className="copiloto__nota">
+        {podeConduzir
+          ? 'O Copiloto não conseguiu ler a entrada. Tente de novo ou escreva você mesmo o problema, o contexto e o que falta.'
+          : 'Ainda não há resumo.'}
+      </p>
+    )
+  }
+
+  let acoes = null
+  if (podeConduzir && !editando && semResumo) {
+    acoes = (
+      <div className="copiloto__acoes">
+        {corrigir('Escrever o resumo', 'admin-btn')}
+        {lerDeNovo}
       </div>
-
-      {editando ? (
-        <form className="copiloto__resumo-forma" onSubmit={salvar}>
-          <label className="admin-field">
-            <span className="admin-field__label">Resumo da entrada</span>
-            <textarea
-              className="admin-input admin-input--area"
-              rows={6}
-              value={texto}
-              onChange={(event) => setTexto(event.target.value)}
-            />
-            <span className="admin-field__hint">
-              O Copiloto usa este resumo para escrever a proposta.
-            </span>
-          </label>
-          <div className="copiloto__acoes">
-            <button type="submit" className="admin-btn admin-btn--sm" disabled={ocupado}>
-              <Icone icon={appIcons.save} />
-              Salvar o resumo
-            </button>
-            <button
-              type="button"
-              className="admin-btn admin-btn--sm admin-btn--outline"
-              onClick={() => setEditando(false)}
-              disabled={ocupado}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      ) : sessao.sintese ? (
-        <p className="copiloto__resumo-texto">{sessao.sintese}</p>
-      ) : (
+    )
+  } else if (aConferir && !editando) {
+    acoes = (
+      <>
         <p className="copiloto__nota">
-          Ainda não há resumo.{' '}
-          {podeConduzir
-            ? 'Escreva o problema, o contexto e o que falta: é do resumo que o Copiloto parte.'
-            : ''}
+          Confira antes de seguir: o Copiloto parte deste resumo para escrever a proposta.
         </p>
-      )}
-
-      {podeConduzir && !editando && sessao.sintese && !sessao.sintese_conferida ? (
-        <div className="admin-callout admin-callout--alerta copiloto__conferir" role="status">
-          <Icone icon={appIcons.warning} className="admin-callout__icon" />
-          <p className="admin-callout__text">
-            Confira o resumo antes de estruturar: o Copiloto só parte de um resumo que
-            você aceitou ou corrigiu.
-          </p>
+        <div className="copiloto__acoes">
           <button
             type="button"
-            className="admin-btn admin-btn--sm"
+            className="admin-btn"
             onClick={() => aoSalvar(sessao.sintese)}
             disabled={ocupado}
           >
             <Icone icon={appIcons.done} />
-            Usar este resumo
+            Está certo, usar este resumo
           </button>
+          {corrigir('Corrigir o resumo', 'admin-btn admin-btn--outline')}
         </div>
-      ) : null}
+      </>
+    )
+  }
+
+  return (
+    <div className={`copiloto__bloco copiloto__resumo${aConferir ? ' copiloto__resumo--agora' : ''}`}>
+      <h3 className="copiloto__subtitulo">Resumo da entrada</h3>
+      {conteudo}
+      {acoes}
     </div>
   )
 }
@@ -294,7 +356,13 @@ function Pergunta({ pergunta, rascunho, repetida, podeConduzir, bloqueada, ocupa
       {pergunta.motivo && !repetida ? (
         <p className="copiloto__pergunta-motivo">{pergunta.motivo}</p>
       ) : null}
-      {podeConduzir ? (
+      {pergunta.respondida ? (
+        <p className="copiloto__respondida">
+          <Icone icon={appIcons.done} />
+          Respondida: {pergunta.respondida}
+        </p>
+      ) : null}
+      {podeConduzir && !pergunta.respondida ? (
         <textarea
           className="admin-input admin-input--area copiloto__resposta"
           rows={2}
@@ -397,6 +465,7 @@ function ElementoDoCopiloto({
 
 function Elementos({
   itens,
+  perguntasDaEntrada,
   baseDisponivel,
   podeConduzir,
   podeResponder,
@@ -405,14 +474,16 @@ function Elementos({
   irPara,
   aoEscrever,
 }) {
+  const idDaEntrada = useId()
   const idDaFalta = useId()
   const idDaRevisao = useId()
 
-  if (itens.length === 0) return null
+  if (itens.length === 0 && perguntasDaEntrada.length === 0) return null
 
   const faltam = itens.filter((item) => item.vazio)
   const paraRevisar = itens.filter((item) => !item.vazio)
-  const aberto = podeResponder
+  const entradaPendente = perguntasDaEntrada.some((pergunta) => !pergunta.respondida)
+  const aberto = podeResponder && !entradaPendente
     ? [...faltam, ...paraRevisar].find((item) => item.perguntas.length > 0)?.elemento
     : null
 
@@ -441,7 +512,7 @@ function Elementos({
       {podeConduzir ? (
         <p className="copiloto__nota">
           {podeResponder
-            ? 'Abra um elemento para ver as perguntas. Responda as que souber, em qualquer ordem: nenhuma é obrigatória, e todas vão juntas no envio.'
+            ? 'O Copiloto escreve os elementos mesmo sem respostas. Responda o que só você sabe, como números, prazos e nomes. Nenhuma é obrigatória, e todas vão juntas no envio.'
             : 'Você já pode ler as perguntas. Para responder, confira antes o resumo da entrada.'}
         </p>
       ) : null}
@@ -451,6 +522,25 @@ function Elementos({
           As perguntas orientadoras não estão disponíveis no momento. Você ainda
           pode pedir a estruturação: o Copiloto usa a descrição da oportunidade.
         </p>
+      ) : null}
+
+      {perguntasDaEntrada.length > 0 ? (
+        <div className="copiloto__apontados">
+          <h4 id={idDaEntrada} className="copiloto__apontados-titulo">Sobre a entrada</h4>
+          <ul className="copiloto__perguntas copiloto__entrada" aria-labelledby={idDaEntrada}>
+            {perguntasDaEntrada.map((pergunta) => (
+              <Pergunta
+                key={chaveDa(pergunta)}
+                pergunta={pergunta}
+                rascunho={rascunhos?.[chaveDa(pergunta)]}
+                podeConduzir={podeConduzir}
+                bloqueada={!podeResponder}
+                ocupado={ocupado}
+                aoEscrever={aoEscrever}
+              />
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {faltam.length > 0 ? (
@@ -520,21 +610,54 @@ function Sugestoes({ sugestoes, podeConduzir, ocupado, aoAceitar, aoRecusar }) {
   )
 }
 
+const DATA_DA_FALA = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+
+function Fala({ mensagem }) {
+  const humana = mensagem.autor === 'humano'
+  const { origem, pergunta, resposta } = humana
+    ? lerMensagem(mensagem.conteudo)
+    : { origem: '', pergunta: '', resposta: mensagem.conteudo }
+
+  let sobre = origem || 'Outra informação'
+  if (ehDaEntrada(origem)) sobre = 'Sobre a entrada'
+
+  return (
+    <li className={`copiloto__fala copiloto__fala--${humana ? 'humano' : 'copiloto'}`}>
+      <p className="copiloto__fala-cabeca">
+        <span className="copiloto__autor">{humana ? 'Supervisor' : 'Copiloto'}</span>
+        {mensagem.criado_em ? (
+          <time dateTime={mensagem.criado_em}>{DATA_DA_FALA.format(new Date(mensagem.criado_em))}</time>
+        ) : null}
+      </p>
+      {humana ? (
+        <p className="copiloto__pergunta-motivo">{pergunta ? `${sobre}: ${pergunta}` : sobre}</p>
+      ) : null}
+      <p className="copiloto__conteudo">{resposta}</p>
+    </li>
+  )
+}
+
 function Conversa({ mensagens }) {
   if (mensagens.length === 0) return null
 
   return (
-    <ul className="copiloto__conversa">
-      {mensagens.map((mensagem) => (
-        <li
-          key={mensagem.id_mensagem}
-          className={`copiloto__fala copiloto__fala--${mensagem.autor}`}
-        >
-          <span className="copiloto__autor">{mensagem.autor_rotulo}</span>
-          <p className="copiloto__conteudo">{mensagem.conteudo}</p>
-        </li>
-      ))}
-    </ul>
+    <details className="copiloto__bloco copiloto__detalhes">
+      <summary className="copiloto__resumo-cabeca">
+        <h3 className="copiloto__subtitulo">Conversa com o Copiloto</h3>
+        <span className="copiloto__enviadas-total">
+          {plural(mensagens.length, 'mensagem', 'mensagens')}
+        </span>
+        <Icone icon={appIcons.disclosure} className="copiloto__seta" />
+      </summary>
+
+      <div className="copiloto__elemento-corpo">
+        <ul className="copiloto__conversa">
+          {mensagens.map((mensagem) => (
+            <Fala key={mensagem.id_mensagem} mensagem={mensagem} />
+          ))}
+        </ul>
+      </div>
+    </details>
   )
 }
 
@@ -611,14 +734,26 @@ export default function AbaCopiloto({
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState('')
   const [resposta, setResposta] = useState('')
+  const [outraAberta, setOutraAberta] = useState(false)
   const [rascunhos, setRascunhos] = useState({})
   const [emAcao, setEmAcao] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState(null)
   const [sugestoes, setSugestoes] = useState([])
+  const idDaOutra = useId()
 
-  const respondidas = (estado?.perguntas || []).filter((pergunta) =>
-    (rascunhos[chaveDa(pergunta)] || '').trim(),
+  const jaRespondidas = respostasDaEntrada(estado?.mensagens || [])
+  const perguntasDaEntrada = lerResumo(estado?.sessao?.sintese).faltas.map((pergunta, indice) => ({
+    id: `entrada-${indice}`,
+    elemento: 'entrada',
+    pergunta,
+    motivo: '',
+    origem: 'entrada',
+    respondida: jaRespondidas.get(pergunta) || '',
+  }))
+
+  const respondidas = [...perguntasDaEntrada, ...(estado?.perguntas || [])].filter(
+    (pergunta) => !pergunta.respondida && (rascunhos[chaveDa(pergunta)] || '').trim(),
   )
   const respostasProntas = respondidas.length + (resposta.trim() ? 1 : 0)
   const temRascunho = respostasProntas > 0
@@ -728,11 +863,20 @@ export default function AbaCopiloto({
   }
 
   const enviarRespostas = async () => {
-    const lote = respondidas.map((pergunta) => ({
-      chave: chaveDa(pergunta),
-      texto: rascunhos[chaveDa(pergunta)].trim(),
-      contexto: { elemento: pergunta.elemento, pergunta: pergunta.pergunta },
-    }))
+    const lote = respondidas.map((pergunta) => {
+      const chave = chaveDa(pergunta)
+      const texto = rascunhos[chave].trim()
+
+      if (pergunta.origem === 'entrada') {
+        return { chave, texto: respostaDaEntrada(pergunta.pergunta, texto), contexto: {} }
+      }
+
+      return {
+        chave,
+        texto,
+        contexto: { elemento: pergunta.elemento, pergunta: pergunta.pergunta },
+      }
+    })
 
     if (resposta.trim()) lote.push({ chave: null, texto: resposta.trim(), contexto: {} })
 
@@ -800,16 +944,24 @@ export default function AbaCopiloto({
     setSugestoes((atuais) => atuais.filter((item) => item.elemento !== sugestao.elemento))
   }
 
-  const encerrar = async () => {
-    setEmAcao('encerrar')
+  const lerDeNovo = async () => {
+    const confirmou = window.confirm(
+      'O Copiloto vai ler a entrada outra vez e escrever um resumo novo, que você confere de novo. As respostas já enviadas deixam de ser usadas. O texto da proposta não muda.',
+    )
+
+    if (!confirmou) return
+
+    setEmAcao('ler')
+    setResultado(null)
+    setSugestoes([])
 
     try {
       await concluirSessaoCopiloto(oportunidadeId)
-      await carregar({ silencioso: true })
-      showToast('Conversa encerrada. A proposta continua editável.')
+      await iniciarSessaoCopiloto(oportunidadeId)
     } catch (falha) {
-      showToast(falha?.message || 'A conversa não foi encerrada.', 'error')
+      showToast(falha?.message || 'Não foi possível ler a entrada de novo.', 'error')
     } finally {
+      await carregar({ silencioso: true })
       setEmAcao('')
     }
   }
@@ -855,6 +1007,7 @@ export default function AbaCopiloto({
   const elementos = (
     <Elementos
       itens={elementosDoCopiloto(pendentes, lacunas, perguntas)}
+      perguntasDaEntrada={perguntasDaEntrada}
       baseDisponivel={Boolean(estado?.base_disponivel)}
       podeConduzir={podeConduzir}
       podeResponder={podeResponder}
@@ -976,6 +1129,7 @@ export default function AbaCopiloto({
           podeConduzir={podeConduzir}
           ocupado={ocupado}
           aoLer={lerEntrada}
+          aoReler={lerDeNovo}
           aoSalvar={salvarResumo}
         />
 
@@ -983,20 +1137,40 @@ export default function AbaCopiloto({
           <form className="copiloto__forma" onSubmit={enviar}>
             {elementos}
 
-            <label className="admin-field copiloto__livre">
-              <span className="admin-field__label">Outra informação para o Copiloto</span>
-              <textarea
-                className="admin-input admin-input--area"
-                rows={3}
-                value={resposta}
-                onChange={(event) => setResposta(event.target.value)}
-                placeholder="Ex.: a perda média é de 4% do lote."
-                disabled={ocupado || !podeResponder}
-              />
-              <span className="admin-field__hint">
-                Opcional. Algo que as perguntas não cobrem e que ajuda a escrever a proposta.
-              </span>
-            </label>
+            {podeResponder && (outraAberta || resposta) ? (
+              <div className="admin-field copiloto__livre">
+                <label className="admin-field__label" htmlFor={`${idDaOutra}-campo`}>
+                  Mais alguma coisa que o Copiloto deve saber?
+                </label>
+                <textarea
+                  id={`${idDaOutra}-campo`}
+                  className="admin-input admin-input--area"
+                  rows={3}
+                  value={resposta}
+                  onChange={(event) => setResposta(event.target.value)}
+                  aria-describedby={`${idDaOutra}-dica`}
+                  autoFocus={!resposta}
+                  disabled={ocupado}
+                />
+                <span id={`${idDaOutra}-dica`} className="admin-field__hint">
+                  Opcional. Vai junto com as respostas, para o que nenhuma pergunta cobre.
+                  Ex.: o varejo pede 60 dias de validade; hoje são 45.
+                </span>
+              </div>
+            ) : null}
+
+            {podeResponder && !outraAberta && !resposta ? (
+              <div className="copiloto__livre">
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setOutraAberta(true)}
+                  disabled={ocupado}
+                >
+                  Adicionar outra informação
+                </button>
+              </div>
+            ) : null}
 
             <BarraDeAcoes estado={estadoDoEnvio}>
               {podeEnviar ? (
@@ -1022,25 +1196,7 @@ export default function AbaCopiloto({
           elementos
         )}
 
-        {(estado?.mensagens || []).length > 0 ? (
-          <div className="copiloto__bloco">
-            <div className="copiloto__bloco-cabeca">
-              <h3 className="copiloto__subtitulo">Histórico da conversa</h3>
-              {podeConduzir && sessao ? (
-                <button
-                  type="button"
-                  className="admin-btn admin-btn--sm admin-btn--outline"
-                  onClick={encerrar}
-                  disabled={ocupado}
-                >
-                  <Icone icon={appIcons.done} />
-                  {emAcao === 'encerrar' ? 'Encerrando...' : 'Encerrar conversa'}
-                </button>
-              ) : null}
-            </div>
-            <Conversa mensagens={estado.mensagens} />
-          </div>
-        ) : null}
+        <Conversa mensagens={estado?.mensagens || []} />
       </div>
 
       <AdminToast toast={toast} />
