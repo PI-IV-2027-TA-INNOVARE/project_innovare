@@ -745,6 +745,12 @@ describe('OportunidadePage', () => {
     )
     await user.click(screen.getByRole('button', { name: /registrar decisão/i }))
 
+    expect(api.registrarDecisao).not.toHaveBeenCalled()
+
+    const confirmacao = await screen.findByRole('dialog', { name: /registrar a decisão: continuar/i })
+    expect(confirmacao).toHaveTextContent(/recebe um aviso por e-mail, sem a justificativa/i)
+    await user.click(within(confirmacao).getByRole('button', { name: /confirmar e registrar/i }))
+
     expect(api.registrarDecisao).toHaveBeenCalledWith('OP-2026-014', {
       tipo: 'continuar',
       justificativa: 'Maturidade suficiente e equipe coberta.',
@@ -763,7 +769,7 @@ describe('OportunidadePage', () => {
     entrarComo('supervisor', 'Rafael Antunes')
     renderApp('/oportunidades/OP-2026-014')
 
-    const link = await screen.findByRole('link', { name: /relatório/i })
+    const link = await screen.findByRole('link', { name: 'Relatório da oportunidade' })
 
     expect(link).toHaveAttribute('href', '/oportunidades/OP-2026-014/relatorio')
   })

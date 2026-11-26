@@ -241,7 +241,9 @@ describe('OportunidadePage — do Copiloto ao elemento da proposta', () => {
     renderPagina()
 
     await userEvent.click(await screen.findByRole('button', { name: /^copiloto/i }))
-    await userEvent.click(await screen.findByRole('button', { name: /editar na proposta/i }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /editar na proposta \(metodologia\)/i }),
+    )
 
     const campo = await screen.findByLabelText(/metodologia/i)
 

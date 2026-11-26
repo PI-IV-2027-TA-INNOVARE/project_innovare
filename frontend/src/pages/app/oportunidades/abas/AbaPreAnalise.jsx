@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminModal from '../../../../components/console/AdminModal'
 import VerDetalhes from '../../../../components/console/VerDetalhes'
@@ -97,7 +97,9 @@ export function primeiraFrase(texto) {
 
 const lacunasPorExtenso = (total) => `${total} ${total === 1 ? 'lacuna' : 'lacunas'}`
 
-function Dimensao({ dimensao, lacunas }) {
+const comoFrase = (texto) => `${texto.charAt(0).toUpperCase()}${texto.slice(1)}.`
+
+function Dimensao({ dimensao, lacunas, aoVerLacunas }) {
   const { frase, resto } = primeiraFrase(dimensao.avaliacao)
   const temDetalhe = Boolean(resto) || dimensao.evidencias?.length > 0
 
@@ -110,11 +112,23 @@ function Dimensao({ dimensao, lacunas }) {
         </span>
       </div>
 
+      {dimensao.nivel_significado ? (
+        <p className="preanalise__nivel-significado">
+          {comoFrase(dimensao.nivel_significado)}
+        </p>
+      ) : null}
+
       <p className="preanalise__avaliacao">{frase}</p>
 
       {lacunas.length > 0 ? (
         <p className="preanalise__dimensao-lacunas">
-          {lacunasPorExtenso(lacunas.length)} em O que melhorar
+          {aoVerLacunas ? (
+            <button type="button" className="link-button" onClick={aoVerLacunas}>
+              {lacunasPorExtenso(lacunas.length)} em O que melhorar
+            </button>
+          ) : (
+            `${lacunasPorExtenso(lacunas.length)} em O que melhorar`
+          )}
         </p>
       ) : null}
 
@@ -216,6 +230,18 @@ function Comparacao({ comparacao, versaoAtual }) {
 const recomendacoesPorExtenso = (total) =>
   `${total} ${total === 1 ? 'recomendação' : 'recomendações'}`
 
+function semResultado(rodada) {
+  const motivo = rodada.status === 'erro' ? MOTIVOS_DE_FALHA_DA_PREANALISE[rodada.erro] : ''
+
+  return motivo ? `Não produziu resultado: ${motivo}` : 'Sem resultado'
+}
+
+function maisRecenteConcluida(rodadas) {
+  return rodadas
+    .filter((rodada) => rodada.status === 'ok' && !rodada.atual)
+    .sort((a, b) => Date.parse(b.executada_em) - Date.parse(a.executada_em))[0]
+}
+
 function HistoricoDePreAnalises({ rodadas, aoVer }) {
   if (rodadas.length < 2) return null
 
@@ -242,12 +268,14 @@ function HistoricoDePreAnalises({ rodadas, aoVer }) {
                     ? `${lacunasPorExtenso(rodada.lacunas)} · ${rodada.recomendacoes_acatadas} de ${
                         rodada.recomendacoes
                       } ${rodada.recomendacoes === 1 ? 'recomendação acatada' : 'recomendações acatadas'}`
-                    : 'Sem resultado'}
+                    : semResultado(rodada)}
                 </span>
               </div>
 
               {rodada.atual ? (
-                <span className="proposta__selo">Atual</span>
+                <span className="proposta__selo">
+                  {rodada.status === 'ok' ? 'Atual' : 'Mais recente'}
+                </span>
               ) : (
                 <button
                   type="button"
@@ -267,52 +295,71 @@ function HistoricoDePreAnalises({ rodadas, aoVer }) {
   )
 }
 
-function RodadaAnterior({ analise, onFechar }) {
+function ConteudoDaRodada({ analise }) {
   const dimensoes = analise.dimensoes || []
   const lacunas = analise.lacunas || []
+  const motivo = analise.status === 'erro' ? MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro] : ''
 
+  return (
+    <div className="preanalise__corpo">
+      {analise.status === 'erro' ? (
+        <div className="admin-callout admin-callout--alerta" role="note">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">
+            Esta execução não produziu resultado{motivo ? `: ${motivo}` : ''}.
+          </p>
+        </div>
+      ) : null}
+
+      {analise.sintese ? <p className="preanalise__sintese">{analise.sintese}</p> : null}
+      {dimensoes.length > 0 ? <Resumo dimensoes={dimensoes} /> : null}
+
+      {analise.comparacao ? (
+        <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} />
+      ) : null}
+
+      <Resultado
+        dimensoes={dimensoes}
+        lacunas={lacunas}
+        recomendacoes={analise.recomendacoes || []}
+        podeExecutar={false}
+      />
+    </div>
+  )
+}
+
+function RodadaAnterior({ analise, onFechar }) {
   return (
     <AdminModal
       title={`Pré-análise de ${formatarData(analise.executada_em)}`}
       description={`Proposta na versão ${analise.versao_proposta} · critérios ${analise.versao_criterios}. Somente leitura: as recomendações se marcam na pré-análise atual.`}
       onClose={onFechar}
-      size="lg"
+      size="xl"
       footer={
         <button type="button" className="admin-btn admin-btn--outline" onClick={onFechar}>
           Fechar
         </button>
       }
     >
-      <div className="preanalise__corpo">
-        {analise.sintese ? <p className="preanalise__sintese">{analise.sintese}</p> : null}
-        {dimensoes.length > 0 ? <Resumo dimensoes={dimensoes} /> : null}
-
-        {analise.comparacao ? (
-          <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} />
-        ) : null}
-
-        {dimensoes.length > 0 ? (
-          <div className="preanalise__bloco">
-            <h3 className="preanalise__subtitulo">Dimensões avaliadas</h3>
-            <ul className="preanalise__dimensoes">
-              {dimensoes.map((dimensao) => (
-                <Dimensao
-                  key={dimensao.id_dimensao}
-                  dimensao={dimensao}
-                  lacunas={lacunas.filter((lacuna) => lacuna.campo_afetado === dimensao.dimensao)}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <OQueMelhorar
-          lacunas={lacunas}
-          recomendacoes={analise.recomendacoes || []}
-          podeExecutar={false}
-        />
-      </div>
+      <ConteudoDaRodada analise={analise} />
     </AdminModal>
+  )
+}
+
+function UltimoResultadoValido({ analise }) {
+  const id = useId()
+
+  return (
+    <section className="preanalise__valida" aria-labelledby={id}>
+      <h3 id={id} className="preanalise__subtitulo">
+        Último resultado válido, de {formatarData(analise.executada_em)}
+      </h3>
+      <p className="preanalise__versoes">
+        Somente leitura. É o resultado mais recente que terminou · critérios{' '}
+        {analise.versao_criterios} · proposta na versão {analise.versao_proposta}.
+      </p>
+      <ConteudoDaRodada analise={analise} />
+    </section>
   )
 }
 
@@ -342,11 +389,108 @@ function Recomendacoes({ itens, podeExecutar, ocupado, aoAlternar }) {
   )
 }
 
-function OQueMelhorar({ lacunas, recomendacoes, ...acoes }) {
+const OUTRAS_LACUNAS = 'outras'
+
+const OUTRAS_RECOMENDACOES = 'recomendacoes'
+
+const contar = (total, singular, plural) => `${total} ${total === 1 ? singular : plural}`
+
+function acatadasPorExtenso(recomendacoes) {
+  const acatadas = recomendacoes.filter((item) => item.acatada).length
+  const total = recomendacoes.length
+
+  return `${acatadas} de ${total} ${total === 1 ? 'acatada' : 'acatadas'}`
+}
+
+function gruposPorDimensao(dimensoes, lacunas, recomendacoes) {
   const { grupos, soltas } = agruparPorLacuna(lacunas, recomendacoes)
+  const avaliadas = dimensoes.map((dimensao) => dimensao.dimensao)
+  const ordem = [...new Set([...avaliadas, ...Object.keys(ROTULOS_DAS_DIMENSOES)])]
+  const porChave = new Map()
+
+  for (const grupo of grupos) {
+    const campo = grupo.lacuna.campo_afetado
+    const chave = ordem.includes(campo) ? campo : OUTRAS_LACUNAS
+
+    if (!porChave.has(chave)) porChave.set(chave, [])
+    porChave.get(chave).push(grupo)
+  }
+
+  const daDimensao = [...porChave.keys()]
+    .sort((a, b) => (a === OUTRAS_LACUNAS) - (b === OUTRAS_LACUNAS) || ordem.indexOf(a) - ordem.indexOf(b))
+    .map((chave) => {
+      const itens = porChave.get(chave)
+      const avaliada = dimensoes.find((dimensao) => dimensao.dimensao === chave)
+      const daChave = itens.flatMap((item) => item.recomendacoes)
+      const partes = [contar(itens.length, 'lacuna', 'lacunas')]
+
+      if (daChave.length > 0) partes.push(acatadasPorExtenso(daChave))
+
+      return {
+        chave,
+        titulo:
+          chave === OUTRAS_LACUNAS
+            ? 'Outras lacunas'
+            : ROTULOS_DAS_DIMENSOES[chave] || avaliada?.dimensao_rotulo || chave,
+        nivel: avaliada ? { id: avaliada.nivel, rotulo: rotuloDoNivel(avaliada) } : null,
+        resumo: partes.join(' · '),
+        itens,
+      }
+    })
+
+  if (soltas.length > 0) {
+    daDimensao.push({
+      chave: OUTRAS_RECOMENDACOES,
+      titulo: 'Outras recomendações',
+      nivel: null,
+      resumo: `${contar(soltas.length, 'recomendação', 'recomendações')} · ${acatadasPorExtenso(soltas)}`,
+      soltas,
+    })
+  }
+
+  return daDimensao
+}
+
+function GrupoDoQueMelhorar({ id, grupo, aberto, aoAlternar, children }) {
+  const conteudo = `${id}-conteudo`
+
+  return (
+    <li id={id} className="preanalise__melhoria">
+      <h4 className="preanalise__melhoria-titulo">
+        <button
+          type="button"
+          className="preanalise__melhoria-botao"
+          aria-expanded={aberto}
+          aria-controls={conteudo}
+          onClick={aoAlternar}
+        >
+          <Icone icon={aberto ? appIcons.disclosure : appIcons.next} />
+          <span className="preanalise__melhoria-nome">{grupo.titulo}</span>
+          {grupo.nivel ? (
+            <>
+              {' · '}
+              <span className={`preanalise__nivel preanalise__nivel--${grupo.nivel.id}`}>
+                {grupo.nivel.rotulo}
+              </span>
+            </>
+          ) : null}
+          {' · '}
+          <span className="preanalise__melhoria-resumo">{grupo.resumo}</span>
+        </button>
+      </h4>
+
+      <div id={conteudo} className="preanalise__melhoria-conteudo" hidden={!aberto}>
+        {children}
+      </div>
+    </li>
+  )
+}
+
+function OQueMelhorar({ dimensoes = [], lacunas, recomendacoes, abertos, aoAlternarGrupo, idDoGrupo, ...acoes }) {
+  const grupos = gruposPorDimensao(dimensoes, lacunas, recomendacoes)
   const acatadas = recomendacoes.filter((item) => item.acatada).length
 
-  if (grupos.length === 0 && soltas.length === 0) return null
+  if (grupos.length === 0) return null
 
   return (
     <div className="preanalise__bloco">
@@ -359,44 +503,110 @@ function OQueMelhorar({ lacunas, recomendacoes, ...acoes }) {
         ) : null}
       </h3>
 
-      {grupos.length > 0 ? (
-        <ul className="preanalise__grupos">
-          {grupos.map(({ lacuna, recomendacoes: daLacuna }) => (
-            <li key={lacuna.id_lacuna} className="preanalise__grupo">
-              <div className="preanalise__grupo-cabeca">
-                {ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado] ? (
-                  <span className="preanalise__grupo-dimensao">
-                    {ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado]}
-                  </span>
-                ) : null}
-                <span
-                  className={`preanalise__criterio${
-                    lacuna.criterio_codigo ? '' : ' preanalise__criterio--sem-evidencia'
-                  }`}
-                >
-                  {rotuloDoCriterio(lacuna)}
-                </span>
-              </div>
+      <ul className="preanalise__melhorias">
+        {grupos.map((grupo) => (
+          <GrupoDoQueMelhorar
+            key={grupo.chave}
+            id={idDoGrupo(grupo.chave)}
+            grupo={grupo}
+            aberto={abertos.has(grupo.chave)}
+            aoAlternar={() => aoAlternarGrupo(grupo.chave)}
+          >
+            {grupo.soltas ? (
+              <Recomendacoes itens={grupo.soltas} {...acoes} />
+            ) : (
+              <ul className="preanalise__grupos">
+                {grupo.itens.map(({ lacuna, recomendacoes: daLacuna }) => (
+                  <li key={lacuna.id_lacuna} className="preanalise__grupo">
+                    <div className="preanalise__grupo-cabeca">
+                      <span
+                        className={`preanalise__criterio${
+                          lacuna.criterio_codigo ? '' : ' preanalise__criterio--sem-evidencia'
+                        }`}
+                      >
+                        {rotuloDoCriterio(lacuna)}
+                      </span>
+                    </div>
 
-              <p className="preanalise__grupo-lacuna">{lacuna.descricao}</p>
+                    <p className="preanalise__grupo-lacuna">{lacuna.descricao}</p>
 
-              {daLacuna.length > 0 ? (
-                <Recomendacoes itens={daLacuna} {...acoes} />
-              ) : (
-                <p className="preanalise__sem-recomendacao">{SEM_RECOMENDACAO}</p>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {soltas.length > 0 ? (
-        <>
-          <p className="preanalise__rotulo">Outras recomendações</p>
-          <Recomendacoes itens={soltas} {...acoes} />
-        </>
-      ) : null}
+                    {daLacuna.length > 0 ? (
+                      <Recomendacoes itens={daLacuna} {...acoes} />
+                    ) : (
+                      <p className="preanalise__sem-recomendacao">{SEM_RECOMENDACAO}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </GrupoDoQueMelhorar>
+        ))}
+      </ul>
     </div>
+  )
+}
+
+function Resultado({ dimensoes, lacunas, recomendacoes, ...acoes }) {
+  const prefixo = useId()
+  const [abertos, setAbertos] = useState(() => new Set())
+  const [alvo, setAlvo] = useState(null)
+
+  const idDoGrupo = (chave) => `${prefixo}-melhorar-${chave}`
+
+  useEffect(() => {
+    if (!alvo) return
+
+    const grupo = document.getElementById(`${prefixo}-melhorar-${alvo}`)
+
+    grupo?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    grupo?.querySelector('button')?.focus({ preventScroll: true })
+    setAlvo(null)
+  }, [alvo, prefixo])
+
+  const alternarGrupo = (chave) => {
+    setAbertos((atuais) => {
+      const novos = new Set(atuais)
+
+      if (novos.has(chave)) novos.delete(chave)
+      else novos.add(chave)
+
+      return novos
+    })
+  }
+
+  const abrirGrupo = (chave) => {
+    setAbertos((atuais) => new Set(atuais).add(chave))
+    setAlvo(chave)
+  }
+
+  return (
+    <>
+      {dimensoes.length > 0 ? (
+        <div className="preanalise__bloco">
+          <h3 className="preanalise__subtitulo">Dimensões avaliadas</h3>
+          <ul className="preanalise__dimensoes">
+            {dimensoes.map((dimensao) => (
+              <Dimensao
+                key={dimensao.id_dimensao}
+                dimensao={dimensao}
+                lacunas={lacunas.filter((lacuna) => lacuna.campo_afetado === dimensao.dimensao)}
+                aoVerLacunas={() => abrirGrupo(dimensao.dimensao)}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <OQueMelhorar
+        dimensoes={dimensoes}
+        lacunas={lacunas}
+        recomendacoes={recomendacoes}
+        abertos={abertos}
+        aoAlternarGrupo={alternarGrupo}
+        idDoGrupo={idDoGrupo}
+        {...acoes}
+      />
+    </>
   )
 }
 
@@ -439,9 +649,33 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
   const [ocupado, setOcupado] = useState('')
   const [rodadas, setRodadas] = useState([])
   const [rodadaAberta, setRodadaAberta] = useState(null)
+  const [ultimaValida, setUltimaValida] = useState(null)
 
   const idDaAtual = analise?.id_pre_analise
   const acatadasDaAtual = (analise?.recomendacoes || []).filter((item) => item.acatada).length
+  const idDaUltimaValida =
+    analise?.status === 'erro' ? maisRecenteConcluida(rodadas)?.id_pre_analise : undefined
+
+  useEffect(() => {
+    if (!idDaUltimaValida) {
+      setUltimaValida(null)
+      return undefined
+    }
+
+    let ativo = true
+
+    obterPreAnaliseDaRodada(oportunidadeId, idDaUltimaValida)
+      .then((dados) => {
+        if (ativo) setUltimaValida(dados)
+      })
+      .catch(() => {
+        if (ativo) setUltimaValida(null)
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [oportunidadeId, idDaUltimaValida])
 
   useEffect(() => {
     if (!idDaAtual) return undefined
@@ -719,8 +953,8 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
                 className="admin-btn admin-btn--outline"
                 to={`/oportunidades/${oportunidadeId}/relatorio/pre-analise`}
               >
-                <Icone icon={appIcons.export} />
-                Gerar relatório
+                <Icone icon={appIcons.view} />
+                Relatório da pré-análise
               </Link>
             ) : null}
 
@@ -787,6 +1021,8 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
           </div>
         ) : null}
 
+        {falhou && ultimaValida ? <UltimoResultadoValido analise={ultimaValida} /> : null}
+
         {analise.sintese || dimensoes.length > 0 ? (
           <div className="preanalise__abertura">
             <h3 className="preanalise__subtitulo">Em resumo</h3>
@@ -799,24 +1035,8 @@ export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPa
 
         {analise.comparacao ? <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} /> : null}
 
-        {dimensoes.length > 0 ? (
-          <div className="preanalise__bloco">
-            <h3 className="preanalise__subtitulo">Dimensões avaliadas</h3>
-            <ul className="preanalise__dimensoes">
-              {dimensoes.map((dimensao) => (
-                <Dimensao
-                  key={dimensao.id_dimensao}
-                  dimensao={dimensao}
-                  lacunas={lacunas.filter(
-                    (lacuna) => lacuna.campo_afetado === dimensao.dimensao,
-                  )}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <OQueMelhorar
+        <Resultado
+          dimensoes={dimensoes}
           lacunas={lacunas}
           recomendacoes={recomendacoes}
           podeExecutar={podeExecutar}

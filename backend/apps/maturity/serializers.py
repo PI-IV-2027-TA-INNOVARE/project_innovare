@@ -12,6 +12,7 @@ from apps.accounts.services.nomes import nome_de_quem_executou
 from apps.ai.models import StatusExecucao
 from apps.copilot.serializers import LacunaSerializer
 from apps.maturity.models import (
+    SIGNIFICADO_DO_NIVEL,
     CriterioPreAnalise,
     DimensaoMaturidade,
     NivelDimensao,
@@ -59,6 +60,7 @@ class PreAnaliseDimensaoSerializer(serializers.ModelSerializer):
         source='get_dimensao_display', read_only=True
     )
     nivel_rotulo = serializers.CharField(source='get_nivel_display', read_only=True)
+    nivel_significado = serializers.SerializerMethodField()
 
     class Meta:
         model = PreAnaliseDimensao
@@ -69,10 +71,14 @@ class PreAnaliseDimensaoSerializer(serializers.ModelSerializer):
             'avaliacao',
             'nivel',
             'nivel_rotulo',
+            'nivel_significado',
             'evidencias',
             'ordem',
         ]
         read_only_fields = fields
+
+    def get_nivel_significado(self, instancia) -> str:
+        return SIGNIFICADO_DO_NIVEL.get(instancia.nivel, '')
 
 
 def rotulo_do_criterio(criterio) -> str | None:
@@ -197,6 +203,7 @@ class RodadaDaPreAnaliseSerializer(serializers.ModelSerializer):
             'versao_criterios',
             'status',
             'status_rotulo',
+            'erro',
             'lacunas',
             'recomendacoes',
             'recomendacoes_acatadas',
@@ -209,13 +216,14 @@ class RodadaDaPreAnaliseSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instancia):
         """A execucao que passou do teto sai como erro, como na rodada inteira."""
-        from apps.maturity.services import interrompida
+        from apps.maturity.services import ERRO_INTERROMPIDA, interrompida
 
         dados = super().to_representation(instancia)
 
         if interrompida(instancia):
             dados['status'] = StatusExecucao.ERRO
             dados['status_rotulo'] = StatusExecucao.ERRO.label
+            dados['erro'] = ERRO_INTERROMPIDA
 
         return dados
 

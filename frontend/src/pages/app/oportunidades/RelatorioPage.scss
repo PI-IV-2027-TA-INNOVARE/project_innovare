@@ -17,7 +17,7 @@
   max-width: 900px;
   padding: calc(var(--admin-pad) * 1.5);
   background: var(--bg-card);
-  border: 1px solid var(--admin-card-border);
+  border: 1px solid var(--admin-card-edge);
   border-radius: var(--admin-radius);
   box-shadow: var(--admin-glow-soft);
 }
@@ -221,6 +221,7 @@
     --text-primary: #000;
     --text-muted: #444;
     --admin-card-border: #bbb;
+    --admin-card-edge: #bbb;
     --bg-card: #fff;
     --admin-glow-soft: none;
 

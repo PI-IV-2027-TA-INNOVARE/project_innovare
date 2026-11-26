@@ -33,6 +33,14 @@ class NivelDimensao(models.TextChoices):
     FRAGIL = 'fragil', 'Frágil'
 
 
+SIGNIFICADO_DO_NIVEL = {
+    NivelDimensao.CONSOLIDADA: 'o que a dimensão pede está demonstrado na proposta',
+    NivelDimensao.EM_DESENVOLVIMENTO: 'está em parte demonstrado, com lacunas a fechar',
+    NivelDimensao.FRAGIL: 'está ausente ou pouco demonstrado',
+}
+"""O que cada nivel quer dizer. A tela da pre-analise e o relatorio leem daqui."""
+
+
 class OrigemRecomendacao(models.TextChoices):
     COPILOTO = 'copiloto', 'Copiloto'
     PRE_ANALISE = 'pre_analise', 'Pré-análise'

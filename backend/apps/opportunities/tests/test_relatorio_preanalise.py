@@ -236,6 +236,20 @@ class ComoLerTests(RelatorioPreAnaliseBaseTests):
         self.assertIn('Frágil', texto)
         self.assertIn('não é nota, parecer nem decisão da FAPESP', texto)
 
+    def test_o_significado_dos_niveis_e_o_mesmo_da_tela(self):
+        self.importar()
+        self.analisar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_ler'])
+
+        self.assertIn(
+            'Cada dimensão recebe um de três níveis. Consolidada: o que a dimensão '
+            'pede está demonstrado na proposta. Em desenvolvimento: está em parte '
+            'demonstrado, com lacunas a fechar. Frágil: está ausente ou pouco '
+            'demonstrado.',
+            texto,
+        )
+
     def test_cita_a_versao_dos_criterios_analisada(self):
         self.importar()
         analise = self.analisar()

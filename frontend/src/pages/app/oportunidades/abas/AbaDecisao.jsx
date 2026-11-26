@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import AdminModal from '../../../../components/console/AdminModal'
 import { Icone, appIcons } from '../../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../../lib/people'
+import { listarPreAnalises, obterProposta } from '../../../../services/pdConnectApi'
 import { situacaoEncerrada } from '../etapas'
 import { DECISOES, decisaoLabel } from '../oportunidadesData'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
@@ -21,6 +23,84 @@ function bloqueioDa(situacao) {
     motivo: 'Continuar e Revisar ficam liberados quando a pré-análise termina.',
     etapa: 'pre-analise',
   }
+}
+
+const SEM_VOLTA = 'A decisão não pode ser refeita, e as etapas ficam só para leitura.'
+
+const AVISO_SEM_JUSTIFICATIVA = 'A empresa demandante recebe um aviso por e-mail, sem a justificativa.'
+
+const JUSTIFICATIVA_VAI_PARA_A_EMPRESA =
+  'Este texto vai para a empresa demandante, na plataforma e por e-mail.'
+
+function consequencias(tipo, comEmpresa) {
+  if (tipo === 'revisar') {
+    return [
+      'A oportunidade volta para complementação ou correção antes de seguir.',
+      comEmpresa ? JUSTIFICATIVA_VAI_PARA_A_EMPRESA : null,
+    ].filter(Boolean)
+  }
+
+  return [
+    tipo === 'continuar'
+      ? 'A oportunidade segue como apta a avançar, e o fluxo dela termina aqui.'
+      : 'A oportunidade sai do fluxo ativo, e o histórico é preservado.',
+    SEM_VOLTA,
+    comEmpresa ? AVISO_SEM_JUSTIFICATIVA : null,
+  ].filter(Boolean)
+}
+
+const formatarData = (valor) => new Date(valor).toLocaleDateString('pt-BR')
+
+function maisRecenteConcluida(rodadas) {
+  return (rodadas || [])
+    .filter((rodada) => rodada.status === 'ok')
+    .sort((a, b) => Date.parse(b.executada_em) - Date.parse(a.executada_em))[0]
+}
+
+function AvisoPropostaMudou({ oportunidadeId, irPara }) {
+  const [base, setBase] = useState(null)
+
+  useEffect(() => {
+    let ativo = true
+
+    Promise.all([obterProposta(oportunidadeId), listarPreAnalises(oportunidadeId)])
+      .then(([proposta, rodadas]) => {
+        const valida = maisRecenteConcluida(rodadas)
+        const salvaDepois =
+          valida && Date.parse(proposta?.atualizado_em) > Date.parse(valida.executada_em)
+
+        if (ativo) setBase(salvaDepois ? valida : null)
+      })
+      .catch(() => {
+        if (ativo) setBase(null)
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [oportunidadeId])
+
+  if (!base) return null
+
+  return (
+    <div className="admin-callout admin-callout--alerta" role="note">
+      <Icone icon={appIcons.warning} className="admin-callout__icon" />
+      <p className="admin-callout__text">
+        A proposta foi salva depois da pré-análise de {formatarData(base.executada_em)}, que
+        leu o texto anterior. Reavalie antes de decidir, para a decisão se apoiar na proposta
+        atual.
+      </p>
+      {irPara ? (
+        <button
+          type="button"
+          className="admin-btn admin-btn--sm admin-btn--outline"
+          onClick={() => irPara('pre-analise')}
+        >
+          Ir para Pré-análise
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 function DecisaoRegistrada({ decisao, titulo, aviso = null }) {
@@ -64,10 +144,12 @@ export default function AbaDecisao({
   irPara,
   observacoes = [],
   aoRegistrarObservacao,
+  comEmpresa = true,
 }) {
   const [tipo, setTipo] = useState('')
   const [justificativa, setJustificativa] = useState('')
   const [erro, setErro] = useState('')
+  const [confirmando, setConfirmando] = useState(false)
 
   const encerrada = situacaoEncerrada(situacao)
 
@@ -132,14 +214,19 @@ export default function AbaDecisao({
       return
     }
 
+    setConfirmando(true)
+  }
+
+  const confirmar = () => {
+    setConfirmando(false)
     onRegistrar(tipo, justificativa.trim())
   }
+
+  const opcaoEscolhida = DECISOES.find((opcao) => opcao.id === tipo)
 
   return (
     <>
       {decisao ? <DecisaoRegistrada decisao={decisao} titulo="Última decisão" /> : null}
-
-      {observacoesDaAvaliacao}
 
       <section className="perfil-card">
         <header className="perfil-card__header">
@@ -154,6 +241,10 @@ export default function AbaDecisao({
 
         <form className="perfil-card__body" onSubmit={enviar} noValidate>
           {aviso}
+
+          {situacao === 'aguardando_decisao' ? (
+            <AvisoPropostaMudou oportunidadeId={oportunidadeId} irPara={irPara} />
+          ) : null}
 
           {bloqueio ? (
             <EtapaBloqueada motivo={bloqueio.motivo} etapa={bloqueio.etapa} irPara={irPara} />
@@ -192,7 +283,11 @@ export default function AbaDecisao({
               className="admin-input admin-input--area"
               rows={4}
               value={justificativa}
-              aria-describedby={tipo === 'revisar' ? 'dica-justificativa' : undefined}
+              aria-describedby={
+                tipo === 'revisar' && comEmpresa
+                  ? 'dica-minimo-justificativa dica-justificativa'
+                  : 'dica-minimo-justificativa'
+              }
               onChange={(event) => {
                 setJustificativa(event.target.value)
                 setErro('')
@@ -201,10 +296,14 @@ export default function AbaDecisao({
             />
           </label>
 
-          {tipo === 'revisar' ? (
+          <p id="dica-minimo-justificativa" className="admin-field__hint">
+            Mínimo de 10 caracteres.
+          </p>
+
+          {tipo === 'revisar' && comEmpresa ? (
             <p id="dica-justificativa" className="admin-field__hint">
-              Este texto vai para a empresa demandante, na plataforma e por e-mail.
-              Não cite pessoas da equipe nem informação interna.
+              {JUSTIFICATIVA_VAI_PARA_A_EMPRESA} Não cite pessoas da equipe nem informação
+              interna.
             </p>
           ) : null}
 
@@ -220,6 +319,36 @@ export default function AbaDecisao({
           </div>
         </form>
       </section>
+
+      {observacoesDaAvaliacao}
+
+      {confirmando && opcaoEscolhida ? (
+        <AdminModal
+          title={`Registrar a decisão: ${opcaoEscolhida.label}?`}
+          onClose={() => setConfirmando(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="admin-btn admin-btn--outline"
+                onClick={() => setConfirmando(false)}
+              >
+                Voltar
+              </button>
+              <button type="button" className="admin-btn" onClick={confirmar}>
+                <Icone icon={appIcons.done} />
+                Confirmar e registrar
+              </button>
+            </>
+          }
+        >
+          <div className="decisao-confirmacao">
+            {consequencias(tipo, comEmpresa).map((frase) => (
+              <p key={frase}>{frase}</p>
+            ))}
+          </div>
+        </AdminModal>
+      ) : null}
     </>
   )
 }

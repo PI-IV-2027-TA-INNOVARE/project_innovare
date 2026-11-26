@@ -494,3 +494,74 @@ describe('pedido de exclusão em destaque — WCAG 2.2 AA', () => {
     })
   }
 })
+
+/**
+ * O cartao branco sobre o fundo creme da pagina dava 1,07:1, e a borda bege,
+ * 1,29:1: o usuario nao distinguia o cartao do fundo e as vezes nem percebia
+ * que havia um cartao. As cores da marca ficam como estao. O contorno do
+ * cartao mistura na borda o azul-marinho da marca, entao acompanha o que o
+ * Administrador escolher na Aparencia, e os blocos de dentro do cartao seguem
+ * com a borda discreta de antes.
+ */
+describe('contorno dos cartões', () => {
+  const CONTORNO = /--admin-card-edge:\s*color-mix\(in srgb, var\(--accent-secondary\) (\d+)%, var\(--border-color\)\);/
+
+  const CARTOES = [
+    ['./components/_console.scss', '.perfil-card'],
+    ['./components/_console.scss', '.admin-table-wrap'],
+    ['../pages/app/oportunidades/OportunidadesPage.scss', '.filtros-oportunidades'],
+    ['../pages/app/indicadores/IndicadoresPage.scss', '.indicadores-resumo__item'],
+    ['../pages/app/perfil/PerfilPage.scss', '.perfil-completude'],
+    ['../pages/admin/AdminPage.scss', '.tokens-group'],
+    ['../pages/app/oportunidades/RelatorioPage.scss', '.relatorio-documento'],
+  ]
+
+  function cor(valor) {
+    const rgba = valor.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/)
+
+    if (rgba) return { canais: rgba.slice(1, 4).map(Number), alfa: Number(rgba[4]) }
+
+    return { canais: [1, 3, 5].map((i) => parseInt(valor.slice(i, i + 2), 16)), alfa: 1 }
+  }
+
+  function misturaSobre(primeira, segunda, proporcao, fundo) {
+    const a = cor(primeira)
+    const b = cor(segunda)
+    const f = cor(fundo)
+    const alfa = a.alfa * proporcao + b.alfa * (1 - proporcao)
+    const canais = a.canais.map((canal, i) => {
+      const misturado = (canal * a.alfa * proporcao + b.canais[i] * b.alfa * (1 - proporcao)) / alfa
+      return Math.round(misturado * alfa + f.canais[i] * (1 - alfa))
+    })
+
+    return `#${canais.map((c) => c.toString(16).padStart(2, '0')).join('')}`
+  }
+
+  it('mistura o azul-marinho da marca na borda, sem cor nova', () => {
+    expect(console_).toMatch(CONTORNO)
+  })
+
+  for (const tema of ['light', 'dark']) {
+    it(`separa o cartão do fundo da página no tema ${tema}`, () => {
+      const paleta = getDefaultBranding(tema)
+      const proporcao = Number(console_.match(CONTORNO)[1]) / 100
+      const contorno = misturaSobre(paleta.accentSecondary, paleta.borderColor, proporcao, paleta.bgPrimary)
+      const razao = contraste(contorno, paleta.bgPrimary)
+
+      expect(razao, `${contorno} sobre ${paleta.bgPrimary} = ${razao.toFixed(2)}:1`).toBeGreaterThanOrEqual(1.8)
+    })
+  }
+
+  it.each(CARTOES)('%s %s usa o contorno do cartão', (arquivo, seletor) => {
+    const scss = fonte(arquivo)
+    const inicio = scss.indexOf('\n' + seletor + ' {')
+    const bloco = scss.slice(inicio, scss.indexOf('\n}', inicio))
+
+    expect(inicio).toBeGreaterThanOrEqual(0)
+    expect(bloco).toMatch(/border:\s*1px solid var\(--admin-card-edge\)/)
+  })
+
+  it('na impressão do relatório o contorno fica cinza, como a borda', () => {
+    expect(fonte('../pages/app/oportunidades/RelatorioPage.scss')).toMatch(/--admin-card-edge:\s*#bbb;/)
+  })
+})

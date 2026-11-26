@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -11,10 +11,15 @@ const estilos = readFileSync(
   'utf8',
 )
 
-const api = vi.hoisted(() => ({ obterProposta: null, registrarObservacao: null }))
+const api = vi.hoisted(() => ({
+  obterProposta: null,
+  registrarObservacao: null,
+  listarPreAnalises: null,
+}))
 
 vi.mock('../../../../services/pdConnectApi', () => ({
   obterProposta: (...args) => api.obterProposta(...args),
+  listarPreAnalises: (...args) => api.listarPreAnalises(...args),
   registrarObservacao: (...args) => api.registrarObservacao(...args),
 }))
 
@@ -53,6 +58,7 @@ beforeEach(() => {
   onRegistrar = vi.fn()
   aoRegistrarObservacao = vi.fn()
   api.obterProposta = vi.fn().mockResolvedValue(PROPOSTA_REVISADA)
+  api.listarPreAnalises = vi.fn().mockResolvedValue([])
   api.registrarObservacao = vi.fn().mockResolvedValue({
     ocorrido_em: '2026-09-22T10:00:00.000Z',
     texto: 'Laudo do lote de verão confirma a contaminação.',
@@ -75,6 +81,8 @@ function renderizar(props = {}) {
 
 const justificativa = () => screen.getByLabelText('Justificativa')
 const registrar = () => screen.getByRole('button', { name: /registrar decisão/i })
+const confirmar = async (user) =>
+  user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /confirmar e registrar/i }))
 const novaObservacao = () => screen.getByLabelText('Nova observação')
 const registrarObservacao = () => screen.getByRole('button', { name: /registrar observação/i })
 
@@ -284,6 +292,7 @@ describe('AbaDecisao — o que o registro exige', () => {
     await user.click(screen.getByRole('radio', { name: /revisar/i }))
     await user.type(justificativa(), '   Faltam resultados esperados.   ')
     await user.click(registrar())
+    await confirmar(user)
 
     expect(onRegistrar).toHaveBeenCalledTimes(1)
     expect(onRegistrar).toHaveBeenCalledWith(
@@ -301,6 +310,7 @@ describe('AbaDecisao — o que o registro exige', () => {
       await user.click(screen.getByRole('radio', { name: new RegExp(tipo, 'i') }))
       await user.type(justificativa(), 'Justificativa com tamanho bastante.')
       await user.click(registrar())
+      await confirmar(user)
 
       expect(onRegistrar).toHaveBeenCalledWith(tipo, expect.any(String))
       expect(onRegistrar.mock.calls[0][0]).toBe(tipo)
@@ -319,6 +329,141 @@ describe('AbaDecisao — o que o registro exige', () => {
     await user.click(screen.getByRole('radio', { name: /continuar/i }))
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Continuar e Arquivar encerram a oportunidade e nao tem volta, e o Revisar
+ * manda a justificativa para a empresa por e-mail. A decisao era gravada no
+ * primeiro clique, sem a pessoa conferir o que ia acontecer.
+ */
+describe('AbaDecisao — confirmação antes de registrar', () => {
+  async function preencher(user, tipo) {
+    await user.click(screen.getByRole('radio', { name: new RegExp(tipo, 'i') }))
+    await user.type(justificativa(), 'Justificativa com tamanho bastante.')
+    await user.click(registrar())
+  }
+
+  it('pede confirmação, e Voltar não registra', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await preencher(user, 'continuar')
+
+    const dialogo = await screen.findByRole('dialog')
+    expect(onRegistrar).not.toHaveBeenCalled()
+
+    await user.click(within(dialogo).getByRole('button', { name: /voltar/i }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(onRegistrar).not.toHaveBeenCalled()
+    expect(justificativa()).toHaveValue('Justificativa com tamanho bastante.')
+  })
+
+  it('Continuar e Arquivar dizem que encerram a oportunidade', async () => {
+    for (const tipo of ['continuar', 'arquivar']) {
+      const user = userEvent.setup()
+      const { unmount } = renderizar()
+
+      await preencher(user, tipo)
+
+      const dialogo = await screen.findByRole('dialog')
+      expect(dialogo).toHaveAccessibleName(new RegExp(tipo, 'i'))
+      expect(within(dialogo).getByText(/as etapas ficam só para leitura/i)).toBeInTheDocument()
+      expect(within(dialogo).getByText(/não pode ser refeita/i)).toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('Revisar diz que a justificativa vai para a empresa', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await preencher(user, 'revisar')
+
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText(/vai para a empresa demandante/i)).toBeInTheDocument()
+    expect(within(dialogo).queryByText(/não pode ser refeita/i)).not.toBeInTheDocument()
+  })
+
+  it('com o formulário incompleto, não abre a confirmação', async () => {
+    const user = userEvent.setup()
+    renderizar()
+
+    await user.click(registrar())
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * A acao principal da etapa vinha depois das Observacoes, e o minimo da
+ * justificativa so aparecia no erro.
+ */
+describe('AbaDecisao — o que vem primeiro', () => {
+  it('o registro da decisão vem antes das observações', () => {
+    renderizar()
+
+    const decisao = screen.getByRole('heading', { name: 'Registrar decisão' })
+    const observacoes = screen.getByRole('heading', { name: /observações da avaliação/i })
+
+    expect(decisao.compareDocumentPosition(observacoes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('diz o mínimo da justificativa antes do erro', () => {
+    renderizar()
+
+    expect(justificativa()).toHaveAccessibleDescription(/mínimo de 10 caracteres/i)
+  })
+})
+
+/**
+ * Na etapa 7 o Supervisor ainda pode mudar a proposta. A pre-analise, porem,
+ * leu o texto anterior, e nada avisava que a decisao ia se apoiar numa
+ * leitura antiga.
+ */
+describe('AbaDecisao — proposta mudou depois da pré-análise', () => {
+  const RODADAS = [
+    { id_pre_analise: 'pa-2', executada_em: '2026-11-14T12:00:00Z', status: 'erro', atual: true },
+    { id_pre_analise: 'pa-1', executada_em: '2026-11-10T12:00:00Z', status: 'ok', atual: false },
+  ]
+
+  it('avisa e leva à Pré-análise para reavaliar', async () => {
+    const irPara = vi.fn()
+    const user = userEvent.setup()
+    api.obterProposta = vi.fn().mockResolvedValue({ ...PROPOSTA_REVISADA, atualizado_em: '2026-11-12T09:00:00Z' })
+    api.listarPreAnalises = vi.fn().mockResolvedValue(RODADAS)
+
+    renderizar({ irPara })
+
+    const texto = await screen.findByText(/a proposta foi salva depois da pré-análise de 10\/11\/2026/i)
+    const aviso = texto.closest('[role="note"]')
+    expect(aviso).toHaveTextContent(/reavalie antes de decidir/i)
+
+    await user.click(within(aviso).getByRole('button', { name: /ir para pré-análise/i }))
+    expect(irPara).toHaveBeenCalledWith('pre-analise')
+  })
+
+  it('não avisa quando a proposta foi salva antes da pré-análise', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({ ...PROPOSTA_REVISADA, atualizado_em: '2026-10-31T17:14:00Z' })
+    api.listarPreAnalises = vi.fn().mockResolvedValue(RODADAS)
+
+    renderizar()
+
+    await waitFor(() => expect(api.listarPreAnalises).toHaveBeenCalled())
+    expect(screen.queryByText(/foi salva depois da pré-análise/i)).not.toBeInTheDocument()
+  })
+
+  it('depois de encerrada, não avisa: a decisão já foi tomada', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({ ...PROPOSTA_REVISADA, atualizado_em: '2026-11-12T09:00:00Z' })
+    api.listarPreAnalises = vi.fn().mockResolvedValue(RODADAS)
+
+    renderizar({ decisao: DECISAO_REGISTRADA, situacao: 'continuar' })
+
+    await screen.findByText('Decisão registrada')
+    expect(screen.queryByText(/foi salva depois da pré-análise/i)).not.toBeInTheDocument()
+    expect(api.listarPreAnalises).not.toHaveBeenCalled()
   })
 })
 

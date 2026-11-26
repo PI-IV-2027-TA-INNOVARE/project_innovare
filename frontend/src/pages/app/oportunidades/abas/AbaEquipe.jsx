@@ -94,6 +94,11 @@ function Indicacao({ membro, podeAjustar, onAjustar, ocupado }) {
         <div>
           <p className="equipe__nome">
             {membro.nome}
+            {membro.incluido ? null : (
+              <span className="status-badge status-badge--neutro equipe__inativo">
+                Fora da equipe
+              </span>
+            )}
             {membro.inativo ? (
               <span className="status-badge status-badge--inativo equipe__inativo">
                 Inativo na rede
@@ -412,8 +417,8 @@ export default function AbaEquipe({
               className="admin-btn admin-btn--outline"
               to={`/oportunidades/${oportunidadeId}/relatorio/equipe`}
             >
-              <Icone icon={appIcons.export} />
-              Gerar relatório
+              <Icone icon={appIcons.view} />
+              Relatório da equipe
             </Link>
 
             {podeConduzir ? (

@@ -158,7 +158,7 @@
   container: grupo / inline-size;
   padding: 20px;
   background: var(--bg-card);
-  border: 1px solid var(--admin-card-border);
+  border: 1px solid var(--admin-card-edge);
   border-radius: var(--admin-radius);
   box-shadow: var(--admin-glow-soft);
   transition: border-color var(--admin-motion), box-shadow var(--admin-motion);

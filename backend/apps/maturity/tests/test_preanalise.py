@@ -795,6 +795,38 @@ class ComparacaoComAAnteriorTests(PreAnaliseBaseTests):
         )
 
 
+class SignificadoDoNivelTests(PreAnaliseBaseTests):
+    """
+    A tela mostrava "Frágil" e "Em desenvolvimento" sem dizer o que cada um
+    quer dizer: so o relatorio explicava. Cada dimensao leva o significado do
+    proprio nivel, do mesmo texto que o relatorio usa.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.importar_criterios()
+
+    def test_cada_dimensao_diz_o_que_o_nivel_significa(self):
+        self.analisar(
+            provedor=ProvedorFake(
+                preanalise=_preanalise_com(
+                    {'inovacao': 'fragil', 'viabilidade': 'em_desenvolvimento', 'plano_pesquisa': 'consolidada'}
+                )
+            )
+        )
+
+        dimensoes = {
+            item['dimensao']: item['nivel_significado']
+            for item in self.client.get(self.url()).data['dimensoes']
+        }
+
+        self.assertEqual(dimensoes['inovacao'], 'está ausente ou pouco demonstrado')
+        self.assertEqual(dimensoes['viabilidade'], 'está em parte demonstrado, com lacunas a fechar')
+        self.assertEqual(
+            dimensoes['plano_pesquisa'], 'o que a dimensão pede está demonstrado na proposta'
+        )
+
+
 class TodasAsPreAnalisesTests(PreAnaliseBaseTests):
     """
     PB98: o historico de pre-analises fica todo acessivel, e nao so a ultima.
@@ -842,6 +874,20 @@ class TodasAsPreAnalisesTests(PreAnaliseBaseTests):
             resposta.data['comparacao']['anterior']['id_pre_analise'],
             str(primeira.id_pre_analise),
         )
+
+    def test_a_rodada_que_falhou_diz_o_motivo_na_lista(self):
+        """
+        A lista dizia so "Erro", e o Supervisor nao sabia por que a rodada
+        falhou: o motivo ficava gravado e so a rodada atual o mostrava.
+        """
+        self.rodada({'inovacao': 'fragil'})
+        self.analisar(provedor=ProvedorIndisponivel())
+
+        resposta = self.client.get(self.url('pre-analises'))
+
+        self.assertEqual(resposta.data[0]['status'], StatusExecucao.ERRO)
+        self.assertEqual(resposta.data[0]['erro'], 'provedor_indisponivel')
+        self.assertEqual(resposta.data[1]['erro'], '')
 
     def test_rodada_de_outra_oportunidade_responde_404(self):
         self.rodada({'inovacao': 'fragil'})

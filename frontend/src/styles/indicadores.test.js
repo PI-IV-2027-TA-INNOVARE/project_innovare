@@ -16,6 +16,27 @@ const consoleScss = readFileSync(
   'utf8'
 )
 
+/**
+ * A pagina Indicadores so tinha margem em cima e embaixo: titulo e cartoes
+ * encostavam na borda esquerda da tela. A raiz usa a mesma margem das outras
+ * paginas do console (Painel, Oportunidades, Rede, Perfil, Problemas).
+ */
+describe('margem da página Indicadores', () => {
+  const indicadoresScss = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'pages', 'app', 'indicadores', 'IndicadoresPage.scss'),
+    'utf8'
+  )
+
+  it('tem a mesma margem lateral das outras páginas', () => {
+    const inicio = indicadoresScss.indexOf('.indicadores-page {')
+    const bloco = indicadoresScss.slice(inicio, indicadoresScss.indexOf('\n}', inicio))
+
+    expect(inicio).toBeGreaterThanOrEqual(0)
+    expect(bloco).toMatch(/width:\s*100%;/)
+    expect(bloco).toMatch(/padding:\s*32px var\(--admin-gutter\) 64px;/)
+  })
+})
+
 describe('cards de indicador', () => {
   it('no celular, os cards com frase ficam um por linha', () => {
     const celular = consoleScss.slice(consoleScss.indexOf('@media (max-width: 620px)'))

@@ -367,7 +367,7 @@ export default function OportunidadePage() {
               className="admin-btn admin-btn--outline"
             >
               <Icone icon={appIcons.view} />
-              Relatório
+              Relatório da oportunidade
             </Link>
           ) : null}
         </div>
@@ -569,6 +569,7 @@ export default function OportunidadePage() {
             situacao={registro.situacao}
             podeDecidir={ehSupervisor}
             onRegistrar={registrarDecisao}
+            comEmpresa={registro.origem === 'externo'}
             irPara={irPara}
             observacoes={eventos.filter((evento) => evento.categoria === 'observacao')}
             aoRegistrarObservacao={acrescentarNaTrilha}

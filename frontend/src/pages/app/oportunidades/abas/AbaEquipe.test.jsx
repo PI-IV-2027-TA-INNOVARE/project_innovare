@@ -1,9 +1,17 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaEquipe from './AbaEquipe'
 import { ROLES } from '../../../../lib/roles'
+
+const estilos = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'OportunidadesPage.scss'),
+  'utf8',
+)
 
 /**
  * A aba tem um `Link` para o relatorio (PB77), e `Link` exige Router.
@@ -252,6 +260,47 @@ describe('AbaEquipe', () => {
     )
   })
 
+  /**
+   * Quem saia da equipe ficava com o cartao inteiro a 55% de opacidade, botao
+   * incluido: o texto caia para 2,4:1 e o "Recolocar na equipe" quase sumia.
+   * Nada dizia que a pessoa estava fora, so o apagado.
+   */
+  it('diz quem está fora da equipe e deixa o Recolocar legível', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: [{ ...EQUIPE.membros[0], incluido: false }],
+    })
+
+    renderizar()
+
+    const recolocar = await screen.findByRole('button', { name: /recolocar na equipe/i })
+    const cartao = recolocar.closest('li')
+
+    expect(within(cartao).getByText('Fora da equipe')).toBeInTheDocument()
+
+    const inicio = estilos.indexOf('\n.equipe__membro--fora {')
+    const bloco = estilos.slice(inicio, estilos.indexOf('\n}', inicio))
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).not.toMatch(/opacity/)
+
+    await userEvent.click(recolocar)
+
+    await waitFor(() =>
+      expect(api.ajustarMembroEquipe).toHaveBeenCalledWith('OP-2026-001', 10, {
+        incluido: true,
+      }),
+    )
+  })
+
+  it('quem está na equipe não leva a marca de fora', async () => {
+    renderizar()
+
+    await screen.findByRole('button', { name: /tirar da equipe/i })
+
+    expect(screen.queryByText('Fora da equipe')).not.toBeInTheDocument()
+  })
+
   it('valida a equipe e avisa que ninguém foi convocado', async () => {
     renderizar()
 
@@ -369,7 +418,7 @@ describe('AbaEquipe', () => {
     expect(screen.queryByRole('button', { name: /tirar da equipe/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /validar equipe/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/incluir alguém da rede/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /gerar relatório/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /relatório da equipe/i })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /ver a decisão/i }))
     expect(irPara).toHaveBeenCalledWith('decisao')

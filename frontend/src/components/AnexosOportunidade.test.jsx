@@ -171,6 +171,22 @@ describe('AnexosOportunidade — tela', () => {
     expect(api.enviarAnexo.mock.calls[0][1].name).toBe('foto-do-lote.png')
   })
 
+  /**
+   * O envio aceita um documento por vez. Soltando tres, so o primeiro subia e
+   * os outros sumiam sem aviso.
+   */
+  it('soltar vários arquivos de uma vez não envia nenhum e diz para mandar um por vez', async () => {
+    renderizar()
+    await screen.findByText('laudo-lote-42.pdf')
+
+    fireEvent.drop(screen.getByTestId('anexo-envio'), {
+      dataTransfer: { files: [arquivo('laudo-a.pdf'), arquivo('laudo-b.pdf')] },
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/um documento por vez/i)
+    expect(api.enviarAnexo).not.toHaveBeenCalled()
+  })
+
   it('enquanto envia, diz qual arquivo está subindo', async () => {
     const user = userEvent.setup()
     api.enviarAnexo = vi.fn(() => new Promise(() => {}))

@@ -1,6 +1,9 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import LayoutDoRelatorio, { SecaoDoRelatorio, idDaSecao } from './LayoutDoRelatorio'
 
@@ -26,6 +29,32 @@ function renderizar() {
 
 afterEach(() => {
   vi.restoreAllMocks()
+})
+
+const estilos = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'LayoutDoRelatorio.scss'),
+  'utf8',
+)
+
+/**
+ * Em tela larga o painel ficava preso a 24 px do topo, e a barra do menu, que
+ * tambem fica presa, cobre os primeiros 68 px: ao rolar, o sumario escorregava
+ * para baixo da barra e parecia descer. Ele fica logo abaixo da barra, como o
+ * menu lateral da Administracao, e rola por dentro quando nao cabe na tela.
+ */
+describe('LayoutDoRelatorio — painel preso na tela larga', () => {
+  it('o painel fica abaixo da barra do menu e rola por dentro', () => {
+    const inicio = estilos.indexOf('@media (min-width: 1200px)')
+    const largo = estilos.slice(inicio, estilos.indexOf('\n}\n', inicio))
+    const painel = largo.slice(largo.indexOf('.relatorio-painel {'))
+    const bloco = painel.slice(0, painel.indexOf('}'))
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).toMatch(/position:\s*sticky;/)
+    expect(bloco).toMatch(/top:\s*var\(--admin-nav-offset\);/)
+    expect(bloco).toMatch(/max-height:\s*calc\(100vh - var\(--admin-nav-offset\) - 24px\);/)
+    expect(bloco).toMatch(/overflow-y:\s*auto;/)
+  })
 })
 
 describe('LayoutDoRelatorio', () => {

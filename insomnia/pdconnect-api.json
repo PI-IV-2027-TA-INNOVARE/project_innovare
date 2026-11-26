@@ -1797,7 +1797,7 @@
                     ""
                   ]
                 },
-                "description": "A Pre-analise de Maturidade PIPE/FAPESP (RF09) e a reavaliacao (RF10).\n\n`POST` sempre cria uma execucao nova: a anterior fica, com a versao de\ncriterios e a versao da proposta que avaliou.\n\noperationId: oportunidades_pre_analise_retrieve"
+                "description": "A Pre-analise de Maturidade PIPE/FAPESP (RF09) e a reavaliacao (RF10).\n\n`POST` sempre cria uma execucao nova: a anterior fica, com a versao de\ncriterios e a versao da proposta que avaliou.\n\nCada dimensao traz `nivel_significado`, o que o nivel quer dizer, no mesmo texto do relatorio.\n\noperationId: oportunidades_pre_analise_retrieve"
               }
             },
             {
@@ -1837,7 +1837,7 @@
                     ""
                   ]
                 },
-                "description": "Todas as rodadas da pre-analise, e nao so a ultima (PB98). O id_pre_analise de cada uma vai na variavel pre_analise_id para abrir a rodada.\n\noperationId: oportunidades_pre_analises_list"
+                "description": "Todas as rodadas da pre-analise, e nao so a ultima (PB98). O id_pre_analise de cada uma vai na variavel pre_analise_id para abrir a rodada.\n\nCada rodada traz `erro`, o motivo da falha (vazio quando concluiu). A que passou do tempo sem terminar sai com status `erro` e `erro` = `execucao_interrompida`.\n\noperationId: oportunidades_pre_analises_list"
               }
             },
             {
@@ -1858,7 +1858,7 @@
                     ""
                   ]
                 },
-                "description": "Uma rodada antiga, com a comparacao dela com a que veio antes (PB98). O identificador e o UUID id_pre_analise que a lista devolve.\n\noperationId: oportunidades_pre_analises_retrieve"
+                "description": "Uma rodada antiga, com a comparacao dela com a que veio antes (PB98). O identificador e o UUID id_pre_analise que a lista devolve. Cada dimensao traz `nivel_significado`, como na ultima pre-analise.\n\noperationId: oportunidades_pre_analises_retrieve"
               }
             },
             {

@@ -40,13 +40,26 @@ function rotuloDePontos(total) {
   return total === 1 ? '1 ponto' : `${total} pontos`
 }
 
-function Progresso({ preenchidos, paraRevisar }) {
+function Progresso({ preenchidos, paraRevisar, irPara, podeConduzir, ocupado }) {
   return (
     <div className="copiloto__indicadores">
       <div className="copiloto__progresso">
-        <p className="copiloto__contagem">
-          {preenchidos} de {TOTAL_DE_ELEMENTOS} elementos preenchidos
-        </p>
+        <div className="copiloto__contagem-linha">
+          <p className="copiloto__contagem">
+            {preenchidos} de {TOTAL_DE_ELEMENTOS} elementos preenchidos
+          </p>
+          {irPara ? (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => irPara('proposta')}
+              disabled={ocupado}
+            >
+              {podeConduzir ? 'Editar na proposta' : 'Ver na proposta'}{' '}
+              <span className="sr-only">(os oito elementos)</span>
+            </button>
+          ) : null}
+        </div>
         <div
           className="copiloto__barra"
           role="progressbar"
@@ -1050,7 +1063,13 @@ export default function AbaCopiloto({
             respostas e escreve uma primeira versão dos elementos vazios. No que
             você já escreveu, ele só sugere: a mudança entra se você aceitar.
           </p>
-          <Progresso preenchidos={preenchidos} paraRevisar={paraRevisar} />
+          <Progresso
+            preenchidos={preenchidos}
+            paraRevisar={paraRevisar}
+            irPara={irPara}
+            podeConduzir={podeConduzir}
+            ocupado={ocupado}
+          />
           {podeReavaliar ? (
             <p id={idDaExplicacao} className="copiloto__nota copiloto__explicacao">
               Reavaliar a proposta: o Copiloto relê os oito elementos e atualiza os

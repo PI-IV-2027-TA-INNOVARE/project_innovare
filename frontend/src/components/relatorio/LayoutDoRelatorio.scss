@@ -136,7 +136,9 @@
 
   .relatorio-painel {
     position: sticky;
-    top: 24px;
+    top: var(--admin-nav-offset);
+    max-height: calc(100vh - var(--admin-nav-offset) - 24px);
+    overflow-y: auto;
     flex-direction: column;
     flex-wrap: nowrap;
   }

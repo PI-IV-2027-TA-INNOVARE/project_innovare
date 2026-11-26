@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AdminToast, useToast } from '../../../../components/console/toast'
+import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { useAuth } from '../../../../context/AuthContext'
 import { Icone, appIcons } from '../../../../lib/icons'
 import { ROLES } from '../../../../lib/roles'
@@ -109,7 +110,7 @@ function Apontamento({ id, lacuna }) {
     >
       <Icone icon={appIcons.warning} className="admin-callout__icon" />
       <div className="admin-callout__text">
-        <p className="proposta__apontamento-cabeca">
+        <p id={`${id}-resumo`} className="proposta__apontamento-cabeca">
           <span className={`copiloto__selo copiloto__selo--${lacuna.severidade}`}>
             {lacuna.severidade_rotulo || 'Lacuna'}
           </span>
@@ -118,13 +119,21 @@ function Apontamento({ id, lacuna }) {
             {lacuna.natureza_rotulo ? ` · ${lacuna.natureza_rotulo}` : ''}
           </span>
         </p>
-        <p className="copiloto__lacuna-descricao">{lacuna.descricao}</p>
-        {lacuna.recomendacao ? (
-          <p className="copiloto__lacuna-recomendacao">
-            <span className="copiloto__lacuna-rotulo">O que fazer: </span>
-            {lacuna.recomendacao}
+        <VerDetalhes
+          rotulo="Ver o que o Copiloto apontou"
+          rotuloAberto="Ocultar o que o Copiloto apontou"
+          className="proposta__apontamento-detalhe"
+        >
+          <p id={`${id}-descricao`} className="copiloto__lacuna-descricao">
+            {lacuna.descricao}
           </p>
-        ) : null}
+          {lacuna.recomendacao ? (
+            <p id={`${id}-recomendacao`} className="copiloto__lacuna-recomendacao">
+              <span className="copiloto__lacuna-rotulo">O que fazer: </span>
+              {lacuna.recomendacao}
+            </p>
+          ) : null}
+        </VerDetalhes>
       </div>
     </div>
   )
@@ -173,7 +182,9 @@ function Campo({ campo, valor, onChange, erro, somenteLeitura, apontamento }) {
 
   const descritores = [
     `dica-${id}`,
-    apontamento ? `apontamento-${id}` : null,
+    apontamento ? `apontamento-${id}-resumo` : null,
+    apontamento ? `apontamento-${id}-descricao` : null,
+    apontamento?.recomendacao ? `apontamento-${id}-recomendacao` : null,
     erro ? `erro-${id}` : null,
   ].filter(Boolean).join(' ')
 
@@ -185,7 +196,6 @@ function Campo({ campo, valor, onChange, erro, somenteLeitura, apontamento }) {
       <span id={`dica-${id}`} className="admin-field__hint">
         {dica}
       </span>
-      {apontamento ? <Apontamento id={`apontamento-${id}`} lacuna={apontamento} /> : null}
       <div className={`proposta__caixa${recolhido && transborda ? ' proposta__caixa--cortada' : ''}`}>
         <textarea
           ref={caixa}
@@ -214,6 +224,7 @@ function Campo({ campo, valor, onChange, erro, somenteLeitura, apontamento }) {
           <Icone icon={appIcons.disclosure} className="proposta__ver-tudo-icone" />
         </button>
       ) : null}
+      {apontamento ? <Apontamento id={`apontamento-${id}`} lacuna={apontamento} /> : null}
       {erro ? (
         <span id={`erro-${id}`} className="admin-field__error" role="alert">
           {erro}

@@ -119,6 +119,31 @@ describe('AbaProposta — o que o Copiloto apontou', () => {
     )
   })
 
+  /**
+   * O ponto do Copiloto ficava aberto, em caixa de alerta, entre o titulo e o
+   * texto: o olho caia primeiro na critica da IA, e o texto da proposta, que
+   * e o que se revisa, ficava com menos destaque que ela. O texto vem primeiro
+   * e o ponto fica numa linha curta embaixo, com o detalhe a um clique.
+   */
+  it('o texto vem antes do ponto do Copiloto, e o detalhe abre num clique', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({ lacunas: [PONTO_NA_METODOLOGIA] })
+    const user = userEvent.setup()
+
+    renderAba()
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+    const descricao = await screen.findByText('Faltam os controles.')
+
+    expect(campo.compareDocumentPosition(descricao) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(descricao).not.toBeVisible()
+    expect(screen.getByText(/apontado pelo copiloto na última análise/i)).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /ver o que o copiloto apontou/i }))
+
+    expect(descricao).toBeVisible()
+    expect(screen.getByText('Descreva o controle positivo e o negativo.')).toBeVisible()
+  })
+
   it('a falha ao ler os pontos do Copiloto não impede a proposta de abrir', async () => {
     api.obterEstadoCopiloto = vi.fn().mockRejectedValue(new Error('fora do ar'))
 

@@ -119,7 +119,15 @@ export default function AnexosOportunidade({
   const soltar = (event) => {
     event.preventDefault()
     setArrastando(false)
-    enviar(event.dataTransfer?.files?.[0])
+
+    const arquivos = event.dataTransfer?.files || []
+
+    if (arquivos.length > 1) {
+      setErro('Envie um documento por vez: solte um arquivo só, e depois o próximo.')
+      return
+    }
+
+    enviar(arquivos[0])
   }
 
   return (

@@ -25,7 +25,12 @@ from apps.competencies.models import CompetenciaNecessaria
 from apps.copilot.models import PropostaEstruturada
 from apps.decisions.models import Decisao
 from apps.matching.models import EquipePotencial
-from apps.maturity.models import CriterioPreAnalise, PreAnalise
+from apps.maturity.models import (
+    SIGNIFICADO_DO_NIVEL,
+    CriterioPreAnalise,
+    NivelDimensao,
+    PreAnalise,
+)
 from apps.opportunities.models import AnexoOportunidade, Oportunidade
 
 MOTIVO_PROPOSTA_NAO_INICIADA = (
@@ -319,10 +324,15 @@ def como_ler_a_preanalise(analise: PreAnalise) -> tuple[str, ...]:
     return (
         'A pré-análise compara a proposta com os critérios da chamada '
         f'PIPE/FAPESP na versão {versao}, agrupados em seis dimensões.',
-        'Cada dimensão recebe um de três níveis. Consolidada: o que a dimensão '
-        'pede está demonstrado na proposta. Em desenvolvimento: está em parte '
-        'demonstrado, com lacunas a fechar. Frágil: está ausente ou pouco '
-        'demonstrado.',
+        ' '.join(
+            [
+                'Cada dimensão recebe um de três níveis.',
+                *(
+                    f'{NivelDimensao(nivel).label}: {significado}.'
+                    for nivel, significado in SIGNIFICADO_DO_NIVEL.items()
+                ),
+            ]
+        ),
         'As lacunas dizem o que falta. As recomendações dizem o que fazer para '
         'fechar cada lacuna. Uma recomendação marcada como acatada já foi '
         'aplicada pela equipe, e a próxima pré-análise mostra se a dimensão '

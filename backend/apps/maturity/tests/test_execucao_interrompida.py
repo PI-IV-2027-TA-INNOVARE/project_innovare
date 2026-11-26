@@ -54,6 +54,14 @@ class ExecucaoInterrompidaTests(PreAnaliseBaseTests):
         self.assertEqual(dados['status_rotulo'], StatusExecucao.ERRO.label)
         self.assertEqual(dados['erro'], 'execucao_interrompida')
 
+    def test_na_lista_a_interrompida_diz_o_motivo(self):
+        self.execucao(StatusExecucao.EXECUTANDO, ha_segundos=101)
+
+        rodada = self.client.get(self.url('pre-analises')).data[0]
+
+        self.assertEqual(rodada['status'], StatusExecucao.ERRO)
+        self.assertEqual(rodada['erro'], 'execucao_interrompida')
+
     def test_pendente_alem_do_teto_tambem_aparece_interrompida(self):
         """A fila sem quem a consuma deixa a execucao pendente para sempre."""
         self.execucao(StatusExecucao.PENDENTE, ha_segundos=101)

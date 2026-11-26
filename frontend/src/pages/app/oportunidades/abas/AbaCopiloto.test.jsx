@@ -984,6 +984,41 @@ describe('AbaCopiloto', () => {
     expect(screen.getByText('1 ponto para revisar')).toBeInTheDocument()
   })
 
+  /**
+   * A contagem dizia quantos elementos estavam preenchidos, mas nao levava a
+   * eles: quem queria ler os oito nao achava onde ficam. O link ao lado da
+   * contagem leva a Proposta estruturada, com o rotulo dos botoes dos pontos
+   * para revisar, e a contagem segue sendo so informacao.
+   */
+  it('ao lado da contagem, leva à Proposta estruturada', async () => {
+    const irPara = vi.fn()
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COMPLETA_COM_PONTO)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" irPara={irPara} />)
+
+    const contagem = await screen.findByText(/8 de 8 elementos preenchidos/i)
+    const progresso = contagem.closest('.copiloto__progresso')
+    const link = within(progresso).getByRole('button', { name: /editar na proposta/i })
+
+    expect(link).toHaveAccessibleName('Editar na proposta (os oito elementos)')
+    expect(contagem).not.toContainElement(link)
+
+    await userEvent.click(link)
+
+    expect(irPara).toHaveBeenCalledWith('proposta')
+  })
+
+  it('para quem só lê, o link ao lado da contagem diz "Ver na proposta"', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COMPLETA_COM_PONTO)
+
+    render(<AbaCopiloto oportunidadeId="OP-2026-001" irPara={vi.fn()} />)
+
+    const progresso = (await screen.findByText(/8 de 8 elementos preenchidos/i)).closest('.copiloto__progresso')
+
+    expect(within(progresso).getByRole('button', { name: 'Ver na proposta (os oito elementos)' })).toBeInTheDocument()
+  })
+
   it('o ponto sobre elemento ainda vazio conta como falta, não como revisão', async () => {
     api.obterEstadoCopiloto = vi.fn().mockResolvedValue(COM_SESSAO)
 
@@ -1079,7 +1114,7 @@ describe('AbaCopiloto', () => {
     expect(within(elemento).getByText('Faltam os controles.')).toBeInTheDocument()
     expect(within(elemento).getByLabelText('Quais controles serão usados?')).toBeInTheDocument()
     expect(screen.getAllByText('Faltam os controles.')).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: /editar na proposta/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /editar na proposta \(metodologia\)/i })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: /^responder/i })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Perguntas orientadoras' })).toBeNull()
   })
