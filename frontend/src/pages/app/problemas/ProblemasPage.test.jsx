@@ -244,10 +244,10 @@ describe('ProblemaFormPage', () => {
   it('vincula o registro à organização de quem está logado, sem deixar editar', () => {
     renderApp('/problemas/novo')
 
-    const campo = screen.getByLabelText(/organização demandante/i)
-
-    expect(campo).toHaveValue('Agroindústria Vale Verde')
-    expect(campo).toHaveAttribute('readonly')
+    expect(screen.getByText(/Cadastrando como/)).toHaveTextContent(
+      'Cadastrando como Agroindústria Vale Verde.'
+    )
+    expect(screen.queryByRole('textbox', { name: /organização/i })).not.toBeInTheDocument()
   })
 
   it('manda o cadastro para a API e confirma com o código devolvido', async () => {
@@ -292,9 +292,8 @@ describe('ProblemaFormPage', () => {
   it('diz que o anexo sobe junto com o cadastro, e o teto por arquivo', () => {
     renderApp('/problemas/novo')
 
-    expect(
-      screen.getByText(/arquivos sobem junto com o cadastro, até 10 MB cada/i)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/arquivos sobem junto com o cadastro/i)).toBeInTheDocument()
+    expect(screen.getByText(/até 10 MB por arquivo/i)).toBeInTheDocument()
   })
 })
 

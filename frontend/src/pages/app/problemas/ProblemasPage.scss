@@ -117,19 +117,26 @@
   box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
-.problema-anexos {
+.problemas-page__quem {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.problema-anexos__item {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  max-width: 68ch;
+  margin-top: 12px;
   font-size: 0.875rem;
+  line-height: 1.6;
   color: var(--text-muted);
+
+  svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 4px;
+    color: var(--accent-primary-text);
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
 }

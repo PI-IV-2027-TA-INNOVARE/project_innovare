@@ -1886,6 +1886,15 @@
   margin-top: var(--admin-pad);
 }
 
+.console-form > .admin-callout {
+  grid-column: 1 / -1;
+}
+
+.console-form__legenda {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 .console-form__actions {
   align-self: end;
   display: flex;

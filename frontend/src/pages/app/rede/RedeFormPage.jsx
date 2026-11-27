@@ -214,7 +214,7 @@ export default function RedeFormPage() {
         </div>
       </header>
 
-      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+      <p className="console-form__legenda">Campos com * são obrigatórios.</p>
 
       <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">

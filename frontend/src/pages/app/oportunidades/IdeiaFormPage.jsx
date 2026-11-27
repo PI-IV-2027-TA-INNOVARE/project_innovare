@@ -211,7 +211,7 @@ export default function IdeiaFormPage() {
         </div>
       ) : null}
 
-      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+      <p className="console-form__legenda">Campos com * são obrigatórios.</p>
 
       <form className="console-form" onSubmit={enviar} noValidate>
         <section className="perfil-card">
