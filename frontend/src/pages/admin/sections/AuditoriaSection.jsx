@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Paginacao, SkeletonRows, TableEmpty } from '../../../components/console/ConsoleTable'
+import { SkeletonRows, TableEmpty } from '../../../components/console/ConsoleTable'
+import RodapeDePaginacao from '../../../components/console/RodapeDePaginacao'
 import { appIcons } from '../../../lib/icons'
+import { useLinhasPorPagina } from '../../../lib/linhasPorPagina'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { listarTrilha, obterFiltrosTrilha } from '../../../services/pdConnectApi'
 
@@ -14,8 +16,6 @@ const COLUNAS = [
 ]
 
 const FILTRO_VAZIO = { categoria: '', status: '', busca: '', desde: '', ate: '' }
-
-const POR_PAGINA = 50
 
 const ATOR_SISTEMA = '__sistema__'
 
@@ -45,6 +45,7 @@ export default function AuditoriaSection() {
   const [rascunho, setRascunho] = useState(FILTRO_VAZIO)
   const [aplicados, setAplicados] = useState(FILTRO_VAZIO)
   const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useLinhasPorPagina('auditoria', 10)
 
   const [catalogo, setCatalogo] = useState(CATALOGO_VAZIO)
   const [eventos, setEventos] = useState([])
@@ -60,7 +61,7 @@ export default function AuditoriaSection() {
       .catch(() => setCatalogo(CATALOGO_VAZIO))
   }, [])
 
-  const consultar = useCallback(async (filtros, numeroDaPagina) => {
+  const consultar = useCallback(async (filtros, numeroDaPagina, tamanho) => {
     ultimaConsulta.current += 1
     const estaConsulta = ultimaConsulta.current
 
@@ -70,7 +71,7 @@ export default function AuditoriaSection() {
       const resposta = await listarTrilha({
         ...somenteOsPreenchidos(filtros),
         page: numeroDaPagina,
-        page_size: POR_PAGINA,
+        page_size: tamanho,
       })
 
       if (estaConsulta !== ultimaConsulta.current) return
@@ -90,8 +91,8 @@ export default function AuditoriaSection() {
   }, [])
 
   useEffect(() => {
-    consultar(aplicados, pagina)
-  }, [aplicados, pagina, consultar])
+    consultar(aplicados, pagina, porPagina)
+  }, [aplicados, pagina, porPagina, consultar])
 
   const alterar = (campo) => (event) => {
     const { value } = event.target
@@ -124,7 +125,24 @@ export default function AuditoriaSection() {
     setErro('')
   }
 
+  const escolherLinhas = (valor) => {
+    setPorPagina(valor)
+    setPagina(1)
+  }
+
   const temFiltro = Object.values(aplicados).some((valor) => String(valor).trim())
+
+  const navegacao = {
+    total,
+    inicio: (pagina - 1) * porPagina,
+    fim: (pagina - 1) * porPagina + eventos.length,
+    pagina,
+    totalPaginas: Math.max(1, Math.ceil(total / porPagina)),
+    porPagina,
+    onPagina: setPagina,
+    onPorPagina: escolherLinhas,
+    comTodas: false,
+  }
 
   return (
     <section className="console-section">
@@ -233,12 +251,12 @@ export default function AuditoriaSection() {
 
       {catalogo.rotina_oculta && aplicados.categoria !== catalogo.rotina_oculta.categoria ? (
         <p className="trilha__nota">
-          Entradas e saídas da plataforma ficam fora desta lista para não
-          esconder o restante: escolha a categoria{' '}
+          Entradas bem-sucedidas e saídas da plataforma ficam fora desta lista
+          para não esconder o restante: escolha a categoria{' '}
           {catalogo.categorias.find(
             (item) => item.valor === catalogo.rotina_oculta.categoria
           )?.rotulo || 'Conta e acesso'}{' '}
-          para vê-las.
+          para vê-las. As entradas recusadas continuam aqui.
         </p>
       ) : null}
 
@@ -246,6 +264,10 @@ export default function AuditoriaSection() {
         <p className="login-message" role="alert">
           {erro}
         </p>
+      ) : null}
+
+      {total > 0 ? (
+        <RodapeDePaginacao {...navegacao} rotulo="Paginação da trilha, no topo" noTopo />
       ) : null}
 
       <div className="admin-table-wrap">
@@ -350,15 +372,7 @@ export default function AuditoriaSection() {
         </table>
       </div>
 
-      {total > 0 ? (
-        <Paginacao
-          pagina={pagina}
-          total={total}
-          porPagina={POR_PAGINA}
-          rotulo={total === 1 ? 'evento' : 'eventos'}
-          onMudar={setPagina}
-        />
-      ) : null}
+      {total > 0 ? <RodapeDePaginacao {...navegacao} rotulo="Paginação da trilha" /> : null}
     </section>
   )
 }

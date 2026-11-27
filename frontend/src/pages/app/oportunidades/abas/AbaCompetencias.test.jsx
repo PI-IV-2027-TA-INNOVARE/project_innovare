@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaCompetencias from './AbaCompetencias'
@@ -195,5 +195,94 @@ describe('AbaCompetencias', () => {
     expect(
       screen.queryByRole('button', { name: /derivar da proposta/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('o Pesquisador vê que a proposta não foi revisada, sem pedido de revisão (RN-IA01)', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" irPara={vi.fn()} />)
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * PB66 e Continuar/Arquivada sem saída: o sistema recusa derivar, acrescentar,
+   * editar e remover. A tela deixa de oferecer e diz por quê.
+   */
+  it('depois de Continuar, só deixa ler as competências (PB66)', async () => {
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" situacao="continuar" />)
+
+    expect(await screen.findByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.getByText('Microbiologia de alimentos')).toBeInTheDocument()
+    expect(screen.getByText(/somente leitura/i)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /derivar da proposta/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /editar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /remover/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/acrescentar competência/i)).not.toBeInTheDocument()
+  })
+
+  it('na arquivada com a proposta sem revisão, não diz que a etapa fica liberada', async () => {
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    render(
+      <AbaCompetencias oportunidadeId="OP-2026-001" situacao="arquivada" irPara={vi.fn()} />,
+    )
+
+    expect(
+      await screen.findByText(/não foi revisada antes da decisão/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/fica liberada/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * O avanço era um cartão no fim da lista, e o botão laranja do topo era
+   * "Derivar da proposta", que refaz a lista. Agora o próximo passo é o botão
+   * principal da barra do fim, como na Proposta e na Equipe.
+   */
+  it('com competência essencial, o próximo passo fica na barra de ações', async () => {
+    const irPara = vi.fn()
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" irPara={irPara} />)
+
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+    await userEvent.click(within(barra).getByRole('button', { name: /continuar para equipe potencial/i }))
+
+    expect(irPara).toHaveBeenCalledWith('equipe')
+    expect(screen.queryByText(/próximo passo/i)).not.toBeInTheDocument()
+  })
+
+  it('com a lista já feita, derivar de novo deixa de ser o botão principal', async () => {
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByRole('button', { name: /derivar da proposta/i })).toHaveClass(
+      'admin-btn--outline',
+    )
+  })
+
+  it('sem competência ainda, derivar continua sendo o botão principal', async () => {
+    api.listarCompetencias = vi.fn().mockResolvedValue([])
+
+    render(<AbaCompetencias oportunidadeId="OP-2026-001" />)
+
+    expect(await screen.findByRole('button', { name: /derivar da proposta/i })).not.toHaveClass(
+      'admin-btn--outline',
+    )
+    expect(screen.queryByRole('group', { name: 'Ações da etapa' })).not.toBeInTheDocument()
   })
 })

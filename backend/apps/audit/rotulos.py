@@ -47,10 +47,10 @@ ROTULOS_DO_TIPO = {
     'observacao_registrada': 'Observação registrada',
     'proposta_iniciada': 'Proposta iniciada',
     'proposta_atualizada': 'Proposta atualizada',
-    'sessao_iniciada': 'Sessão do Copiloto iniciada',
-    'sessao_concluida': 'Sessão do Copiloto concluída',
+    'sessao_iniciada': 'Copiloto leu a entrada',
+    'sessao_concluida': 'Conversa com o Copiloto encerrada',
     'resposta_registrada': 'Resposta ao Copiloto registrada',
-    'sintese_revisada': 'Resumo da entrada corrigido',
+    'sintese_revisada': 'Resumo da entrada conferido',
     'sugestao_aceita': 'Sugestão do Copiloto aceita',
     'estruturacao_executada': 'Estruturação pelo Copiloto',
     'derivacao_executada': 'Competências derivadas pela IA',
@@ -76,7 +76,7 @@ ROTULOS_DO_TIPO = {
 }
 
 ROTULOS_POR_ENTIDADE = {
-    ('execucao', 'equipe_potencial'): 'Matching executado',
+    ('execucao', 'equipe_potencial'): 'Equipe potencial gerada',
     ('execucao', 'pre_analise_maturidade'): 'Pré-análise executada',
 }
 """O mesmo `tipo` em entidades diferentes, quando ele sozinho nao diz o que foi."""

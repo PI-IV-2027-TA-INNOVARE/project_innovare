@@ -168,6 +168,53 @@ describe('UsersSection', () => {
 
     expect(screen.getByText('Mostrando 1–12 de 12')).toBeInTheDocument()
   })
+
+  it('"Linhas por página" termina com "Todos", que mostra a lista inteira numa página', async () => {
+    /**
+     * A plataforma pode passar de 50 contas, e 50 era o maior tamanho de
+     * página. "Todos" mostra a lista inteira de uma vez.
+     */
+    const user = userEvent.setup()
+    await renderUsuarios()
+
+    const seletor = screen.getByLabelText(/linhas por página/i)
+
+    expect(within(seletor).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
+      '10',
+      '25',
+      '50',
+      'Todos',
+    ])
+
+    await user.selectOptions(seletor, 'Todos')
+
+    expect(screen.getByText('Mostrando 1–12 de 12')).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 1')).toBeInTheDocument()
+
+    for (const usuario of USUARIOS_EXEMPLO) {
+      expect(linhaDe(usuario.nome)).not.toBeNull()
+    }
+  })
+
+  it('carrega todas as páginas da API, e não só as primeiras 100 contas', async () => {
+    /**
+     * A API entrega no máximo 100 contas por página, e a tela lia só a
+     * primeira: da 101ª conta em diante, nada aparecia, nem com "Todos". A
+     * tela agora segue as páginas até a última.
+     */
+    const contas = USUARIOS_EXEMPLO.map(comoApi)
+
+    api.listUsuarios
+      .mockResolvedValueOnce({ count: 12, next: 'http://api/usuarios/?page=2', results: contas.slice(0, 7) })
+      .mockResolvedValueOnce({ count: 12, next: null, results: contas.slice(7) })
+
+    await renderUsuarios()
+
+    expect(api.listUsuarios).toHaveBeenCalledTimes(2)
+    expect(api.listUsuarios).toHaveBeenNthCalledWith(1, { page: '1' })
+    expect(api.listUsuarios).toHaveBeenNthCalledWith(2, { page: '2' })
+    expect(screen.getByText('Mostrando 1–10 de 12')).toBeInTheDocument()
+  })
 })
 
 describe('UsersSection — provisionamento', () => {
@@ -433,6 +480,34 @@ describe('UsersSection — convite', () => {
     const jaEntrou = linhaDe('Rafael Antunes')
     await user.click(within(jaEntrou).getByRole('button', { name: /ações para rafael antunes/i }))
     expect(screen.queryByRole('menuitem', { name: /reenviar convite/i })).not.toBeInTheDocument()
+  })
+
+  /**
+   * Conta inativa ou suspensa não entra, mesmo que a pessoa crie a senha pelo
+   * convite. "Aguardando primeiro acesso" prometia um acesso que não vem, e o
+   * "Reenviar convite" mandava um link que terminava na entrada recusada. Sem
+   * senha e fora de Ativo, a linha diz "Nunca acessou" e o menu não oferece o
+   * convite; ao ativar, as duas coisas voltam.
+   */
+  it('conta inativa ou suspensa sem senha não fica aguardando nem recebe convite', async () => {
+    const user = userEvent.setup()
+    api.listUsuarios.mockResolvedValue({
+      results: [
+        { ...comoApi(USUARIOS_EXEMPLO[1]), situacao: 'inativo', ultimo_acesso: null, aguardando_primeiro_acesso: true },
+        { ...comoApi(USUARIOS_EXEMPLO[7]), situacao: 'suspenso', ultimo_acesso: null, aguardando_primeiro_acesso: true },
+      ],
+    })
+    await renderUsuarios()
+
+    for (const nome of ['Maria Ferreira', 'Rafael Antunes']) {
+      const linha = linhaDe(nome)
+      expect(within(linha).queryByText('Aguardando primeiro acesso')).not.toBeInTheDocument()
+      expect(within(linha).getByText('Nunca acessou')).toBeInTheDocument()
+
+      await user.click(within(linha).getByRole('button', { name: new RegExp(`ações para ${nome}`, 'i') }))
+      expect(screen.queryByRole('menuitem', { name: /reenviar convite/i })).not.toBeInTheDocument()
+      await user.keyboard('{Escape}')
+    }
   })
 
   it('reenvia o convite pela API', async () => {

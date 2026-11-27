@@ -8,8 +8,10 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, views
 from rest_framework.response import Response
 
+from apps.ai.services.registro import servicos_que_recebem_textos
 from apps.platform_settings.serializers import (
     ConfiguracaoSerializer,
+    ContatoSuporteLidoSerializer,
     ContatoSuporteSerializer,
     PrivacidadeSerializer,
     TemaPatchSerializer,
@@ -18,6 +20,7 @@ from apps.platform_settings.serializers import (
 from apps.platform_settings.services.contatos import (
     RestaurarContatosService,
     SubstituirContatosService,
+    contatos_com_origem,
     contatos_vigentes,
     encarregado_de_dados,
 )
@@ -67,10 +70,12 @@ class TemaView(views.APIView):
 
 class PrivacidadeView(views.APIView):
     """
-    `GET /api/privacidade/` - o contato do encarregado de dados, para o aviso.
+    `GET /api/privacidade/` - o que o aviso le da configuracao.
 
-    Publico como o aviso: quem ainda nao tem conta tambem precisa saber como
-    os dados sao tratados e com quem falar.
+    O contato do encarregado de dados, os prazos de retencao e os servicos de
+    IA ligados. Publico como o aviso: quem ainda nao tem conta tambem precisa
+    saber como os dados sao tratados, com quem sao compartilhados e com quem
+    falar.
     """
 
     permission_classes = [permissions.AllowAny]
@@ -86,6 +91,7 @@ class PrivacidadeView(views.APIView):
                         'eventos_conta_meses': settings.RETENCAO_EVENTOS_CONTA_MESES,
                         'anexos_apos_arquivamento_meses': settings.RETENCAO_ANEXOS_MESES,
                     },
+                    'servicos_de_ia': servicos_que_recebem_textos(),
                 }
             ).data
         )
@@ -107,13 +113,13 @@ class ContatosSuporteView(views.APIView):
 
         return [permissions.AllowAny()]
 
-    @extend_schema(responses=ContatoSuporteSerializer(many=True))
+    @extend_schema(responses=ContatoSuporteLidoSerializer(many=True))
     def get(self, request):
-        return Response(ContatoSuporteSerializer(contatos_vigentes(), many=True).data)
+        return Response(ContatoSuporteLidoSerializer(contatos_com_origem(), many=True).data)
 
     @extend_schema(
         request=ContatoSuporteSerializer(many=True),
-        responses=ContatoSuporteSerializer(many=True),
+        responses=ContatoSuporteLidoSerializer(many=True),
     )
     def put(self, request):
         contatos = ContatoSuporteSerializer(data=request.data, many=True, allow_empty=False)
@@ -123,10 +129,10 @@ class ContatosSuporteView(views.APIView):
             contatos=contatos.validated_data, ator=request.user
         )
 
-        return Response(ContatoSuporteSerializer(gravados, many=True).data)
+        return Response(ContatoSuporteLidoSerializer(gravados, many=True).data)
 
-    @extend_schema(request=None, responses=ContatoSuporteSerializer(many=True))
+    @extend_schema(request=None, responses=ContatoSuporteLidoSerializer(many=True))
     def delete(self, request):
         padrao = RestaurarContatosService().execute(ator=request.user)
 
-        return Response(ContatoSuporteSerializer(padrao, many=True).data)
+        return Response(ContatoSuporteLidoSerializer(padrao, many=True).data)

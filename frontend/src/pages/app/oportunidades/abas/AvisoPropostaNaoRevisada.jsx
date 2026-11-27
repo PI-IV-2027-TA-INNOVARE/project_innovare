@@ -16,7 +16,30 @@ const ELEMENTOS = [
 const preenchido = (valor) =>
   Array.isArray(valor) ? valor.length > 0 : Boolean(String(valor ?? '').trim())
 
-export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara, aoVerificar }) {
+function textoDoAviso(podeRevisar, bloqueiaEtapa, encerrada) {
+  if (encerrada) {
+    return 'A proposta estruturada não foi revisada antes da decisão, e o texto do Copiloto não vale como definitivo.'
+  }
+
+  if (!podeRevisar) {
+    return 'A proposta estruturada ainda não foi revisada pelo Supervisor, e o texto do Copiloto não vale como definitivo.'
+  }
+
+  if (bloqueiaEtapa) {
+    return 'A proposta estruturada ainda não foi revisada. Esta etapa fica liberada depois que você revisa e salva o texto do Copiloto.'
+  }
+
+  return 'A proposta estruturada ainda não foi revisada. O texto do Copiloto só vale como definitivo depois que você revisa e salva.'
+}
+
+export default function AvisoPropostaNaoRevisada({
+  oportunidadeId,
+  irPara,
+  aoVerificar,
+  podeRevisar = false,
+  bloqueiaEtapa = true,
+  encerrada = false,
+}) {
   const [pendente, setPendente] = useState(false)
 
   useEffect(() => {
@@ -53,10 +76,9 @@ export default function AvisoPropostaNaoRevisada({ oportunidadeId, irPara, aoVer
     <div className="admin-callout admin-callout--alerta" role="note">
       <Icone icon={appIcons.warning} className="admin-callout__icon" />
       <p className="admin-callout__text">
-        A proposta estruturada ainda não foi revisada. Esta etapa fica liberada
-        depois que você revisa e salva o texto do Copiloto.
+        {textoDoAviso(podeRevisar, bloqueiaEtapa, encerrada)}
       </p>
-      {irPara ? (
+      {podeRevisar && !encerrada && irPara ? (
         <button
           type="button"
           className="link-button"

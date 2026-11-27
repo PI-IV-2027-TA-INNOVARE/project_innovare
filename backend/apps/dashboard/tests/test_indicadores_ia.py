@@ -16,20 +16,25 @@ O que estes testes protegem:
 
 Provedor sempre duble (AGENTS.md 0.1).
 """
+import json
 import tempfile
+from datetime import timedelta
 
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.ai.models import ExecucaoIA, StatusExecucao, TipoExecucaoIA
 from apps.ai.services.base_conhecimento import base_conhecimento
 from apps.competencies.models import CompetenciaNecessaria, NivelImportancia
-from apps.copilot.models import PropostaEstruturada
+from apps.copilot.models import Lacuna, PropostaEstruturada
+from apps.matching.models import EquipePotencial, MembroEquipe
 from apps.matching.services import ExecutarMatchingService
-from apps.maturity.models import NivelDimensao
+from apps.maturity.models import NivelDimensao, PreAnalise, Recomendacao
 from apps.maturity.services import ImportarCriteriosService, PreAnalisarService
 from core.tests.builders import (
     MembroRedeBuilder,
@@ -37,6 +42,7 @@ from core.tests.builders import (
     OrganizacaoBuilder,
     UsuarioBuilder,
     indicar_na_equipe,
+    versao_criterio,
 )
 from core.tests.dubles import ProvedorFake, escrever_base_pipe
 
@@ -225,6 +231,152 @@ class MaturidadeTests(IndicadoresDeIABaseTests):
             self.assertNotIn(proibido, campos)
 
 
+class RodadaMaisRecenteTests(IndicadoresDeIABaseTests):
+    """
+    Pessoas indicadas, lacunas e recomendacoes contam so a rodada em jogo.
+
+    E a regra da Saude da IA: cada matching gera uma equipe nova e cada
+    reavaliacao, uma pre-analise nova, e as antigas nunca mais serao
+    validadas, resolvidas nem acatadas. O que conta atividade - rodadas
+    executadas, equipes geradas, pre-analises executadas - segue somando tudo.
+    """
+
+    def indicar(self, equipe, *, validada=False, incluido=True):
+        membro = MembroRedeBuilder().pesquisador().build()
+
+        return MembroEquipe.objects.create(
+            equipe=equipe,
+            membro=membro,
+            papel=membro.papel_rede,
+            validada=validada,
+            incluido=incluido,
+        )
+
+    def pre_analise(self, *, ha_dias):
+        analise = PreAnalise.objects.create(
+            proposta=self.proposta,
+            versao_criterio=versao_criterio(),
+            versao_proposta=1,
+            status=StatusExecucao.OK,
+        )
+        PreAnalise.objects.filter(pk=analise.pk).update(
+            executada_em=timezone.now() - timedelta(days=ha_dias)
+        )
+        return analise
+
+    def lacuna(self, analise, *, resolvida=False):
+        return Lacuna.objects.create(
+            proposta=self.proposta,
+            pre_analise=analise,
+            tipo='pre_analise',
+            descricao='Nao ha descricao do laboratorio.',
+            resolvida=resolvida,
+        )
+
+    def recomendar(self, analise, *, acatada=False):
+        return Recomendacao.objects.create(
+            oportunidade=self.oportunidade,
+            origem='pre_analise',
+            pre_analise=analise,
+            texto='Descrever a infraestrutura disponivel.',
+            acatada=acatada,
+        )
+
+    def test_pessoas_indicadas_contam_so_a_equipe_mais_recente(self):
+        antiga = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        for _ in range(3):
+            self.indicar(antiga)
+        atual = EquipePotencial.objects.create(oportunidade=self.oportunidade)
+        self.indicar(atual, validada=True)
+        self.indicar(atual)
+        self.indicar(atual, incluido=False)
+
+        dados = self.client.get(self.url).data['matching']
+
+        self.assertEqual(dados['indicacoes'], 3)
+        self.assertEqual(dados['indicacoes_incluidas'], 2)
+        self.assertEqual(dados['indicacoes_validadas'], 1)
+        self.assertEqual(dados['equipes_geradas'], 2)
+
+    def test_lacunas_e_recomendacoes_contam_so_a_pre_analise_mais_recente(self):
+        antiga = self.pre_analise(ha_dias=2)
+        atual = self.pre_analise(ha_dias=1)
+        self.lacuna(antiga)
+        self.lacuna(antiga)
+        self.recomendar(antiga, acatada=True)
+        self.recomendar(antiga)
+        self.lacuna(atual, resolvida=True)
+        self.recomendar(atual)
+
+        dados = self.client.get(self.url).data['maturidade']
+
+        self.assertEqual((dados['lacunas_abertas'], dados['lacunas']), (0, 1))
+        self.assertEqual(
+            (dados['recomendacoes_acatadas'], dados['recomendacoes']), (0, 1)
+        )
+        self.assertEqual(dados['execucoes'], 2)
+
+
+class UsoDaIATests(IndicadoresDeIABaseTests):
+    """
+    PB105: volume de chamadas e falhas por fluxo, ao lado dos indicadores de
+    matching e maturidade, tirado do registro de chamadas (PB107) e sem dado
+    pessoal de ninguem.
+    """
+
+    def chamada(self, tipo, status_execucao=StatusExecucao.OK, fallback=False):
+        return ExecucaoIA.objects.create(
+            tipo=tipo,
+            provedor='google',
+            modelo='gemini-2.5-flash',
+            status=status_execucao,
+            fallback_usado=fallback,
+            oportunidade=self.oportunidade,
+            executado_por=self.supervisor.email,
+        )
+
+    def uso(self):
+        return self.client.get(self.url).data['uso']
+
+    def fluxo(self, uso, tipo):
+        return next(item for item in uso['por_fluxo'] if item['fluxo'] == tipo)
+
+    def test_sem_chamada_o_bloco_declara_a_ausencia(self):
+        uso = self.uso()
+
+        self.assertFalse(uso['houve_chamada'])
+        self.assertEqual(uso['chamadas'], 0)
+
+    def test_conta_chamadas_e_falhas_de_cada_fluxo(self):
+        self.chamada(TipoExecucaoIA.COPILOTO)
+        self.chamada(TipoExecucaoIA.COPILOTO)
+        self.chamada(TipoExecucaoIA.COPILOTO, StatusExecucao.ERRO)
+        self.chamada(TipoExecucaoIA.PREANALISE, fallback=True)
+
+        uso = self.uso()
+
+        self.assertTrue(uso['houve_chamada'])
+        self.assertEqual(uso['chamadas'], 4)
+        self.assertEqual(uso['falhas'], 2)
+        self.assertEqual(
+            self.fluxo(uso, 'copiloto'),
+            {'fluxo': 'copiloto', 'rotulo': 'Copiloto de estruturação', 'chamadas': 3, 'falhas': 1},
+        )
+        self.assertEqual(self.fluxo(uso, 'preanalise')['falhas'], 1)
+
+    def test_fluxo_sem_chamada_aparece_zerado(self):
+        self.chamada(TipoExecucaoIA.COPILOTO)
+
+        matching = self.fluxo(self.uso(), 'matching')
+
+        self.assertEqual((matching['chamadas'], matching['falhas']), (0, 0))
+
+    def test_bloco_nao_traz_quem_chamou(self):
+        self.chamada(TipoExecucaoIA.COPILOTO)
+
+        self.assertNotIn(self.supervisor.email, json.dumps(self.uso()))
+
+
 class AcessoAosIndicadoresDeIATests(IndicadoresDeIABaseTests):
     def test_so_o_supervisor_le(self):
         """PB74 e PB75 sao historias do Supervisor; PB71 corta o Demandante."""
@@ -249,6 +401,7 @@ class AcessoAosIndicadoresDeIATests(IndicadoresDeIABaseTests):
 
         A rota e separada de `/api/indicadores/` justamente porque le cinco
         tabelas das fases 3.2/3.3; o que ela nao pode e crescer com o volume.
+        O uso da IA (PB105) soma um agregado fixo, e o teto foi de 12 para 13.
         """
         self.competencia('Microbiologia de alimentos')
         MembroRedeBuilder().pesquisador().build()
@@ -259,7 +412,7 @@ class AcessoAosIndicadoresDeIATests(IndicadoresDeIABaseTests):
             resposta = self.client.get(self.url)
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
-        self.assertLessEqual(len(capturadas.captured_queries), 12)
+        self.assertLessEqual(len(capturadas.captured_queries), 13)
 
     def test_indicadores_essenciais_nao_pagam_pelo_bloco_novo(self):
         """O painel que abre com a sessao segue com o orcamento dele."""

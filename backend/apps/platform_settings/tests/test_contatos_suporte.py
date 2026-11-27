@@ -23,6 +23,13 @@ NOVOS = [
 ]
 
 
+def sem_origem(contatos):
+    return [
+        {chave: valor for chave, valor in contato.items() if chave != 'padrao'}
+        for contato in contatos
+    ]
+
+
 class ContatosSuporteTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -53,12 +60,12 @@ class ContatosSuporteTests(TestCase):
         resposta = self.ler()
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
-        self.assertEqual(resposta.data, [dict(contato) for contato in CONTATOS_PADRAO])
+        self.assertEqual(sem_origem(resposta.data), [dict(contato) for contato in CONTATOS_PADRAO])
 
     def test_o_que_o_administrador_grava_vale_para_todos(self):
         self.assertEqual(self.gravar(NOVOS).status_code, status.HTTP_200_OK)
 
-        self.assertEqual(self.ler().data, NOVOS)
+        self.assertEqual(sem_origem(self.ler().data), NOVOS)
         self.assertEqual(
             list(ContatoSuporte.objects.values_list('ordem', flat=True)), [0, 1]
         )
@@ -91,7 +98,7 @@ class ContatosSuporteTests(TestCase):
         resposta = self.gravar([{'nome': 'X', 'email': 'pd-arroba-ac2', 'papel': ''}])
 
         self.assertEqual(resposta.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(self.ler().data, NOVOS)
+        self.assertEqual(sem_origem(self.ler().data), NOVOS)
 
     def test_restaurar_volta_ao_padrao(self):
         self.gravar(NOVOS)
@@ -100,8 +107,24 @@ class ContatosSuporteTests(TestCase):
         resposta = self.client.delete(self.url)
 
         self.assertEqual(resposta.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.ler().data, [dict(contato) for contato in CONTATOS_PADRAO])
+        self.assertEqual(
+            sem_origem(self.ler().data), [dict(contato) for contato in CONTATOS_PADRAO]
+        )
         self.assertFalse(ContatoSuporte.objects.exists())
+
+    def test_cada_contato_diz_se_e_o_padrao_da_ac2(self):
+        """O painel so oferece restaurar quando ha lista gravada para apagar."""
+        self.assertTrue(all(contato['padrao'] for contato in self.ler().data))
+
+        gravados = self.gravar(NOVOS).data
+
+        self.assertFalse(any(contato['padrao'] for contato in gravados))
+        self.assertFalse(any(contato['padrao'] for contato in self.ler().data))
+
+        self.client.force_authenticate(user=self.administrador)
+        restaurados = self.client.delete(self.url).data
+
+        self.assertTrue(all(contato['padrao'] for contato in restaurados))
 
     def test_so_o_administrador_restaura(self):
         self.gravar(NOVOS)

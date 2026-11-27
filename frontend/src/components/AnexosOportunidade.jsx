@@ -1,36 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  EXTENSOES_ACEITAS,
   PRAZO_DE_GUARDA,
-  TIPOS_POR_EXTENSO,
+  TETO_BYTES,
+  quantosDocumentos,
   salvarNoComputador,
+  tamanhoLegivel,
+  tipoDoArquivo,
 } from '../lib/anexos'
 import { Icone, appIcons } from '../lib/icons'
 import { formatarUltimoAcesso } from '../lib/people'
 import { baixarAnexo, enviarAnexo, listarAnexos } from '../services/pdConnectApi'
+import AreaDeEnvio from './AreaDeEnvio'
 import './AnexosOportunidade.scss'
-
-const TETO_BYTES = 10 * 1024 * 1024
-
-function tamanhoLegivel(bytes) {
-  if (!bytes) return '—'
-
-  const kb = bytes / 1024
-
-  return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
-}
-
-function tipoDoArquivo(nome) {
-  const extensao = (nome || '').split('.').pop()
-
-  if (!extensao || extensao === nome) return 'ARQ'
-
-  return extensao === 'jpeg' ? 'JPG' : extensao.toUpperCase().slice(0, 4)
-}
-
-function quantos(total) {
-  return total === 1 ? '1 documento' : `${total} documentos`
-}
 
 /**
  * Os documentos de uma oportunidade (PB21).
@@ -51,9 +32,6 @@ export default function AnexosOportunidade({
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState('')
   const [baixando, setBaixando] = useState(null)
-  const [arrastando, setArrastando] = useState(false)
-
-  const campo = useRef(null)
 
   const carregar = useCallback(async () => {
     try {
@@ -104,22 +82,13 @@ export default function AnexosOportunidade({
     }
   }
 
-  const escolher = (event) => {
-    const arquivo = event.target.files?.[0]
+  const receber = (arquivos) => {
+    if (arquivos.length > 1) {
+      setErro('Envie um documento por vez: solte um arquivo só, e depois o próximo.')
+      return
+    }
 
-    if (campo.current) campo.current.value = ''
-    enviar(arquivo)
-  }
-
-  const arrastarSobre = (event) => {
-    event.preventDefault()
-    if (!enviando) setArrastando(true)
-  }
-
-  const soltar = (event) => {
-    event.preventDefault()
-    setArrastando(false)
-    enviar(event.dataTransfer?.files?.[0])
+    enviar(arquivos[0])
   }
 
   return (
@@ -130,7 +99,7 @@ export default function AnexosOportunidade({
           <p className="perfil-card__description">{descricao}</p>
         </div>
         {!carregando && anexos.length > 0 ? (
-          <span className="anexos__total">{quantos(anexos.length)}</span>
+          <span className="anexos__total">{quantosDocumentos(anexos.length)}</span>
         ) : null}
       </header>
 
@@ -145,44 +114,12 @@ export default function AnexosOportunidade({
         ) : null}
 
         {podeEnviar ? (
-          <div
-            data-testid="anexo-envio"
-            className={`anexos__envio${arrastando ? ' is-arrastando' : ''}${enviando ? ' is-enviando' : ''}`}
-            onDragOver={arrastarSobre}
-            onDragLeave={() => setArrastando(false)}
-            onDrop={soltar}
-          >
-            <span className="anexos__envio-icone" aria-hidden="true">
-              <Icone icon={appIcons.folder} />
-            </span>
-
-            {enviando ? (
-              <p className="anexos__envio-texto" role="status">
-                Enviando {enviando}...
-              </p>
-            ) : (
-              <p className="anexos__envio-texto">Arraste um arquivo para cá ou</p>
-            )}
-
-            <input
-              id="anexo-arquivo"
-              ref={campo}
-              type="file"
-              accept={EXTENSOES_ACEITAS}
-              className="sr-only anexos__campo"
-              aria-label="Anexar documento"
-              onChange={escolher}
-              disabled={Boolean(enviando)}
-            />
-            <label
-              htmlFor="anexo-arquivo"
-              className={`admin-btn anexos__escolher${enviando ? ' is-desabilitado' : ''}`}
-            >
-              Escolher arquivo
-            </label>
-
-            <p className="anexos__envio-dica">{TIPOS_POR_EXTENSO} · até 10 MB por arquivo</p>
-          </div>
+          <AreaDeEnvio
+            id="anexo-arquivo"
+            rotulo="Anexar documento"
+            enviando={enviando}
+            aoReceber={receber}
+          />
         ) : null}
 
         <p className="anexos__prazo">{PRAZO_DE_GUARDA}</p>

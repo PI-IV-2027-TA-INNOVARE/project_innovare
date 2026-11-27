@@ -12,7 +12,8 @@ from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.accounts.cookie_de_sessao import (
@@ -45,6 +46,7 @@ from apps.accounts.services.acesso import (
     RegistrarAcessoService,
     RegistrarEntradaRecusadaService,
     SolicitarRecuperacaoSenhaService,
+    marcar_uso_da_sessao,
 )
 from apps.accounts.services.titular import (
     AnonimizarContaService,
@@ -61,6 +63,7 @@ from apps.accounts.services.contas import (
 )
 from apps.organizations.services.empresas import buscar_empresa_demandante
 from core.permissions import EhAdministrador
+from core.segundo_plano import em_segundo_plano
 
 
 def _exigir_origem_confiavel(request) -> None:
@@ -84,6 +87,7 @@ class LoginView(TokenObtainPairView):
     parser_classes = [JSONParser]
     serializer_class = LoginSerializer
     throttle_scope = 'login'
+    limite_por_conta = 'entrada'
 
     def post(self, request, *args, **kwargs):
         _exigir_origem_confiavel(request)
@@ -135,6 +139,8 @@ class RefreshView(TokenRefreshView):
             raise InvalidToken(exc.args[0]) from exc
 
         dados = dict(serializer.validated_data)
+        marcar_uso_da_sessao(AccessToken(dados['access'])[api_settings.USER_ID_CLAIM])
+
         novo = dados.get('refresh') if do_corpo else dados.pop('refresh', None)
         resposta = Response(dados, status=status.HTTP_200_OK)
 
@@ -225,17 +231,22 @@ class EsqueciSenhaView(views.APIView):
     `POST /api/auth/forgot-password/`.
 
     Responde 200 exista ou nao a conta - ver `SolicitarRecuperacaoSenhaService`.
+    O envio sai fora do pedido, para a resposta levar o mesmo tempo nos dois
+    casos (`core/segundo_plano.py`).
     """
 
     permission_classes = [permissions.AllowAny]
     throttle_scope = 'recuperacao'
+    limite_por_conta = 'recuperacao'
 
     @extend_schema(request=EsqueciSenhaSerializer, responses={200: None})
     def post(self, request):
         serializer = EsqueciSenhaSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        SolicitarRecuperacaoSenhaService().execute(serializer.validated_data['email'])
+        em_segundo_plano(
+            SolicitarRecuperacaoSenhaService().execute, serializer.validated_data['email']
+        )
 
         return Response(
             {

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { Icone, appIcons } from '../../lib/icons'
 import { roleLabel } from '../../lib/roles'
+import { rotaInicialDe, rotuloDoInicio } from '../../lib/rotas'
 import { lerContatosSuporte } from '../../services/pdConnectApi'
 import './SystemPages.scss'
 
@@ -33,36 +33,28 @@ export default function AcessoRestritoPage() {
   return (
     <div className="system-page">
       <div className="system-card">
-        <span className="system-card__icon system-card__icon--lock" aria-hidden="true">
-          <Icone icon={appIcons.lock} />
-        </span>
-
-        <h1 className="system-card__title">Acesso restrito</h1>
+        <p className="system-card__code">403</p>
+        <h1 className="system-card__title">Acesso não autorizado</h1>
 
         <p className="system-card__text">
           {rotaTentada ? (
             <>
-              A página <code>{rotaTentada}</code> não faz parte do que o seu
-              perfil alcança.
+              A página <code>{rotaTentada}</code> não está disponível para o seu perfil.
             </>
           ) : (
-            'Esta página não faz parte do que o seu perfil alcança.'
-          )}
+            'Esta página não está disponível para o seu perfil.'
+          )}{' '}
+          Se você precisa dela para o seu trabalho, fale com o Núcleo de P&amp;D da
+          AC2 por um dos contatos abaixo.
         </p>
 
         <p className="system-card__role">
-          Você está autenticado como{' '}
-          <strong>{user?.displayName || 'usuário'}</strong>
+          Você entrou como <strong>{user?.displayName || 'usuário'}</strong>
           {user?.role ? (
             <>
               {' '}· <span className="admin-tag">{roleLabel(user.role)}</span>
             </>
           ) : null}
-        </p>
-
-        <p className="system-card__text">
-          O acesso é concedido pelo Núcleo de P&amp;D da AC2. Se você precisa desta
-          área para o seu trabalho, fale com um dos contatos abaixo.
         </p>
 
         <ul className="system-contatos">
@@ -84,7 +76,9 @@ export default function AcessoRestritoPage() {
         ) : null}
 
         <div className="system-card__acoes">
-          <Link className="admin-btn" to="/painel">Voltar ao painel</Link>
+          <Link className="admin-btn" to={rotaInicialDe(user?.role)}>
+            {rotuloDoInicio(user?.role)}
+          </Link>
         </div>
       </div>
     </div>

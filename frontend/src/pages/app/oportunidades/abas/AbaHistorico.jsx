@@ -1,110 +1,93 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
+import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { Icone, appIcons } from '../../../../lib/icons'
-import { formatarUltimoAcesso } from '../../../../lib/people'
-import {
-  registrarObservacao,
-  solicitarComplemento,
-} from '../../../../services/pdConnectApi'
 import { decisaoLabel } from '../oportunidadesData'
 
 const CATEGORIAS = [
   { id: 'oportunidade', label: 'Oportunidade', icon: appIcons.folder },
   { id: 'observacao', label: 'Observações', icon: appIcons.edit },
-  { id: 'copiloto', label: 'Copiloto IA', icon: appIcons.edit },
+  { id: 'copiloto', label: 'Copiloto', icon: appIcons.compass },
   { id: 'competencia', label: 'Competências', icon: appIcons.role },
-  { id: 'matching', label: 'Matching', icon: appIcons.users },
+  { id: 'matching', label: 'Equipe potencial', icon: appIcons.users },
   { id: 'preanalise', label: 'Pré-análise', icon: appIcons.researcher },
   { id: 'decisao', label: 'Decisão', icon: appIcons.decision },
 ]
 
+const DIA = 24 * 60 * 60 * 1000
+const DATA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
+const DATA_E_HORA = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeStyle: 'short' })
+
 const categoria = (id) => CATEGORIAS.find((item) => item.id === id)
 
-/**
- * A trilha da oportunidade, e o unico lugar onde o Supervisor escreve nela.
- *
- * A observacao (PB65) nasce aqui porque e aqui que ela e lida: duas telas para
- * a mesma verdade divergem. Escrever nao contradiz o "nada e editado ou
- * apagado" - a trilha e append-only, e acrescentar nao e editar.
- */
-export default function AbaHistorico({
-  codigo,
-  historico,
-  decisao,
-  podeRegistrar = false,
-  podeSolicitarComplemento = false,
-}) {
+const contagem = (total) => `${total} ${total === 1 ? 'evento' : 'eventos'}`
+
+function rotuloDoDia(data, referencia = Date.now()) {
+  if (data === DATA.format(referencia)) return `Hoje, ${data}`
+  if (data === DATA.format(referencia - DIA)) return `Ontem, ${data}`
+  return data
+}
+
+function porDia(eventos) {
+  const dias = []
+
+  for (const evento of eventos) {
+    const data = DATA.format(evento.em)
+    const ultimo = dias[dias.length - 1]
+
+    if (ultimo?.data === data) ultimo.eventos.push(evento)
+    else dias.push({ data, rotulo: rotuloDoDia(data), eventos: [evento] })
+  }
+
+  return dias
+}
+
+function Evento({ evento }) {
+  return (
+    <li className="trilha__item">
+      <span className={`trilha__marca trilha__marca--${evento.categoria}`} aria-hidden="true">
+        <Icone icon={categoria(evento.categoria)?.icon || appIcons.info} />
+      </span>
+
+      <div className="trilha__corpo">
+        <p className="trilha__texto">{evento.texto}</p>
+        {evento.anterior?.length > 0 ? (
+          <VerDetalhes
+            rotulo="Ver a versão anterior"
+            rotuloAberto="Ocultar a versão anterior"
+            className="trilha__anterior"
+          >
+            <dl className="trilha__anterior-lista">
+              {evento.anterior.map((item) => (
+                <div key={item.elemento}>
+                  <dt>{item.rotulo}</dt>
+                  <dd>{item.texto}</dd>
+                </div>
+              ))}
+            </dl>
+          </VerDetalhes>
+        ) : null}
+        <p className="trilha__meta">
+          <time dateTime={new Date(evento.em).toISOString()} title={DATA_E_HORA.format(evento.em)}>
+            {HORA.format(evento.em)}
+          </time>
+          <span aria-hidden="true">·</span>
+          <span className="trilha__ator">{evento.ator}</span>
+          {categoria(evento.categoria) ? (
+            <span className="admin-tag">{categoria(evento.categoria).label}</span>
+          ) : null}
+        </p>
+      </div>
+    </li>
+  )
+}
+
+export default function AbaHistorico({ historico, decisao }) {
+  const prefixo = useId()
   const [filtro, setFiltro] = useState('todas')
-  const [texto, setTexto] = useState('')
-  const [registrando, setRegistrando] = useState(false)
-  const [erro, setErro] = useState('')
-  const [novas, setNovas] = useState([])
 
-  const [pedido, setPedido] = useState('')
-  const [solicitando, setSolicitando] = useState(false)
-  const [erroDoPedido, setErroDoPedido] = useState('')
-
-  const solicitar = async (event) => {
-    event.preventDefault()
-
-    if (!pedido.trim() || solicitando) return
-
-    setSolicitando(true)
-    setErroDoPedido('')
-
-    try {
-      const criada = await solicitarComplemento(codigo, pedido.trim())
-
-      setNovas((atual) => [
-        {
-          id: `solicitacao-${criada.ocorrido_em}`,
-          em: Date.parse(criada.ocorrido_em),
-          categoria: 'oportunidade',
-          ator: criada.autor_nome,
-          texto: `Complementação solicitada ao Demandante: ${criada.mensagem}`,
-        },
-        ...atual,
-      ])
-      setPedido('')
-    } catch (problema) {
-      setErroDoPedido(
-        problema?.message || 'Não foi possível solicitar a complementação.'
-      )
-    } finally {
-      setSolicitando(false)
-    }
-  }
-
-  const registrar = async (event) => {
-    event.preventDefault()
-
-    if (!texto.trim() || registrando) return
-
-    setRegistrando(true)
-    setErro('')
-
-    try {
-      const criada = await registrarObservacao(codigo, texto.trim())
-
-      setNovas((atual) => [
-        {
-          id: `observacao-${criada.ocorrido_em}`,
-          em: Date.parse(criada.ocorrido_em),
-          categoria: 'observacao',
-          ator: criada.autor_nome,
-          texto: criada.texto,
-        },
-        ...atual,
-      ])
-      setTexto('')
-    } catch (problema) {
-      setErro(problema?.message || 'Não foi possível registrar a observação.')
-    } finally {
-      setRegistrando(false)
-    }
-  }
-
-  const eventos = useMemo(() => {
-    const base = [...historico, ...novas]
+  const todos = useMemo(() => {
+    const base = [...historico]
 
     if (decisao && !base.some((evento) => evento.categoria === 'decisao' && evento.em === decisao.em)) {
       base.push({
@@ -116,10 +99,18 @@ export default function AbaHistorico({
       })
     }
 
-    return base
-      .filter((evento) => filtro === 'todas' || evento.categoria === filtro)
-      .sort((a, b) => b.em - a.em)
-  }, [decisao, filtro, historico, novas])
+    return base.sort((a, b) => b.em - a.em)
+  }, [decisao, historico])
+
+  const presentes = CATEGORIAS.map((item) => ({
+    ...item,
+    total: todos.filter((evento) => evento.categoria === item.id).length,
+  })).filter((item) => item.total > 0)
+
+  const eventos = todos.filter((evento) => filtro === 'todas' || evento.categoria === filtro)
+  const dias = porDia(eventos)
+
+  const filtros = [{ id: 'todas', label: 'Tudo', total: todos.length }, ...presentes]
 
   return (
     <section className="perfil-card">
@@ -134,130 +125,39 @@ export default function AbaHistorico({
       </header>
 
       <div className="perfil-card__body">
-        {podeSolicitarComplemento ? (
-          <form className="trilha-nota" onSubmit={solicitar} noValidate>
-            <label className="admin-field">
-              <span className="admin-field__label" htmlFor="trilha-complemento">
-                Solicitar complementação
-              </span>
-              <textarea
-                id="trilha-complemento"
-                className="admin-input"
-                rows={3}
-                maxLength={2000}
-                placeholder="Que informação falta para o Demandante Externo completar."
-                value={pedido}
-                onChange={(event) => setPedido(event.target.value)}
-              />
-            </label>
-
-            <p className="console-form__hint">
-              O Demandante Externo recebe um aviso com este texto e responde
-              pela própria tela da oportunidade. Não é decisão e não muda a
-              etapa — encerrar a avaliação continua sendo a aba Decisão.
-            </p>
-
-            {erroDoPedido ? (
-              <p className="login-message" role="alert">
-                {erroDoPedido}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              className="admin-btn"
-              disabled={!pedido.trim() || solicitando}
-            >
-              <Icone icon={appIcons.notifications} />
-              {solicitando ? 'Solicitando...' : 'Solicitar'}
-            </button>
-          </form>
-        ) : null}
-
-        {podeRegistrar ? (
-          <form className="trilha-nota" onSubmit={registrar} noValidate>
-            <label className="admin-field">
-              <span className="admin-field__label" htmlFor="trilha-observacao">
-                Registrar observação
-              </span>
-              <textarea
-                id="trilha-observacao"
-                className="admin-input"
-                rows={3}
-                maxLength={2000}
-                placeholder="O que você quer deixar documentado nesta avaliação."
-                value={texto}
-                onChange={(event) => setTexto(event.target.value)}
-              />
-            </label>
-
-            <p className="console-form__hint">
-              Fica na trilha com seu nome e a data. Não é decisão: o
-              encaminhamento continua sendo registrado na aba Decisão.
-            </p>
-
-            {erro ? (
-              <p className="login-message" role="alert">
-                {erro}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              className="admin-btn"
-              disabled={!texto.trim() || registrando}
-            >
-              <Icone icon={appIcons.done} />
-              {registrando ? 'Registrando...' : 'Registrar'}
-            </button>
-          </form>
-        ) : null}
-
-        <div className="chip-row" role="group" aria-label="Filtrar o histórico por categoria">
-          <button
-            type="button"
-            className={`chip${filtro === 'todas' ? ' is-selected' : ''}`}
-            aria-pressed={filtro === 'todas'}
-            onClick={() => setFiltro('todas')}
-          >
-            Tudo
-          </button>
-
-          {CATEGORIAS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`chip${filtro === item.id ? ' is-selected' : ''}`}
-              aria-pressed={filtro === item.id}
-              onClick={() => setFiltro(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {eventos.length > 0 ? (
-          <ol className="trilha">
-            {eventos.map((evento) => (
-              <li className="trilha__item" key={evento.id}>
-                <span className={`trilha__marca trilha__marca--${evento.categoria}`} aria-hidden="true">
-                  <Icone icon={categoria(evento.categoria)?.icon || appIcons.info} />
-                </span>
-
-                <div className="trilha__corpo">
-                  <p className="trilha__texto">{evento.texto}</p>
-                  <p className="trilha__meta">
-                    <span className="trilha__ator">{evento.ator}</span>
-                    <span aria-hidden="true">·</span>
-                    <time dateTime={new Date(evento.em).toISOString()}>
-                      {formatarUltimoAcesso(evento.em)}
-                    </time>
-                    <span className="admin-tag">{categoria(evento.categoria)?.label}</span>
-                  </p>
-                </div>
-              </li>
+        {presentes.length > 1 ? (
+          <div className="chip-row" role="group" aria-label="Filtrar o histórico por categoria">
+            {filtros.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`chip${filtro === item.id ? ' is-selected' : ''}`}
+                aria-pressed={filtro === item.id}
+                aria-label={`${item.label}, ${contagem(item.total)}`}
+                onClick={() => setFiltro(item.id)}
+              >
+                {item.label}
+                <span className="chip__total" aria-hidden="true">{item.total}</span>
+              </button>
             ))}
-          </ol>
+          </div>
+        ) : null}
+
+        {dias.length > 0 ? (
+          <div className="trilha-dias">
+            {dias.map((dia, indice) => (
+              <section key={dia.data} className="trilha-dia">
+                <h3 id={`${prefixo}-${indice}`} className="trilha-dia__titulo">
+                  {dia.rotulo}
+                </h3>
+                <ol className="trilha" aria-labelledby={`${prefixo}-${indice}`}>
+                  {dia.eventos.map((evento) => (
+                    <Evento key={evento.id} evento={evento} />
+                  ))}
+                </ol>
+              </section>
+            ))}
+          </div>
         ) : (
           <p className="oportunidade-bloco__vazio">
             Nenhum evento desta categoria nesta oportunidade.

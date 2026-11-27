@@ -7,6 +7,7 @@ leitura, nem de escrita (RN-A06 / D07). O que o Supervisor escreve e `incluido`,
 """
 from rest_framework import serializers
 
+from apps.accounts.services.nomes import nome_de_quem_executou
 from apps.competencies.models import NivelImportancia
 from apps.matching.models import (
     EquipePotencial,
@@ -106,6 +107,7 @@ class ExecucaoMatchingSerializer(serializers.ModelSerializer):
     ai_run_id = serializers.UUIDField(
         source='execucao_ia_id', read_only=True, default=None
     )
+    executado_por_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = ExecucaoMatching
@@ -117,6 +119,7 @@ class ExecucaoMatchingSerializer(serializers.ModelSerializer):
             'usou_rerank',
             'fallback_usado',
             'executado_por',
+            'executado_por_nome',
             'status',
             'status_rotulo',
             'erro',
@@ -125,6 +128,9 @@ class ExecucaoMatchingSerializer(serializers.ModelSerializer):
             'concluido_em',
         ]
         read_only_fields = fields
+
+    def get_executado_por_nome(self, execucao) -> str | None:
+        return nome_de_quem_executou(execucao.executado_por)
 
 
 class EquipePotencialSerializer(serializers.ModelSerializer):

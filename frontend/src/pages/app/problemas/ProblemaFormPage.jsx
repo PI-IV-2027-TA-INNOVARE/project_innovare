@@ -4,11 +4,11 @@ import BackLink from '../../../components/console/BackLink'
 import GuardaDeSaida from '../../../components/console/GuardaDeSaida'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { useAuth } from '../../../context/AuthContext'
-import { EXTENSOES_ACEITAS, TIPOS_POR_EXTENSO } from '../../../lib/anexos'
 import { Icone, appIcons } from '../../../lib/icons'
 import { formatarUltimoAcesso } from '../../../lib/people'
 import { useRascunho } from '../../../lib/rascunho'
 import { criarOportunidade, enviarAnexo } from '../../../services/pdConnectApi'
+import AnexosDoCadastro from './AnexosDoCadastro'
 import './ProblemasPage.scss'
 
 const VAZIO = {
@@ -19,7 +19,11 @@ const VAZIO = {
 }
 
 const LIMITE_RESUMO = 400
-const TETO_BYTES = 10 * 1024 * 1024
+
+const IDS_DOS_CAMPOS = {
+  titulo: 'campo-titulo-problema',
+  resumo: 'campo-resumo-problema',
+}
 
 function validar(valores) {
   const erros = {}
@@ -61,18 +65,6 @@ export default function ProblemaFormPage() {
     const { value } = event.target
     setValores((atual) => ({ ...atual, [campo]: value }))
     setErros((atual) => ({ ...atual, [campo]: undefined }))
-  }
-
-  const escolherAnexos = (event) => {
-    const escolhidos = Array.from(event.target.files || [])
-    const grandes = escolhidos.filter((arquivo) => arquivo.size > TETO_BYTES)
-
-    setAnexos(escolhidos.filter((arquivo) => arquivo.size <= TETO_BYTES))
-    setErroEnvio(
-      grandes.length > 0
-        ? `${grandes.map((arquivo) => arquivo.name).join(', ')} passa de 10 MB e ficou de fora.`
-        : ''
-    )
   }
 
   const descartarRascunho = () => {
@@ -130,6 +122,10 @@ export default function ProblemaFormPage() {
 
     if (Object.keys(encontrados).length > 0) {
       setErros(encontrados)
+
+      const primeiro = Object.keys(IDS_DOS_CAMPOS).find((campo) => encontrados[campo])
+
+      document.getElementById(IDS_DOS_CAMPOS[primeiro])?.focus()
       return
     }
 
@@ -188,6 +184,13 @@ export default function ProblemaFormPage() {
             Descreva o desafio com as suas palavras. Quem estrutura a proposta
             científica é o Núcleo de P&amp;D da AC2 — aqui basta o problema real.
           </p>
+          <p className="problemas-page__quem">
+            <Icone icon={appIcons.lock} />
+            <span>
+              Cadastrando como <strong>{user?.displayName}</strong>. Só a sua
+              organização e o Núcleo de P&amp;D veem este registro.
+            </span>
+          </p>
         </div>
       </header>
 
@@ -206,34 +209,9 @@ export default function ProblemaFormPage() {
         </div>
       ) : null}
 
-      <p className="proposta__legenda">Campos com * são obrigatórios.</p>
+      <p className="console-form__legenda">Campos com * são obrigatórios.</p>
 
       <form className="console-form" onSubmit={enviar} noValidate>
-        <section className="perfil-card">
-          <header className="perfil-card__header">
-            <div>
-              <h2 className="perfil-card__title">Quem está cadastrando</h2>
-              <p className="perfil-card__description">
-                O problema fica vinculado à sua organização. Só você e o Núcleo de
-                P&amp;D enxergam este registro.
-              </p>
-            </div>
-          </header>
-
-          <div className="perfil-card__body">
-            <label className="admin-field">
-              <span className="admin-field__label">Organização demandante</span>
-              <input
-                type="text"
-                className="admin-input"
-                value={user?.displayName || ''}
-                readOnly
-                aria-readonly="true"
-              />
-            </label>
-          </div>
-        </section>
-
         <section className="perfil-card">
           <header className="perfil-card__header">
             <div>
@@ -251,6 +229,7 @@ export default function ProblemaFormPage() {
                 Título <span aria-hidden="true">*</span>
               </span>
               <input
+                id={IDS_DOS_CAMPOS.titulo}
                 type="text"
                 className="admin-input"
                 aria-required="true"
@@ -268,11 +247,11 @@ export default function ProblemaFormPage() {
             </label>
 
             <div className="admin-field">
-              <label className="admin-field__label" htmlFor="campo-resumo-problema">
+              <label className="admin-field__label" htmlFor={IDS_DOS_CAMPOS.resumo}>
                 Resumo do problema <span aria-hidden="true">*</span>
               </label>
               <textarea
-                id="campo-resumo-problema"
+                id={IDS_DOS_CAMPOS.resumo}
                 aria-required="true"
                 className="admin-input admin-input--area"
                 rows={4}
@@ -319,50 +298,7 @@ export default function ProblemaFormPage() {
           </div>
         </section>
 
-        <section className="perfil-card">
-          <header className="perfil-card__header">
-            <div>
-              <h2 className="perfil-card__title">Anexos</h2>
-              <p className="perfil-card__description">
-                Laudos, fotos, relatórios de ensaio — o que ajudar a AC2 a
-                entender o problema. {TIPOS_POR_EXTENSO}, até 10 MB por arquivo.
-              </p>
-            </div>
-          </header>
-
-          <div className="perfil-card__body">
-            <label className="admin-field">
-              <span className="admin-field__label">Selecionar arquivos</span>
-              <input
-                type="file"
-                accept={EXTENSOES_ACEITAS}
-                className="admin-input"
-                multiple
-                onChange={escolherAnexos}
-              />
-            </label>
-
-            {anexos.length > 0 ? (
-              <ul className="problema-anexos">
-                {anexos.map((arquivo) => (
-                  <li className="problema-anexos__item" key={arquivo.name}>
-                    <Icone icon={appIcons.folder} aria-hidden="true" />
-                    {arquivo.name}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            <div className="admin-callout" role="note">
-              <Icone icon={appIcons.info} className="admin-callout__icon" />
-              <p className="admin-callout__text">
-                Os arquivos sobem junto com o cadastro, até 10 MB cada: PDF,
-                imagem, texto, planilha ou documento. A seleção não entra no
-                rascunho — se você sair e voltar, escolha os arquivos de novo.
-              </p>
-            </div>
-          </div>
-        </section>
+        <AnexosDoCadastro arquivos={anexos} aoMudar={setAnexos} desabilitado={enviando} />
 
         {erroEnvio ? (
           <div className="admin-callout" role="alert">

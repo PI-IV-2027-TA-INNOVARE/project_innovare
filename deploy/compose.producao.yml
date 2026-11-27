@@ -1,0 +1,149 @@
+# O P&D Connect em producao, numa VPS com Docker:
+#   docker compose -f deploy/compose.producao.yml up -d --build
+# O passo a passo, do servidor vazio ao primeiro acesso, esta em deploy/README.md.
+#
+# Dois arquivos de ambiente, cada um com o seu papel:
+# - deploy/.env: dominio, caminho do admin, senha do Redis e e-mail do
+#   certificado. O Compose le este sozinho, para montar este arquivo.
+# - backend/.env: os segredos da aplicacao (SECRET_KEY, banco, e-mail, chaves de
+#   IA). Entra nos containers como arquivo somente leitura, e nao por env_file:
+#   o Compose interpretaria o `$` dos valores e corromperia a SECRET_KEY.
+# O que esta em `environment` abaixo vence o backend/.env (python-decouple le o
+# ambiente antes do arquivo): producao, atras de um proxy, com Redis.
+#
+# So o nginx publica porta. A API, o worker e o agendador falam com ele e com o
+# Redis por redes do Docker; o Redis nem sai da rede interna.
+
+name: pdconnect-producao
+
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-ambiente: &ambiente
+  AMBIENTE: producao
+  DEBUG: "False"
+  ALLOWED_HOSTS: ${DOMINIO:?defina DOMINIO no deploy/.env}
+  CORS_ALLOWED_ORIGINS: https://${DOMINIO}
+  FRONTEND_URL: https://${DOMINIO}
+  ADMIN_URL: ${ADMIN_URL:?defina ADMIN_URL no deploy/.env}
+  AUTH_COOKIE_SAMESITE: Lax
+  NUM_PROXIES: "1"
+  CACHE_URL: redis://:${REDIS_SENHA:?defina REDIS_SENHA no deploy/.env}@redis:6379/2
+  CELERY_BROKER_URL: redis://:${REDIS_SENHA}@redis:6379/0
+  PREANALISE_ASSINCRONA: "True"
+
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: backend/Dockerfile
+  image: pdconnect-backend:producao
+  restart: unless-stopped
+  logging: *logs
+  environment: *ambiente
+  networks:
+    - borda
+    - interna
+  depends_on:
+    - redis
+
+services:
+  backend:
+    <<: *backend
+    volumes:
+      - ../backend/.env:/app/backend/.env:ro
+      - media:/app/backend/media
+      - estaticos:/app/backend/staticfiles
+
+  estaticos:
+    <<: *backend
+    restart: "no"
+    command: python manage.py collectstatic --noinput
+    volumes:
+      - ../backend/.env:/app/backend/.env:ro
+      - estaticos:/app/backend/staticfiles
+
+  worker:
+    <<: *backend
+    command: celery -A config.celery:app worker --loglevel=info --concurrency=2
+    volumes:
+      - ../backend/.env:/app/backend/.env:ro
+      - media:/app/backend/media
+
+  beat:
+    <<: *backend
+    command: celery -A config.celery:app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    volumes:
+      - ../backend/.env:/app/backend/.env:ro
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    logging: *logs
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_SENHA}
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - volatile-lru
+    volumes:
+      - redis:/data
+    networks:
+      - interna
+
+  nginx:
+    build:
+      context: ../frontend
+      dockerfile: ../deploy/nginx/Dockerfile
+    image: pdconnect-nginx:producao
+    restart: unless-stopped
+    logging: *logs
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO}
+      ADMIN_URL: ${ADMIN_URL}
+      NGINX_ENVSUBST_FILTER: ^(DOMINIO|ADMIN_URL)$$
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - estaticos:/srv/static:ro
+      - certificados:/etc/letsencrypt:ro
+      - desafio-acme:/var/www/certbot:ro
+    networks:
+      - borda
+    depends_on:
+      backend:
+        condition: service_started
+      estaticos:
+        condition: service_completed_successfully
+
+  certbot:
+    image: certbot/certbot:v4.0.0
+    restart: unless-stopped
+    logging: *logs
+    entrypoint:
+      - /bin/sh
+      - -c
+      - trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done
+    volumes:
+      - certificados:/etc/letsencrypt
+      - desafio-acme:/var/www/certbot
+    networks:
+      - borda
+
+networks:
+  borda:
+  interna:
+    internal: true
+
+volumes:
+  media:
+  estaticos:
+  redis:
+  certificados:
+  desafio-acme:

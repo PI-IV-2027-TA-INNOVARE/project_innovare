@@ -1,9 +1,17 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbaEquipe from './AbaEquipe'
 import { ROLES } from '../../../../lib/roles'
+
+const estilos = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'OportunidadesPage.scss'),
+  'utf8',
+)
 
 /**
  * A aba tem um `Link` para o relatorio (PB77), e `Link` exige Router.
@@ -40,9 +48,12 @@ vi.mock('../../../../services/pdConnectApi', () => ({
   validarEquipe: (...args) => api.validarEquipe(...args),
   listarRede: (...args) => api.listarRede(...args),
   obterProposta: (...args) => api.obterProposta(...args),
+  listarCompetencias: (...args) => api.listarCompetencias(...args),
 }))
 
 const SEM_EQUIPE = { data: { codigo: 'equipe_inexistente' }, message: 'sem equipe' }
+
+const SEM_PROPOSTA = { data: { codigo: 'proposta_inexistente' }, message: 'sem proposta' }
 
 const EQUIPE = {
   id_equipe: 3,
@@ -97,6 +108,9 @@ describe('AbaEquipe', () => {
       problema_pesquisa: 'Contaminação resiste à pasteurização.',
       revisada_por_humano: true,
     })
+    api.listarCompetencias = vi
+      .fn()
+      .mockResolvedValue([{ id_competencia_necessaria: 1, descricao: 'Microbiologia de alimentos' }])
   })
 
   /**
@@ -246,6 +260,47 @@ describe('AbaEquipe', () => {
     )
   })
 
+  /**
+   * Quem saia da equipe ficava com o cartao inteiro a 55% de opacidade, botao
+   * incluido: o texto caia para 2,4:1 e o "Recolocar na equipe" quase sumia.
+   * Nada dizia que a pessoa estava fora, so o apagado.
+   */
+  it('diz quem está fora da equipe e deixa o Recolocar legível', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: [{ ...EQUIPE.membros[0], incluido: false }],
+    })
+
+    renderizar()
+
+    const recolocar = await screen.findByRole('button', { name: /recolocar na equipe/i })
+    const cartao = recolocar.closest('li')
+
+    expect(within(cartao).getByText('Fora da equipe')).toBeInTheDocument()
+
+    const inicio = estilos.indexOf('\n.equipe__membro--fora {')
+    const bloco = estilos.slice(inicio, estilos.indexOf('\n}', inicio))
+
+    expect(inicio).toBeGreaterThan(-1)
+    expect(bloco).not.toMatch(/opacity/)
+
+    await userEvent.click(recolocar)
+
+    await waitFor(() =>
+      expect(api.ajustarMembroEquipe).toHaveBeenCalledWith('OP-2026-001', 10, {
+        incluido: true,
+      }),
+    )
+  })
+
+  it('quem está na equipe não leva a marca de fora', async () => {
+    renderizar()
+
+    await screen.findByRole('button', { name: /tirar da equipe/i })
+
+    expect(screen.queryByText('Fora da equipe')).not.toBeInTheDocument()
+  })
+
   it('valida a equipe e avisa que ninguém foi convocado', async () => {
     renderizar()
 
@@ -273,6 +328,28 @@ describe('AbaEquipe', () => {
     expect(await screen.findByText(/somente leitura/i)).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /validar equipe/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  /**
+   * Com a equipe gerada, o aviso só aparecia ao Supervisor. O Pesquisador
+   * está nessa equipe e lê a oportunidade: sem a indicação, tomava por
+   * definitivo um texto que ninguém revisou.
+   */
+  it('o Pesquisador vê que a proposta não foi revisada, sem pedido de revisão (RN-IA01)', async () => {
+    auth.user = { role: ROLES.PESQUISADOR, name: 'Maria' }
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: 'Contaminação resiste à pasteurização.',
+      revisada_por_humano: false,
+    })
+
+    renderizar({ irPara: vi.fn() })
+
+    expect(
+      await screen.findByText(/ainda não foi revisada pelo supervisor/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /revisar a proposta/i }),
     ).not.toBeInTheDocument()
   })
 
@@ -307,5 +384,142 @@ describe('AbaEquipe', () => {
     const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
     await userEvent.click(within(barra).getByRole('button', { name: /continuar para pré-análise/i }))
     expect(irPara).toHaveBeenCalledWith('pre-analise')
+  })
+
+  /**
+   * A barra dizia "Equipe validada" com o botão "Validar equipe" ainda ativo.
+   */
+  it('com a equipe validada, o botão diz que está validada e fica inativo', async () => {
+    api.obterEquipePotencial = vi.fn().mockResolvedValue({
+      ...EQUIPE,
+      membros: EQUIPE.membros.map((membro) => ({ ...membro, validada: true })),
+    })
+
+    renderizar({ irPara: vi.fn() })
+
+    const barra = await screen.findByRole('group', { name: 'Ações da etapa' })
+
+    expect(within(barra).getByRole('button', { name: /equipe validada/i })).toBeDisabled()
+    expect(within(barra).queryByRole('button', { name: /^validar equipe/i })).toBeNull()
+  })
+
+  /**
+   * PB66: Continuar conclui o fluxo, e Continuar e Arquivada não têm saída. O
+   * sistema já recusa rodar, ajustar e validar; a tela oferecia os botões e o
+   * Supervisor só descobria pela mensagem de erro.
+   */
+  it('depois de Continuar, não oferece rodar, ajustar nem validar, e diz por quê (PB66)', async () => {
+    const irPara = vi.fn()
+
+    renderizar({ situacao: 'continuar', irPara })
+
+    expect(await screen.findByText(/concluiu o fluxo/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /rodar de novo/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /tirar da equipe/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validar equipe/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/incluir alguém da rede/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /relatório da equipe/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /ver a decisão/i }))
+    expect(irPara).toHaveBeenCalledWith('decisao')
+  })
+
+  it('arquivada sem equipe, não oferece rodar o matching', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+
+    renderizar({ situacao: 'arquivada' })
+
+    expect(await screen.findByText(/foi arquivada/i)).toBeInTheDocument()
+    expect(screen.getByText(/nenhum matching foi rodado antes da decisão/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /rodar matching/i })).not.toBeInTheDocument()
+  })
+
+  /**
+   * A etapa 5 abria com "Rodar matching" ligado mesmo com a oportunidade na
+   * etapa 1: o servidor recusava só depois do clique. O matching compara as
+   * competências necessárias com a rede; sem elas, a aba diz de onde vêm.
+   */
+  it('sem competências identificadas, não deixa rodar e aponta a etapa Competências', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+    api.listarCompetencias = vi.fn().mockResolvedValue([])
+    const irPara = vi.fn()
+
+    renderizar({ irPara })
+
+    expect(await screen.findByText(/identifique as competências/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /rodar matching/i })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /ir para competências/i }))
+    expect(irPara).toHaveBeenCalledWith('competencias')
+  })
+
+  it('sem proposta, também aponta a etapa Competências', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+    api.listarCompetencias = vi.fn().mockRejectedValue(SEM_PROPOSTA)
+
+    renderizar({ irPara: vi.fn() })
+
+    expect(await screen.findByText(/identifique as competências/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /rodar matching/i })).toBeDisabled()
+  })
+
+  it('falha ao ler as competências não trava o matching', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+    api.listarCompetencias = vi.fn().mockRejectedValue(new Error('fora do ar'))
+
+    renderizar()
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /rodar matching/i })).toBeEnabled(),
+    )
+    expect(screen.queryByText(/identifique as competências/i)).toBeNull()
+  })
+
+  /**
+   * A rodada travava todas as etapas ("Aguarde a IA terminar") e podia passar
+   * de um minuto. O resultado fica salvo no servidor, então a página guarda
+   * a rodada, e a pessoa segue trabalhando em outra etapa.
+   */
+  it('a rodada passa pela página, sem travar as outras etapas', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+    const aoRodar = vi.fn((acao) => acao())
+    const aoOcupar = vi.fn()
+
+    renderizar({ aoRodar, aoOcupar })
+
+    await userEvent.click(await screen.findByRole('button', { name: /rodar matching/i }))
+
+    await waitFor(() => expect(api.executarMatching).toHaveBeenCalledWith('OP-2026-001'))
+    expect(aoRodar).toHaveBeenCalledTimes(1)
+    expect(aoOcupar).not.toHaveBeenCalledWith(true)
+  })
+
+  it('enquanto roda, diz que dá para seguir para outra etapa', async () => {
+    api.obterEquipePotencial = vi.fn().mockRejectedValue(SEM_EQUIPE)
+
+    renderizar({ rodadaEmCurso: true })
+
+    expect(await screen.findByText(/pode seguir para outra etapa/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /rodando/i })).toBeDisabled()
+  })
+
+  it('quando a rodada termina com a pessoa fora da aba, a aba volta já com a equipe', async () => {
+    api.obterEquipePotencial = vi
+      .fn()
+      .mockRejectedValueOnce(SEM_EQUIPE)
+      .mockResolvedValue(EQUIPE)
+
+    const { rerender } = renderizar({ rodadaEmCurso: true })
+
+    await screen.findByText(/pode seguir para outra etapa/i)
+
+    rerender(
+      <MemoryRouter>
+        <AbaEquipe oportunidadeId="OP-2026-001" rodadaEmCurso={false} />
+      </MemoryRouter>,
+    )
+
+    expect((await screen.findAllByText('Marina Alves')).length).toBeGreaterThan(0)
+    expect(api.obterEquipePotencial).toHaveBeenCalledTimes(2)
   })
 })

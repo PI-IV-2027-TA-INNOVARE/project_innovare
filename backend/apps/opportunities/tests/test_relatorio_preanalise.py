@@ -236,6 +236,20 @@ class ComoLerTests(RelatorioPreAnaliseBaseTests):
         self.assertIn('Frágil', texto)
         self.assertIn('não é nota, parecer nem decisão da FAPESP', texto)
 
+    def test_o_significado_dos_niveis_e_o_mesmo_da_tela(self):
+        self.importar()
+        self.analisar()
+
+        texto = ' '.join(self.client.get(self.url()).data['como_ler'])
+
+        self.assertIn(
+            'Cada dimensão recebe um de três níveis. Consolidada: o que a dimensão '
+            'pede está demonstrado na proposta. Em desenvolvimento: está em parte '
+            'demonstrado, com lacunas a fechar. Frágil: está ausente ou pouco '
+            'demonstrado.',
+            texto,
+        )
+
     def test_cita_a_versao_dos_criterios_analisada(self):
         self.importar()
         analise = self.analisar()
@@ -243,3 +257,38 @@ class ComoLerTests(RelatorioPreAnaliseBaseTests):
         texto = ' '.join(self.client.get(self.url()).data['como_ler'])
 
         self.assertIn(analise.versao_criterio.versao, texto)
+
+
+class RelatorioDaOportunidadeTrazAPreAnaliseInteiraTests(RelatorioPreAnaliseBaseTests):
+    """
+    O relatorio da oportunidade (PB76) e o documento que sai da tela. A
+    pre-analise entra nele inteira, com a leitura dos niveis e os criterios da
+    versao citada, sem depender de abrir o relatorio da pre-analise.
+    """
+
+    def consolidado(self):
+        return self.client.get(
+            reverse('oportunidade-relatorio', args=[self.oportunidade.codigo])
+        ).data
+
+    def test_leva_como_ler_e_os_criterios_da_versao_citada(self):
+        self.importar()
+        self.analisar()
+
+        consolidado = self.consolidado()
+        proprio = self.client.get(self.url()).data
+
+        self.assertEqual(consolidado['como_ler'], proprio['como_ler'])
+        self.assertEqual(
+            [criterio['codigo'] for criterio in consolidado['criterios']],
+            [criterio['codigo'] for criterio in proprio['criterios']],
+        )
+        self.assertEqual(len(consolidado['pre_analise']['recomendacoes']), 1)
+
+    def test_diz_quem_executou_pelo_nome_e_nao_pelo_e_mail(self):
+        self.importar()
+        self.analisar()
+
+        analise = self.consolidado()['pre_analise']
+
+        self.assertEqual(analise['executada_por_nome'], self.supervisor.nome)

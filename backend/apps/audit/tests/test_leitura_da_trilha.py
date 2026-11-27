@@ -107,7 +107,7 @@ class RotuloDoEventoTests(LeituraBaseTests):
         self.assertEqual(self.linha()['tipo_rotulo'], 'Critérios PIPE importados')
 
     def test_execucao_e_rotulada_pelo_que_foi_executado(self):
-        self.assertEqual(rotulo_do_tipo('execucao', 'equipe_potencial'), 'Matching executado')
+        self.assertEqual(rotulo_do_tipo('execucao', 'equipe_potencial'), 'Equipe potencial gerada')
         self.assertEqual(
             rotulo_do_tipo('execucao', 'pre_analise_maturidade'), 'Pré-análise executada'
         )
@@ -194,7 +194,7 @@ class BuscaPeloNomeDoEventoTests(LeituraBaseTests):
 
     def test_o_mesmo_tipo_em_entidades_diferentes_nao_se_confunde(self):
         self.assertEqual(
-            self.tipos('Matching executado'), [('execucao', 'equipe_potencial')]
+            self.tipos('Equipe potencial gerada'), [('execucao', 'equipe_potencial')]
         )
         self.assertEqual(
             self.tipos('Pré-análise executada'),

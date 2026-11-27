@@ -2,10 +2,18 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
+    'topo'
     'painel'
     'documento';
   gap: var(--admin-pad);
   align-items: start;
+}
+
+.relatorio-layout__topo {
+  grid-area: topo;
+  display: flex;
+  align-items: center;
+  gap: var(--admin-gap);
 }
 
 .relatorio-layout__documento {
@@ -117,7 +125,9 @@
 @media (min-width: 1200px) {
   .relatorio-layout {
     grid-template-columns: minmax(0, 1fr) 280px;
-    grid-template-areas: 'documento painel';
+    grid-template-areas:
+      'topo topo'
+      'documento painel';
   }
 
   .relatorio-layout__documento .relatorio-documento {
@@ -126,7 +136,9 @@
 
   .relatorio-painel {
     position: sticky;
-    top: 24px;
+    top: var(--admin-nav-offset);
+    max-height: calc(100vh - var(--admin-nav-offset) - 24px);
+    overflow-y: auto;
     flex-direction: column;
     flex-wrap: nowrap;
   }
@@ -142,6 +154,7 @@
     display: block;
   }
 
+  .relatorio-layout__topo,
   .relatorio-painel {
     display: none;
   }

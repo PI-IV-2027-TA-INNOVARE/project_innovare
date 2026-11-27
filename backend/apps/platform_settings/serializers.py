@@ -131,6 +131,10 @@ class ContatoSuporteSerializer(serializers.Serializer):
     papel = serializers.CharField(max_length=120, allow_blank=True, required=False, default='')
 
 
+class ContatoSuporteLidoSerializer(ContatoSuporteSerializer):
+    padrao = serializers.BooleanField(read_only=True)
+
+
 class EncarregadoSerializer(serializers.Serializer):
     nome = serializers.CharField()
     email = serializers.EmailField()
@@ -141,10 +145,16 @@ class RetencaoSerializer(serializers.Serializer):
     anexos_apos_arquivamento_meses = serializers.IntegerField()
 
 
+class ServicoDeIASerializer(serializers.Serializer):
+    nome = serializers.CharField()
+    papel = serializers.ChoiceField(choices=('principal', 'reserva'))
+
+
 class PrivacidadeSerializer(serializers.Serializer):
     encarregado = EncarregadoSerializer(allow_null=True)
     contatos = ContatoSuporteSerializer(many=True)
     retencao = RetencaoSerializer()
+    servicos_de_ia = ServicoDeIASerializer(many=True)
 
 
 def secao_vazia(secao):

@@ -12,7 +12,7 @@ export default function PainelPage() {
   }
 
   return (
-    <div className="painel">
+    <div className="console painel">
       <header className="painel__header">
         <p className="painel__eyebrow">AC2 Microbiologia · Núcleo de P&amp;D</p>
         <h1 className="painel__title">
@@ -24,7 +24,7 @@ export default function PainelPage() {
         </p>
       </header>
 
-      <div className="console painel__papel">
+      <div className="painel__papel">
         <PainelPorPapel user={user} />
       </div>
 

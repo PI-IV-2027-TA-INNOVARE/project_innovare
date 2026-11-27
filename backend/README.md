@@ -139,6 +139,54 @@ para arquivo. O backup é guardado só até o ensaio dar certo; cada ação fica
 
 ---
 
+## Produção
+
+Numa VPS com Docker, o caminho pronto é o `deploy/compose.producao.yml`: nginx
+com HTTPS, API, Celery, Redis e renovação do certificado. O passo a passo está
+em [`../deploy/README.md`](../deploy/README.md). O que vem abaixo vale para quem
+montar o servidor de outro jeito.
+
+O `runserver` é só para desenvolvimento. Em produção quem atende é o gunicorn,
+com a configuração de `gunicorn.conf.py` (não roda no Windows):
+
+```bash
+python manage.py migrate
+python manage.py collectstatic --noinput
+python manage.py check --deploy
+gunicorn --config gunicorn.conf.py
+```
+
+A imagem do `Dockerfile` já sobe assim, com um usuário sem privilégio. O
+`docker-compose.yml` da raiz é de desenvolvimento e troca o comando pelo
+`runserver`.
+
+O que o `.env` de produção precisa ter, além do banco e do e-mail:
+
+| Chave | Por quê |
+|---|---|
+| `AMBIENTE=producao`, `DEBUG=False` | liga HTTPS obrigatório, cookie seguro e HSTS |
+| `SECRET_KEY` própria | sem ela a aplicação não sobe |
+| `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` | os endereços reais da API e do front |
+| `ADMIN_URL` | o endereço padrão do `/admin/` é recusado em produção |
+| `CACHE_URL` | Redis para os contadores dos limites de pedidos; sem ele cada processo conta o seu |
+| `NUM_PROXIES` | número de proxies na frente da API; em zero atrás de um proxy, todos os visitantes dividem o mesmo limite |
+| `WEB_CONCURRENCY`, `GUNICORN_THREADS` | processos e threads do gunicorn (padrão 2 e 8) |
+
+O que fica fora da aplicação e precisa existir no ambiente:
+
+- **Proxy ou CDN na frente**, com HTTPS. É ele que segura ataque de volume: a
+  aplicação limita pedidos por pessoa e por endereço, mas não impede que o
+  tráfego chegue ao servidor.
+- **Arquivos estáticos** do `/admin/` e da documentação da API: o
+  `collectstatic` os reúne em `staticfiles/`, e quem os serve é o proxy.
+- **Pasta `media/` em disco persistente**: é onde ficam os anexos. Em
+  hospedagem que recria o disco a cada publicação, eles se perdem.
+- **Worker e beat do Celery**, se a pré-análise for para a fila
+  (`PREANALISE_ASSINCRONA`) e para as rotinas diárias de retenção e de limpeza
+  de sessões vencidas.
+
+---
+
 ## Estrutura
 
 ```

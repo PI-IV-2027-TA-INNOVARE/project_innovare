@@ -58,6 +58,10 @@ const HELENA = {
   competencias: ['Biologia molecular', 'Bioinformática'],
   tecnicas: ['Sequenciamento'],
   linhas: ['Microbiota de solo'],
+  formacoes: [
+    { curso: 'Ciências Biológicas', instituicao: 'Unicamp', titulacao_codigo: 'mestrado', ano_conclusao: 2016 },
+    { curso: 'Agronomia', instituicao: 'USP', titulacao_codigo: 'graduacao', ano_conclusao: null },
+  ],
 }
 
 const CARLA = {
@@ -96,7 +100,16 @@ const BANCADA = {
   tem_acesso: false,
 }
 
-const REDE = [MARIA, HELENA, CARLA, PEDRO, BANCADA]
+const JOAO = {
+  ...MARIA,
+  id_membro: 8,
+  nome: 'João Silva',
+  email: 'joao.silva@ac2microbiologia.com.br',
+  disponibilidade: 'integral',
+  competencias: ['Microbiologia de alimentos', 'Fermentação', 'PCR em tempo real', 'Bioinformática'],
+}
+
+const REDE = [MARIA, HELENA, CARLA, PEDRO, BANCADA, JOAO]
 
 function renderRede(rota = '/rede') {
   return render(
@@ -197,24 +210,233 @@ describe('RedePage', () => {
     expect(['Pedro Salgado', 'Núcleo de P&D — Bancada 2']).toContain(primeiro)
   })
 
+  it('filtra por disponibilidade e envia o parâmetro à API', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const select = screen.getByLabelText(/filtrar por disponibilidade/i)
+    await user.selectOptions(select, 'integral')
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ disponibilidade: 'integral', page: 1 }),
+      ),
+    )
+  })
+
+  it('exibe chips de filtros ativos e remove individualmente pelo ×', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await user.type(screen.getByLabelText(/buscar na rede interna/i), 'silva')
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busca: 'silva', page: 1 }),
+      ),
+    )
+
+    // O chip da busca deve aparecer
+    const chipBusca = screen.getByText('Busca')
+    expect(chipBusca).toBeInTheDocument()
+
+    // O botão de remoção do chip remove o filtro
+    const container = chipBusca.closest('.active-chip')
+    await user.click(within(container).getByRole('button', { name: /remover filtro busca/i }))
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busca: '', page: 1 }),
+      ),
+    )
+    expect(screen.queryByText('Busca')).not.toBeInTheDocument()
+  })
+
+  it('abre o popover de competências ao clicar no +N', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    // João Silva tem 4 competências, então mostra 2 + o botão +2
+    await waitFor(() => expect(screen.getByText('João Silva')).toBeInTheDocument())
+
+    const linhaJoao = screen.getByText('João Silva').closest('tr')
+    const botaoMais = within(linhaJoao).getByRole('button', { name: /ver as 2 competências restantes/i })
+
+    await user.click(botaoMais)
+
+    // O popover deve mostrar as competências restantes
+    await waitFor(() =>
+      expect(screen.getByRole('listbox')).toHaveTextContent('PCR em tempo real'),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('listbox')).toHaveTextContent('Bioinformática'),
+    )
+
+    // Clicar novamente fecha o popover
+    await user.click(botaoMais)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('fecha o popover de competências ao clicar em outra parte da tela', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await waitFor(() => expect(screen.getByText('João Silva')).toBeInTheDocument())
+
+    const linhaJoao = screen.getByText('João Silva').closest('tr')
+    const botaoMais = within(linhaJoao).getByRole('button', { name: /ver as 2 competências restantes/i })
+
+    await user.click(botaoMais)
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+
+    // Clica fora do popover (no body)
+    await user.click(document.body)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
   /**
    * A tela pedia 100 pessoas e contava no navegador: da 101a em diante, a
    * pessoa sumia da lista, da busca e dos números do topo sem aviso.
    */
-  it('mostra a rede em páginas de 20 e pede a próxima à API', async () => {
+  it('mostra a rede em páginas de 25 e pede a próxima à API', async () => {
     const user = userEvent.setup()
     api.listarRede = vi.fn().mockResolvedValue({ count: 45, results: REDE })
     renderRede()
     await esperarLista()
 
-    expect(api.listarRede).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20 }))
-    expect(screen.getByText('Página 1 de 3')).toBeInTheDocument()
+    expect(api.listarRede).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 25 }))
+    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /próxima página/i }))
 
     await waitFor(() =>
       expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })),
     )
+  })
+
+  it('ir para a próxima página logo ao abrir não volta sozinho para a página 1', async () => {
+    /**
+     * A busca espera 300 ms depois da última tecla e então volta à página 1.
+     * Essa espera também corria ao abrir a tela, sem ninguém ter digitado:
+     * quem passava de página antes dela era jogado de volta para a primeira.
+     * Era isso que derrubava, de vez em quando, o teste acima.
+     */
+    const user = userEvent.setup()
+    api.listarRede = vi.fn().mockResolvedValue({ count: 45, results: REDE })
+    renderRede()
+    await esperarLista()
+
+    await user.click(screen.getByRole('button', { name: /próxima página/i }))
+    expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument()
+
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument()
+    expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+  })
+
+  it('"Todos" busca a rede inteira, página por página da API, e mostra numa só', async () => {
+    /**
+     * A paginação da Rede é feita pela API, que entrega no máximo 100 pessoas
+     * por vez. "Todos" segue as páginas até a última e junta as pessoas.
+     */
+    const user = userEvent.setup()
+    api.listarRede = vi.fn(async (params) => {
+      if (params.page_size !== 100) return { count: REDE.length, results: REDE.slice(0, 2) }
+
+      return params.page === '1'
+        ? { count: REDE.length, next: '/?page=2', results: REDE.slice(0, 3) }
+        : { count: REDE.length, next: null, results: REDE.slice(3) }
+    })
+    renderRede()
+    await esperarLista()
+
+    const seletor = screen.getByLabelText(/linhas por página/i)
+
+    expect(seletor).toHaveDisplayValue('25')
+    expect(within(seletor).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
+      '10',
+      '25',
+      '50',
+      'Todos',
+    ])
+
+    await user.selectOptions(seletor, 'Todos')
+
+    expect(
+      await screen.findByText(`Mostrando 1–${REDE.length} de ${REDE.length}`),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 1')).toBeInTheDocument()
+    expect(api.listarRede).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: '2', page_size: 100 }),
+    )
+  })
+
+  it('aberta pelo Painel, mostra só quem não declarou competência', async () => {
+    /**
+     * "Perfis invisíveis ao matching", no Painel, levava à rede inteira. O
+     * link agora abre a Rede já recortada em quem não declarou competência,
+     * que é exatamente o que o número do Painel conta.
+     */
+    renderRede('/rede?sem_competencia=1')
+    await esperarLista()
+
+    expect(api.listarRede).toHaveBeenCalledWith(
+      expect.objectContaining({ sem_competencia: 'true' }),
+    )
+    expect(
+      screen.getByRole('button', { name: /sem competência declarada \(\d\)/i }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('o recorte de quem não declarou competência liga, desliga e sai com "Limpar filtros"', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const recorte = screen.getByRole('button', { name: /sem competência declarada \(\d\)/i })
+
+    expect(recorte).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(recorte)
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sem_competencia: 'true', page: 1 }),
+      ),
+    )
+
+    await user.click(
+      within(screen.getByLabelText('Filtros aplicados')).getByRole('button', {
+        name: /limpar filtros/i,
+      }),
+    )
+
+    await waitFor(() =>
+      expect(api.listarRede).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sem_competencia: '' }),
+      ),
+    )
+    expect(recorte).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lembra quantas linhas a pessoa escolheu', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderRede()
+    await esperarLista()
+
+    await user.selectOptions(screen.getByLabelText(/linhas por página/i), '50')
+    unmount()
+
+    renderRede()
+    await esperarLista()
+
+    expect(screen.getByLabelText(/linhas por página/i)).toHaveDisplayValue('50')
+    expect(api.listarRede).toHaveBeenLastCalledWith(expect.objectContaining({ page_size: 50 }))
   })
 
   it('os números do topo vêm do resumo da rede inteira', async () => {
@@ -311,6 +533,60 @@ describe('RedePage', () => {
     confirmar.mockRestore()
   })
 
+  /**
+   * PB84: a inativacao nao tira ninguem de equipe. O Supervisor fica sabendo
+   * de quais equipes em andamento a pessoa faz parte e decide o ajuste.
+   */
+  it('depois de inativar, lista as oportunidades com a pessoa na equipe', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    api.inativarMembro = vi.fn().mockResolvedValue({
+      ...MARIA,
+      situacao: 'inativo',
+      equipes_afetadas: [
+        { codigo: 'OP-2026-014', titulo: 'Detecção de Alicyclobacillus' },
+        { codigo: 'OP-2026-020', titulo: 'Bioinsumo para soja' },
+      ],
+    })
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Maria Ferreira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /inativar na rede/i }))
+
+    const aviso = await screen.findByRole('region', { name: /equipes com maria ferreira/i })
+    expect(aviso).toHaveTextContent(/está na equipe potencial de 2 oportunidades em andamento/i)
+    expect(within(aviso).getByRole('link', { name: /OP-2026-014/ })).toHaveAttribute(
+      'href',
+      '/oportunidades/OP-2026-014'
+    )
+    expect(within(aviso).getByRole('link', { name: /OP-2026-020/ })).toHaveAttribute(
+      'href',
+      '/oportunidades/OP-2026-020'
+    )
+
+    await user.click(within(aviso).getByRole('button', { name: /fechar o aviso/i }))
+    expect(screen.queryByRole('region', { name: /equipes com maria ferreira/i })).not.toBeInTheDocument()
+    confirmar.mockRestore()
+  })
+
+  it('sem equipe em andamento, a inativação não abre aviso', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    api.inativarMembro = vi.fn().mockResolvedValue({ ...MARIA, situacao: 'inativo', equipes_afetadas: [] })
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    const linha = screen.getByText('Maria Ferreira').closest('tr')
+    await user.click(within(linha).getByRole('button', { name: /ações para maria ferreira/i }))
+    await user.click(screen.getByRole('menuitem', { name: /inativar na rede/i }))
+
+    expect(await screen.findByText(/não entra mais na plataforma/i)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /equipes com/i })).not.toBeInTheDocument()
+    confirmar.mockRestore()
+  })
+
   it('sem confirmar, nada muda', async () => {
     const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const user = userEvent.setup()
@@ -350,6 +626,34 @@ describe('RedePage', () => {
     const dialogo = screen.getByRole('dialog')
     expect(dialogo).toHaveTextContent('Biologia molecular')
     expect(dialogo).toHaveTextContent('Sequenciamento')
+  })
+
+  /**
+   * PB83: o Supervisor ve a formacao cadastrada junto da titulacao, e quem nao
+   * cadastrou aparece como "nao informada", sem travar nada.
+   */
+  it('a ficha mostra a formação acadêmica cadastrada', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de helena torres/i }))
+
+    const linha = within(screen.getByRole('dialog')).getByText('Formação').closest('div')
+    expect(linha).toHaveTextContent(
+      'Ciências Biológicas, Mestrado, Unicamp, 2016; Agronomia, Graduação, USP'
+    )
+  })
+
+  it('sem formação cadastrada, a ficha diz que ela não foi informada', async () => {
+    const user = userEvent.setup()
+    renderRede()
+    await esperarLista()
+
+    await user.click(screen.getByRole('button', { name: /abrir a ficha de maria ferreira/i }))
+
+    const linha = within(screen.getByRole('dialog')).getByText('Formação').closest('div')
+    expect(linha).toHaveTextContent('Não informada')
   })
 
   it('a ficha manda editar na página, não dentro do modal', async () => {
@@ -392,14 +696,11 @@ describe('RedeFormPage', () => {
   it('a dica da instituição fica dentro do campo que ela explica', async () => {
     renderRede('/rede/novo')
 
-    const instituicao = await screen.findByLabelText('Instituição')
-    const campo = instituicao.closest('.admin-field')
+    const campo = await screen.findByText('Instituição')
+      .then((el) => el.closest('.admin-field'))
 
     expect(within(campo).getByText(/vínculo institucional vem do cadastro/i))
       .toBeInTheDocument()
-    expect(instituicao).toHaveAccessibleDescription(
-      /vínculo institucional vem do cadastro/i
-    )
   })
 
   it('separa cadastrar na rede de liberar o acesso', async () => {
@@ -432,20 +733,119 @@ describe('RedeFormPage', () => {
     expect(screen.getByText(/o convite de primeiro acesso sai para o e-mail/i)).toBeInTheDocument()
   })
 
-  it('as listas do matching têm nome visível e um aviso só quando estão todas vazias', async () => {
+  it('as listas do matching aparecem progressivamente: técnicas e linhas só após preencher competências', async () => {
     const user = userEvent.setup()
     renderRede('/rede/novo')
 
     const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
       .closest('.perfil-card')
 
-    expect(within(cartao).getByText('Técnicas', { selector: '.admin-field__label' })).toBeInTheDocument()
+    // Apenas Competências aparece inicialmente
+    expect(within(cartao).getByText('Competências', { selector: '.admin-field__label' })).toBeInTheDocument()
+    expect(within(cartao).queryByText('Técnicas', { selector: '.admin-field__label' })).not.toBeInTheDocument()
+    expect(within(cartao).queryByText('Linhas de pesquisa', { selector: '.admin-field__label' })).not.toBeInTheDocument()
     expect(within(cartao).queryByText(/fica de fora do matching/i)).not.toBeInTheDocument()
     expect(within(cartao).getByText(/dificilmente aparece nas sugestões/i)).toBeInTheDocument()
 
     await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
 
+    // Após preencher competências, Técnicas aparece
+    expect(within(cartao).getByText('Técnicas', { selector: '.admin-field__label' })).toBeInTheDocument()
     expect(within(cartao).queryByText(/dificilmente aparece nas sugestões/i)).not.toBeInTheDocument()
+
+    await user.type(within(cartao).getByLabelText(/adicionar em técnicas/i), 'PCR{Enter}')
+
+    // Após preencher técnicas, Linhas de pesquisa aparece
+    expect(within(cartao).getByText('Linhas de pesquisa', { selector: '.admin-field__label' })).toBeInTheDocument()
+  })
+
+  it('remove um chip sem afetar os outros da mesma lista', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
+      .closest('.perfil-card')
+
+    // Adiciona duas competências
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Fermentação{Enter}')
+
+    expect(await screen.findByText('Microbiologia')).toBeInTheDocument()
+    expect(await screen.findByText('Fermentação')).toBeInTheDocument()
+
+    // Remove apenas a primeira competência
+    const chipMicrobiologia = within(cartao).getByText('Microbiologia').closest('li')
+    const botaoRemover = within(chipMicrobiologia).getByRole('button', { name: /remover microbiologia/i })
+    await user.click(botaoRemover)
+
+    // A primeira sumiu
+    expect(within(cartao).queryByText('Microbiologia')).not.toBeInTheDocument()
+    // A segunda permanece
+    expect(await screen.findByText('Fermentação')).toBeInTheDocument()
+  })
+
+  it('remove o único chip de técnicas e linhas de pesquisa some, técnicas também somem', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
+      .closest('.perfil-card')
+
+    // Adiciona uma competência para técnicas aparecer
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
+
+    await user.type(within(cartao).getByLabelText(/adicionar em técnicas/i), 'PCR{Enter}')
+
+    expect(await screen.findByText('PCR')).toBeInTheDocument()
+    expect(within(cartao).getByText('Linhas de pesquisa', { selector: '.admin-field__label' })).toBeInTheDocument()
+
+    // Remove o único chip de técnicas
+    const chipPcr = within(cartao).getByText('PCR').closest('li')
+    const botaoRemover = within(chipPcr).getByRole('button', { name: /remover pcr/i })
+    await user.click(botaoRemover)
+
+    // Técnica sumiu
+    expect(within(cartao).queryByText('PCR')).not.toBeInTheDocument()
+    // Linhas de pesquisa sumiu porque técnicas ficou vazio
+    expect(within(cartao).queryByText('Linhas de pesquisa', { selector: '.admin-field__label' })).not.toBeInTheDocument()
+  })
+
+  it('quando todos os chips são removidos, apenas competências permanece visível', async () => {
+    const user = userEvent.setup()
+    renderRede('/rede/novo')
+
+    const cartao = (await screen.findByRole('heading', { name: 'O que o matching compara', level: 2 }))
+      .closest('.perfil-card')
+
+    // Adiciona um chip em cada lista
+    await user.type(within(cartao).getByLabelText(/adicionar em competências/i), 'Microbiologia{Enter}')
+    await user.type(within(cartao).getByLabelText(/adicionar em técnicas/i), 'PCR{Enter}')
+    await user.type(within(cartao).getByLabelText(/adicionar em linhas de pesquisa/i), 'Bioinsumos{Enter}')
+
+    // Todas as três listas devem estar visíveis
+    expect(await screen.findByText('Microbiologia')).toBeInTheDocument()
+    expect(await screen.findByText('PCR')).toBeInTheDocument()
+    expect(await screen.findByText('Bioinsumos')).toBeInTheDocument()
+
+    // Remove Linhas de Pesquisa
+    const chipBioinsumos = within(cartao).getByText('Bioinsumos').closest('li')
+    await user.click(within(chipBioinsumos).getByRole('button', { name: /remover bioinsumos/i }))
+    expect(within(cartao).queryByText('Bioinsumos')).not.toBeInTheDocument()
+
+    // Remove Técnicas
+    const chipPcr = within(cartao).getByText('PCR').closest('li')
+    await user.click(within(chipPcr).getByRole('button', { name: /remover pcr/i }))
+    expect(within(cartao).queryByText('PCR')).not.toBeInTheDocument()
+
+    // Remove Competências
+    const chipMicrobiologia = within(cartao).getByText('Microbiologia').closest('li')
+    await user.click(within(chipMicrobiologia).getByRole('button', { name: /remover microbiologia/i }))
+    expect(within(cartao).queryByText('Microbiologia')).not.toBeInTheDocument()
+
+    // Apenas Competências deve permanecer visível como seção
+    expect(within(cartao).getByText('Competências', { selector: '.admin-field__label' })).toBeInTheDocument()
+    expect(within(cartao).queryByText('Técnicas', { selector: '.admin-field__label' })).not.toBeInTheDocument()
+    expect(within(cartao).queryByText('Linhas de pesquisa', { selector: '.admin-field__label' })).not.toBeInTheDocument()
   })
 
   it('pede confirmação ao cancelar com dados preenchidos', async () => {

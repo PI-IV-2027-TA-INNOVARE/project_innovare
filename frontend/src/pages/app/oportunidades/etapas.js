@@ -64,15 +64,37 @@ const EM_CURSO_POR_SITUACAO = {
   aguardando_decisao: ['decisao'],
 }
 
+const ENCERRADAS = ['continuar', 'arquivada']
+
+const ETAPA_FORA_DO_CURSO = {
+  revisar: 'proposta',
+  continuar: 'decisao',
+  arquivada: 'decisao',
+}
+
+export function situacaoEncerrada(situacao) {
+  return ENCERRADAS.includes(situacao)
+}
+
+export function etapaDaSituacao(situacao) {
+  return ETAPA_FORA_DO_CURSO[situacao] || EM_CURSO_POR_SITUACAO[situacao]?.[0] || 'contexto'
+}
+
 export const CONCLUIDA = 'concluida'
 export const EM_ANDAMENTO = 'em_andamento'
 
-export function andamentoDasEtapas(situacao) {
+const EM_CURSO_SEM_TEXTO_NA_PROPOSTA = { estruturacao: ['copiloto'] }
+
+const SEM_ETAPA_A_SEGUIR = ['revisar', 'continuar', 'arquivada']
+
+export function andamentoDasEtapas(situacao, { propostaComTexto = true } = {}) {
   if (situacao === 'continuar') {
     return Object.fromEntries(ETAPAS.map((etapa) => [etapa.id, CONCLUIDA]))
   }
 
-  const emCurso = EM_CURSO_POR_SITUACAO[situacao]
+  const emCurso = propostaComTexto
+    ? EM_CURSO_POR_SITUACAO[situacao]
+    : EM_CURSO_SEM_TEXTO_NA_PROPOSTA[situacao] || EM_CURSO_POR_SITUACAO[situacao]
 
   if (!emCurso) return {}
 
@@ -88,4 +110,10 @@ export function andamentoDasEtapas(situacao) {
           : null,
     ]),
   )
+}
+
+export function etapaASeguir(etapa, situacao, andamento) {
+  if (!etapa.numero || SEM_ETAPA_A_SEGUIR.includes(situacao) || andamento[etapa.id]) return false
+
+  return ETAPAS.some((item) => andamento[item.id] === EM_ANDAMENTO && item.numero < etapa.numero)
 }

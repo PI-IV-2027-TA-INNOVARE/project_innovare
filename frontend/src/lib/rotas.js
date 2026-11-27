@@ -49,6 +49,10 @@ export function rotaInicialDe(papel) {
   return papel === ROLES.ADMINISTRADOR ? '/admin' : '/painel'
 }
 
+export function rotuloDoInicio(papel) {
+  return papel === ROLES.ADMINISTRADOR ? 'Ir para a administração' : 'Ir para o painel'
+}
+
 /**
  * O destino de um aviso, no papel de quem o recebeu.
  *

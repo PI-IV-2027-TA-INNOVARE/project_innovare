@@ -18,6 +18,24 @@ data de cada valor. Mudar qualquer linha daqui é portão de decisão do PO
 Sem a tabela de preço, o custo de cada chamada fica sem valor e nenhum dos dois
 limites bloqueia nada. A tela Saúde da IA avisa quando a tabela está vazia.
 
+### Reservas, aprovadas pelo PO em 17/11/2026
+
+Quando o Gemini falha, a plataforma tenta o Groq e depois o OpenRouter
+(`AI_PROVEDOR_RESERVA=groq,openrouter`). Os dois entram pelo catálogo
+`AI_PROVEDORES_COMPATIVEIS` e ainda não passaram pelo benchmark do PB112: falta
+medi-los ou registrar a dispensa justificada.
+
+| Parâmetro | Valor | Variável | Fonte e data |
+|---|---|---|---|
+| Modelo da 1ª reserva | `openai/gpt-oss-120b`, no Groq | `AI_GROQ_MODELO` | Lista de modelos ativos do Groq, 17/11/2026 |
+| Preço de entrada do Groq | R$ 0,7557 por milhão de tokens | `AI_GROQ_CUSTO_ENTRADA_BRL_POR_MILHAO` | US$ 0,15 ([ficha do modelo](https://console.groq.com/docs/model/openai/gpt-oss-120b), 17/11/2026) × a PTAX do Gemini, R$ 5,0377 |
+| Preço de saída do Groq | R$ 3,0226 por milhão de tokens | `AI_GROQ_CUSTO_SAIDA_BRL_POR_MILHAO` | US$ 0,60, mesma ficha, × a mesma PTAX |
+| Modelo da 2ª reserva | `nvidia/nemotron-3.5-super-vl:free`, no OpenRouter | `AI_OPENROUTER_MODELO` | Respondeu em 8,8 s com JSON válido em 17/11/2026; o `google/gemma-4-31b-it:free` estava sem cota no mesmo dia |
+| Preço do OpenRouter | Gratuito, custo apurado em R$ 0,00 | `AI_OPENROUTER_GRATUITO` | Preço zero na [API de modelos do OpenRouter](https://openrouter.ai/api/v1/models), 17/11/2026 |
+
+O preço do Groq é o da camada paga, como o do Gemini: na conta gratuita ele não
+cobra, e o número estima quanto custaria.
+
 Quando um limite barra a chamada, a IA não é chamada, a trilha registra o
 estouro e a tela diz o motivo: limite da oportunidade ou limite do mês.
 
@@ -138,6 +156,7 @@ A amostra rotulada ainda não existe: ela precisa ser montada com a AC2.
 |---|---|---|
 | Camada da conta do Gemini | **A confirmar pelo PO.** Na camada gratuita o Google usa o conteúdo para melhorar produtos; na paga, não. Nenhum dado real entra antes da camada paga. | [Preços do Gemini, linha "Used to improve our products"](https://ai.google.dev/gemini-api/docs/pricing), consultado em 24/10/2026 |
 | Nomes de pessoas nos prompts | Trocados por apelidos ("Pesquisador A") antes de sair para a IA | SPEC-05 do plano de integração |
+| Reservas Groq e OpenRouter | Aprovadas pelo PO em 17/11/2026. Os apelidos valem para todos os provedores, mas o texto das oportunidades sai para mais duas empresas. No OpenRouter, os modelos gratuitos podem guardar o que recebem, conforme o provedor por trás. | Registro de provedores, 17/11/2026 |
 
 ## Afinidade com o tema (matching)
 

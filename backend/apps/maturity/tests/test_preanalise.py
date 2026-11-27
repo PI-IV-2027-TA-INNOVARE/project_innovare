@@ -12,7 +12,9 @@ O que estes testes protegem, em ordem de importancia:
 
 Provedor sempre duble (AGENTS.md 0.1).
 """
+import copy
 import tempfile
+from datetime import date
 
 from django.db import connection
 from django.test import TestCase, override_settings
@@ -47,6 +49,7 @@ from core.tests.dubles import (
     ProvedorFake,
     ProvedorIndisponivel,
     ProvedorQueObservaATransacao,
+    BASE_PIPE_MINIMA,
     escrever_base_pipe,
 )
 
@@ -160,9 +163,24 @@ class CriteriosTests(PreAnaliseBaseTests):
         self.importar_criterios()
         resultado = self.importar_criterios()
 
-        self.assertEqual(resultado['atualizados'], 2)
+        self.assertEqual(resultado['atualizados'], 0)
         self.assertEqual(CriterioPreAnalise.objects.count(), 2)
         self.assertEqual(VersaoCriterio.objects.count(), 1)
+
+    def test_so_conta_como_revisado_o_criterio_cujo_texto_mudou(self):
+        """Antes, reimportar sem mudanca dizia "2 revisados" - e nada mudara."""
+        self.importar_criterios()
+        dados = copy.deepcopy(BASE_PIPE_MINIMA)
+        dados['criteria_8_5'][0]['label'] = 'Metodologia revisada'
+        self.base = escrever_base_pipe(self.diretorio.name, dados)
+
+        resultado = self.importar_criterios()
+
+        self.assertEqual(resultado['atualizados'], 1)
+        self.assertEqual(
+            CriterioPreAnalise.objects.get(codigo='A3').descricao,
+            'Metodologia revisada — A metodologia e adequada aos objetivos?',
+        )
 
     def test_base_ausente_e_conflito_explicado(self):
         with override_settings(
@@ -203,6 +221,169 @@ class CriteriosTests(PreAnaliseBaseTests):
                 'Viabilidade',
             ],
         )
+
+
+class SituacaoDaBaseTests(PreAnaliseBaseTests):
+    """
+    O arquivo da base PIPE comparado com a versao em uso.
+
+    E o que a tela de Parametros mostra antes de o Administrador ativar uma
+    versao: ativar muda a regua de todas as pre-analises seguintes, entao ele
+    precisa ver o que entra, o que muda e o que sai antes de confirmar.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.como(self.administrador)
+
+    def usar_base(self, dados):
+        self.base = escrever_base_pipe(self.diretorio.name, dados)
+
+    def situacao(self):
+        with override_settings(BASE_CONHECIMENTO_PIPE=self.base):
+            base_conhecimento.cache_clear()
+            return self.client.get(reverse('ia-criterios-arquivo'))
+
+    def base_com(self, **mudancas):
+        dados = copy.deepcopy(BASE_PIPE_MINIMA)
+        dados.update(mudancas)
+
+        return dados
+
+    def test_sem_versao_em_uso_tudo_e_novo_e_ha_o_que_ativar(self):
+        resposta = self.situacao()
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertTrue(resposta.data['disponivel'])
+        self.assertTrue(resposta.data['pendente'])
+        self.assertIsNone(resposta.data['versao_em_uso'])
+        self.assertEqual(resposta.data['versao_do_arquivo'], 'V9')
+        self.assertEqual(
+            resposta.data['novos'],
+            [
+                {'codigo': 'A3', 'titulo': 'Metodologia adequada'},
+                {'codigo': 'F1', 'titulo': 'Infraestrutura compativel'},
+            ],
+        )
+        self.assertEqual(resposta.data['sem_dimensao'], ['ZZ9'])
+
+    def test_depois_de_ativar_o_mesmo_arquivo_nao_ha_nada_pendente(self):
+        self.importar_criterios()
+
+        resposta = self.situacao()
+
+        self.assertFalse(resposta.data['pendente'])
+        self.assertEqual(resposta.data['versao_em_uso'], 'V9')
+        self.assertEqual(resposta.data['novos'], [])
+        self.assertEqual(resposta.data['alterados'], [])
+        self.assertEqual(resposta.data['removidos'], [])
+
+    def test_versao_nova_mostra_o_que_entra_o_que_muda_e_o_que_sai(self):
+        self.importar_criterios()
+        criterios = copy.deepcopy(BASE_PIPE_MINIMA['criteria_8_5'])
+        criterios[0]['label'] = 'Metodologia revisada'
+        criterios[1] = {
+            'id': 'B1',
+            'component': 'Equipe',
+            'label': 'Lideranca tecnica',
+            'evaluation_question': 'Ha quem lidere?',
+        }
+        self.usar_base(
+            self.base_com(
+                versioning=[{'version': 'V10', 'status': 'ATIVA'}],
+                criteria_8_5=criterios,
+            )
+        )
+
+        resposta = self.situacao()
+
+        self.assertTrue(resposta.data['pendente'])
+        self.assertEqual(resposta.data['versao_do_arquivo'], 'V10')
+        self.assertEqual(resposta.data['versao_em_uso'], 'V9')
+        self.assertEqual(
+            resposta.data['novos'], [{'codigo': 'B1', 'titulo': 'Lideranca tecnica'}]
+        )
+        self.assertEqual(
+            resposta.data['alterados'], [{'codigo': 'A3', 'titulo': 'Metodologia revisada'}]
+        )
+        self.assertEqual(
+            resposta.data['removidos'],
+            [{'codigo': 'F1', 'titulo': 'Infraestrutura compativel'}],
+        )
+
+    def test_na_mesma_versao_nada_sai_porque_a_importacao_nao_apaga(self):
+        """Reativar a mesma versao revisa texto; criterio que sumiu do arquivo fica."""
+        self.importar_criterios()
+        criterios = copy.deepcopy(BASE_PIPE_MINIMA['criteria_8_5'])
+        criterios[0]['label'] = 'Metodologia revisada'
+        del criterios[1]
+        self.usar_base(self.base_com(criteria_8_5=criterios))
+
+        resposta = self.situacao()
+
+        self.assertTrue(resposta.data['pendente'])
+        self.assertEqual(
+            resposta.data['alterados'], [{'codigo': 'A3', 'titulo': 'Metodologia revisada'}]
+        )
+        self.assertEqual(resposta.data['removidos'], [])
+
+    def test_diz_de_qual_chamada_a_base_veio(self):
+        dados = self.base_com()
+        dados['metadata']['call'] = '1ª Rodada 2026 — Chamada FAPESP 33/2026'
+        self.usar_base(dados)
+
+        resposta = self.situacao()
+
+        self.assertEqual(resposta.data['chamada'], '1ª Rodada 2026 — Chamada FAPESP 33/2026')
+
+    def test_revisao_prevista_pela_propria_base_e_avisada_com_a_data(self):
+        """A base registra a V3 "15/09/2026 ou apos": o Administrador precisa saber."""
+        versioning = copy.deepcopy(BASE_PIPE_MINIMA['versioning']) + [
+            {
+                'version': 'V10 planejada',
+                'date': '15/09/2020 ou após',
+                'change': 'Reavaliar novas Normas PIPE.',
+                'status': 'PENDENTE',
+            }
+        ]
+        self.usar_base(self.base_com(versioning=versioning))
+
+        revisao = self.situacao().data['revisao_prevista']
+
+        self.assertEqual(revisao['data'], date(2020, 9, 15).isoformat())
+        self.assertEqual(revisao['descricao'], 'Reavaliar novas Normas PIPE.')
+        self.assertTrue(revisao['vencida'])
+
+    def test_revisao_futura_ainda_nao_esta_vencida(self):
+        versioning = copy.deepcopy(BASE_PIPE_MINIMA['versioning']) + [
+            {
+                'version': 'V10 planejada',
+                'date': '15/09/2099',
+                'change': 'Nova rodada.',
+                'status': 'PENDENTE',
+            }
+        ]
+        self.usar_base(self.base_com(versioning=versioning))
+
+        self.assertFalse(self.situacao().data['revisao_prevista']['vencida'])
+
+    def test_sem_revisao_planejada_nao_ha_aviso(self):
+        self.assertIsNone(self.situacao().data['revisao_prevista'])
+
+    def test_arquivo_ausente_e_dito_sem_erro(self):
+        """A tela explica a ausencia; o 409 fica para quem tenta ativar."""
+        self.base = f'{self.diretorio.name}/inexistente.json'
+
+        resposta = self.situacao()
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertFalse(resposta.data['disponivel'])
+        self.assertFalse(resposta.data['pendente'])
+
+    def test_so_o_administrador_consulta(self):
+        self.como(self.supervisor)
+
+        self.assertEqual(self.situacao().status_code, status.HTTP_403_FORBIDDEN)
 
 
 class ExecucaoDaPreAnaliseTests(PreAnaliseBaseTests):
@@ -595,3 +776,137 @@ class ComparacaoComAAnteriorTests(PreAnaliseBaseTests):
         self.rodada({'inovacao': 'fragil'})
 
         self.assertTrue(self.comparacao()['mesmos_criterios'])
+
+    def test_identifica_as_recomendacoes_acatadas_na_anterior(self):
+        """PB100: na comparacao, as recomendacoes acatadas aparecem identificadas."""
+        anterior = self.rodada({'inovacao': 'fragil'}, lacunas=2)
+        acatada = anterior.recomendacoes.order_by('id_recomendacao').first()
+        acatada.acatada = True
+        acatada.save(update_fields=['acatada'])
+        self.rodada({'inovacao': 'consolidada'}, lacunas=1)
+
+        recomendacoes = self.comparacao()['recomendacoes']
+
+        self.assertEqual(recomendacoes['anterior'], 2)
+        self.assertEqual(recomendacoes['atual'], 1)
+        self.assertEqual(
+            recomendacoes['acatadas_na_anterior'],
+            [{'id_recomendacao': acatada.id_recomendacao, 'texto': acatada.texto}],
+        )
+
+
+class SignificadoDoNivelTests(PreAnaliseBaseTests):
+    """
+    A tela mostrava "Frágil" e "Em desenvolvimento" sem dizer o que cada um
+    quer dizer: so o relatorio explicava. Cada dimensao leva o significado do
+    proprio nivel, do mesmo texto que o relatorio usa.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.importar_criterios()
+
+    def test_cada_dimensao_diz_o_que_o_nivel_significa(self):
+        self.analisar(
+            provedor=ProvedorFake(
+                preanalise=_preanalise_com(
+                    {'inovacao': 'fragil', 'viabilidade': 'em_desenvolvimento', 'plano_pesquisa': 'consolidada'}
+                )
+            )
+        )
+
+        dimensoes = {
+            item['dimensao']: item['nivel_significado']
+            for item in self.client.get(self.url()).data['dimensoes']
+        }
+
+        self.assertEqual(dimensoes['inovacao'], 'está ausente ou pouco demonstrado')
+        self.assertEqual(dimensoes['viabilidade'], 'está em parte demonstrado, com lacunas a fechar')
+        self.assertEqual(
+            dimensoes['plano_pesquisa'], 'o que a dimensão pede está demonstrado na proposta'
+        )
+
+
+class TodasAsPreAnalisesTests(PreAnaliseBaseTests):
+    """
+    PB98: o historico de pre-analises fica todo acessivel, e nao so a ultima.
+    Cada rodada abre com a comparacao dela com a que veio antes.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.importar_criterios()
+
+    def rodada(self, niveis, lacunas=1):
+        return self.analisar(
+            provedor=ProvedorFake(preanalise=_preanalise_com(niveis, lacunas))
+        )
+
+    def test_lista_todas_as_rodadas_da_mais_nova_para_a_mais_antiga(self):
+        primeira = self.rodada({'inovacao': 'fragil'}, lacunas=2)
+        segunda = self.rodada({'inovacao': 'em_desenvolvimento'})
+        terceira = self.rodada({'inovacao': 'consolidada'})
+
+        resposta = self.client.get(self.url('pre-analises'))
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item['id_pre_analise'] for item in resposta.data],
+            [str(terceira.id_pre_analise), str(segunda.id_pre_analise), str(primeira.id_pre_analise)],
+        )
+        self.assertEqual([item['atual'] for item in resposta.data], [True, False, False])
+        self.assertEqual(resposta.data[2]['lacunas'], 2)
+        self.assertEqual(resposta.data[2]['recomendacoes'], 2)
+        self.assertEqual(resposta.data[2]['recomendacoes_acatadas'], 0)
+
+    def test_abre_uma_rodada_antiga_com_a_comparacao_dela(self):
+        primeira = self.rodada({'inovacao': 'fragil'})
+        segunda = self.rodada({'inovacao': 'em_desenvolvimento'})
+        self.rodada({'inovacao': 'consolidada'})
+
+        resposta = self.client.get(
+            self.url('pre-analise-rodada', str(segunda.id_pre_analise))
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(resposta.data['id_pre_analise'], str(segunda.id_pre_analise))
+        self.assertEqual(
+            resposta.data['comparacao']['anterior']['id_pre_analise'],
+            str(primeira.id_pre_analise),
+        )
+
+    def test_a_rodada_que_falhou_diz_o_motivo_na_lista(self):
+        """
+        A lista dizia so "Erro", e o Supervisor nao sabia por que a rodada
+        falhou: o motivo ficava gravado e so a rodada atual o mostrava.
+        """
+        self.rodada({'inovacao': 'fragil'})
+        self.analisar(provedor=ProvedorIndisponivel())
+
+        resposta = self.client.get(self.url('pre-analises'))
+
+        self.assertEqual(resposta.data[0]['status'], StatusExecucao.ERRO)
+        self.assertEqual(resposta.data[0]['erro'], 'provedor_indisponivel')
+        self.assertEqual(resposta.data[1]['erro'], '')
+
+    def test_rodada_de_outra_oportunidade_responde_404(self):
+        self.rodada({'inovacao': 'fragil'})
+        outra = OportunidadeBuilder().interna().criada_por(self.supervisor).build()
+        alheia = PreAnalise.objects.create(
+            proposta=PropostaEstruturada.objects.create(oportunidade=outra, **PROPOSTA),
+            versao_criterio=PreAnalise.objects.first().versao_criterio,
+            versao_proposta=1,
+        )
+
+        resposta = self.client.get(self.url('pre-analise-rodada', str(alheia.id_pre_analise)))
+
+        self.assertEqual(resposta.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_demandante_nao_le_o_historico(self):
+        self.rodada({'inovacao': 'fragil'})
+        self.como(self.demandante)
+
+        self.assertEqual(
+            self.client.get(self.url('pre-analises')).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )

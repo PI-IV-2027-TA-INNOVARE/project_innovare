@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAtualizarAoFocar } from '../../../lib/atualizarAoFocar'
 import {
-  Paginacao,
   RowActionsMenu,
   SkeletonRows,
   SortableHeader,
   TableEmpty,
 } from '../../../components/console/ConsoleTable'
 import { BotaoPessoa, FichaDePessoa } from '../../../components/console/Pessoa'
+import RodapeDePaginacao from '../../../components/console/RodapeDePaginacao'
 import { AdminToast, useToast } from '../../../components/console/toast'
 import { Icone, appIcons } from '../../../lib/icons'
+import { TODAS_AS_LINHAS, useLinhasPorPagina } from '../../../lib/linhasPorPagina'
+import { todasAsPaginas } from '../../../lib/paginas'
 import {
   inativarMembro,
   liberarAcessoMembro,
@@ -19,9 +22,11 @@ import {
   reativarMembro,
 } from '../../../services/pdConnectApi'
 import {
+  DISPONIBILIDADES,
   PAPEIS_REDE,
   SITUACOES,
   disponibilidadeLabel,
+  formacoesPorExtenso,
   membroDaApi,
   papelLabel,
   situacaoLabel,
@@ -39,14 +44,49 @@ const COLUNAS = [
   { id: 'acoes', label: 'Ações', ordenavel: false },
 ]
 
-const POR_PAGINA = 20
 const ESPERA_DA_BUSCA_MS = 300
 
 const RESUMO_VAZIO = { total: 0, ativos: 0, titulados: 0, sem_competencia: 0 }
 
+function EquipesAfetadas({ nome, oportunidades, onFechar }) {
+  const quantas =
+    oportunidades.length === 1 ? '1 oportunidade' : `${oportunidades.length} oportunidades`
+
+  return (
+    <section
+      className="admin-callout admin-callout--alerta rede-page__equipes-afetadas"
+      aria-label={`Equipes com ${nome}`}
+    >
+      <Icone icon={appIcons.warning} className="admin-callout__icon" />
+      <p className="admin-callout__text">
+        {nome} está na equipe potencial de {quantas} em andamento. A inativação não
+        tira ninguém da equipe: abra cada oportunidade e decida o ajuste na etapa Equipe.
+      </p>
+      <button
+        type="button"
+        className="admin-btn admin-btn--sm admin-btn--outline"
+        onClick={onFechar}
+        aria-label="Fechar o aviso"
+      >
+        <Icone icon={appIcons.clear} />
+      </button>
+      <ul className="admin-callout__detail rede-page__equipes-afetadas-lista">
+        {oportunidades.map((oportunidade) => (
+          <li key={oportunidade.codigo}>
+            <Link to={`/oportunidades/${oportunidade.codigo}`}>
+              {oportunidade.codigo} · {oportunidade.titulo}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 export default function RedePage() {
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
+  const [parametros, setParametros] = useSearchParams()
 
   const [pessoas, setPessoas] = useState([])
   const [total, setTotal] = useState(0)
@@ -57,33 +97,54 @@ export default function RedePage() {
   const [buscaAplicada, setBuscaAplicada] = useState('')
   const [papelFiltro, setPapelFiltro] = useState('todos')
   const [situacaoFiltro, setSituacaoFiltro] = useState('todos')
+  const [disponibilidadeFiltro, setDisponibilidadeFiltro] = useState('todos')
+  const [soSemCompetencia, setSoSemCompetencia] = useState(
+    () => parametros.get('sem_competencia') === '1'
+  )
   const [ordem, setOrdem] = useState({ campo: 'nome', direcao: 'asc' })
   const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useLinhasPorPagina('rede', 25)
   const [detalhe, setDetalhe] = useState(null)
+  const [equipesAfetadas, setEquipesAfetadas] = useState(null)
   const [liberando, setLiberando] = useState(() => new Set())
+  const [popoverAberto, setPopoverAberto] = useState(null)
 
   useEffect(() => {
+    const termo = busca.trim()
+
+    if (termo === buscaAplicada) return undefined
+
     const relogio = setTimeout(() => {
-      setBuscaAplicada(busca.trim())
+      setBuscaAplicada(termo)
       setPagina(1)
     }, ESPERA_DA_BUSCA_MS)
 
     return () => clearTimeout(relogio)
-  }, [busca])
+  }, [busca, buscaAplicada])
 
   const carregar = useCallback(async () => {
     setCarregando(true)
     setErroCarga('')
 
+    const filtros = {
+      busca: buscaAplicada,
+      papel_rede: papelFiltro === 'todos' ? '' : papelFiltro,
+      situacao: situacaoFiltro === 'todos' ? '' : situacaoFiltro,
+      disponibilidade:
+        disponibilidadeFiltro === 'todos' ? '' : disponibilidadeFiltro,
+      sem_competencia: soSemCompetencia ? 'true' : '',
+      ordenar: (ordem.direcao === 'desc' ? '-' : '') + ordem.campo,
+    }
+
     try {
-      const resposta = await listarRede({
-        page: pagina,
-        page_size: POR_PAGINA,
-        busca: buscaAplicada,
-        papel_rede: papelFiltro === 'todos' ? '' : papelFiltro,
-        situacao: situacaoFiltro === 'todos' ? '' : situacaoFiltro,
-        ordenar: (ordem.direcao === 'desc' ? '-' : '') + ordem.campo,
-      })
+      if (porPagina === TODAS_AS_LINHAS) {
+        const rede = await todasAsPaginas(listarRede, { ...filtros, page_size: 100 })
+        setPessoas(rede.map(membroDaApi))
+        setTotal(rede.length)
+        return
+      }
+
+      const resposta = await listarRede({ ...filtros, page: pagina, page_size: porPagina })
       const resultados = resposta.results || resposta
       setPessoas(resultados.map(membroDaApi))
       setTotal(resposta.count ?? resultados.length)
@@ -94,7 +155,16 @@ export default function RedePage() {
     } finally {
       setCarregando(false)
     }
-  }, [buscaAplicada, ordem, pagina, papelFiltro, situacaoFiltro])
+  }, [
+    buscaAplicada,
+    ordem,
+    pagina,
+    porPagina,
+    papelFiltro,
+    situacaoFiltro,
+    disponibilidadeFiltro,
+    soSemCompetencia,
+  ])
 
   const carregarResumo = useCallback(async () => {
     try {
@@ -112,6 +182,33 @@ export default function RedePage() {
     carregarResumo()
   }, [carregarResumo])
 
+  /**
+   * Fecha os popovers de competências quando o usuário clica
+   * em qualquer outra parte da tela.
+   */
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const alvo = event.target
+
+      // Fecha apenas se clicar fora da célula da pessoa E fora do próprio popover
+      let dentroDeCelula = false
+      document.querySelectorAll('.competencia-celula').forEach((celula) => {
+        if (celula.contains(alvo)) {
+          dentroDeCelula = true
+        }
+      })
+
+      const dentroDoPopover = alvo.closest('.competencia-popover')
+
+      if (!dentroDeCelula && !dentroDoPopover) {
+        setPopoverAberto(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const atualizar = useCallback(() => {
     carregar()
     carregarResumo()
@@ -119,7 +216,21 @@ export default function RedePage() {
 
   useAtualizarAoFocar(atualizar)
 
-  const temFiltro = Boolean(busca) || papelFiltro !== 'todos' || situacaoFiltro !== 'todos'
+  const temFiltro =
+    Boolean(busca) ||
+    papelFiltro !== 'todos' ||
+    situacaoFiltro !== 'todos' ||
+    disponibilidadeFiltro !== 'todos' ||
+    soSemCompetencia
+
+  const tamanhoDaPagina = porPagina === TODAS_AS_LINHAS ? Math.max(total, 1) : porPagina
+  const totalPaginas = Math.max(1, Math.ceil(total / tamanhoDaPagina))
+  const inicio = (pagina - 1) * tamanhoDaPagina
+
+  const escolherLinhas = (valor) => {
+    setPorPagina(valor)
+    setPagina(1)
+  }
 
   const ordenarPor = (campo) => {
     setOrdem((atual) => ({
@@ -139,12 +250,40 @@ export default function RedePage() {
     setPagina(1)
   }
 
+  const filtrarDisponibilidade = (valor) => {
+    setDisponibilidadeFiltro(valor)
+    setPagina(1)
+  }
+
+  const removerFiltro = (nome) => {
+    if (nome === 'busca') {
+      setBusca('')
+      setBuscaAplicada('')
+    } else if (nome === 'papel') {
+      setPapelFiltro('todos')
+    } else if (nome === 'situacao') {
+      setSituacaoFiltro('todos')
+    } else if (nome === 'disponibilidade') {
+      setDisponibilidadeFiltro('todos')
+    } else if (nome === 'sem_competencia') {
+      recortarSemCompetencia(false)
+    }
+    setPagina(1)
+  }
+
+  const recortarSemCompetencia = (ligado) => {
+    setSoSemCompetencia(ligado)
+    setParametros(ligado ? { sem_competencia: '1' } : {}, { replace: true })
+    setPagina(1)
+  }
+
   const limparFiltros = () => {
     setBusca('')
     setBuscaAplicada('')
     setPapelFiltro('todos')
     setSituacaoFiltro('todos')
-    setPagina(1)
+    setDisponibilidadeFiltro('todos')
+    recortarSemCompetencia(false)
   }
 
   const marcarLiberando = (id, emAndamento) => {
@@ -189,10 +328,16 @@ export default function RedePage() {
 
     try {
       const acao = inativar ? inativarMembro : reativarMembro
-      const atualizado = membroDaApi(await acao(pessoa.id))
+      const resposta = await acao(pessoa.id)
+      const atualizado = membroDaApi(resposta)
 
       setPessoas((atual) =>
         atual.map((item) => (item.id === pessoa.id ? atualizado : item))
+      )
+      setEquipesAfetadas(
+        inativar && resposta.equipes_afetadas?.length
+          ? { nome: pessoa.nome, oportunidades: resposta.equipes_afetadas }
+          : null,
       )
       carregarResumo()
       showToast(
@@ -244,12 +389,24 @@ export default function RedePage() {
           </div>
         </article>
 
-        <article className="stat-card stat-card--ok">
+        <article
+          className={`stat-card stat-card--ok stat-card--link`}
+          onClick={() => filtrarSituacao('ativo')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              filtrarSituacao('ativo')
+            }
+          }}
+        >
           <Icone icon={appIcons.active} className="stat-card__icon" />
           <div>
             <p className="stat-card__label">Com acesso ativo</p>
             <p className="stat-card__value">{resumo.ativos}</p>
           </div>
+          <span className="stat-card__seta">›</span>
         </article>
 
         <article className="stat-card">
@@ -268,6 +425,10 @@ export default function RedePage() {
           </div>
         </article>
       </div>
+
+      {equipesAfetadas ? (
+        <EquipesAfetadas {...equipesAfetadas} onFechar={() => setEquipesAfetadas(null)} />
+      ) : null}
 
       <div className="admin-toolbar">
         <div className="admin-search">
@@ -294,6 +455,16 @@ export default function RedePage() {
         </div>
 
         <div className="admin-toolbar__actions">
+          <button
+            type="button"
+            className={`admin-btn admin-btn--outline${soSemCompetencia ? ' is-active' : ''}`}
+            aria-pressed={soSemCompetencia}
+            title="Quem não declarou competência fica de fora do matching."
+            onClick={() => recortarSemCompetencia(!soSemCompetencia)}
+          >
+            Sem competência declarada ({resumo.sem_competencia})
+          </button>
+
           <label className="sr-only" htmlFor="filtro-papel">Filtrar por papel</label>
           <select
             id="filtro-papel"
@@ -319,17 +490,89 @@ export default function RedePage() {
               <option key={situacao.id} value={situacao.id}>{situacao.label}</option>
             ))}
           </select>
+
+          <label className="sr-only" htmlFor="filtro-disponibilidade">
+            Filtrar por disponibilidade
+          </label>
+          <select
+            id="filtro-disponibilidade"
+            className="admin-input admin-input--select"
+            value={disponibilidadeFiltro}
+            onChange={(event) => filtrarDisponibilidade(event.target.value)}
+          >
+            <option value="todos">Todas as disponibilidades</option>
+            {DISPONIBILIDADES.map((disponibilidade) => (
+              <option
+                key={disponibilidade.id}
+                value={disponibilidade.id}
+              >
+                {disponibilidade.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       {temFiltro ? (
         <div className="active-filters" aria-label="Filtros aplicados">
           <span className="rede-page__count">{total} de {resumo.total}</span>
+          {[
+            buscaAplicada && { id: 'busca', label: 'Busca', valor: buscaAplicada },
+            papelFiltro !== 'todos' && {
+              id: 'papel',
+              label: 'Papel',
+              valor: papelLabel(papelFiltro),
+            },
+            situacaoFiltro !== 'todos' && {
+              id: 'situacao',
+              label: 'Situação',
+              valor: situacaoLabel(situacaoFiltro),
+            },
+            disponibilidadeFiltro !== 'todos' && {
+              id: 'disponibilidade',
+              label: 'Disponibilidade',
+              valor: disponibilidadeLabel(disponibilidadeFiltro),
+            },
+            soSemCompetencia && {
+              id: 'sem_competencia',
+              label: 'Sem competência declarada',
+              valor: '',
+            },
+          ]
+            .filter(Boolean)
+            .map((filtro) => (
+              <span key={filtro.id} className="active-chip">
+                <span className="active-chip__label">{filtro.label}</span>
+                {filtro.valor ? (
+                  <span className="active-chip__valor">{filtro.valor}</span>
+                ) : null}
+                <button
+                  type="button"
+                  className="active-chip__remover"
+                  onClick={() => removerFiltro(filtro.id)}
+                  aria-label={`Remover filtro ${filtro.label}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
           <button type="button" className="link-button" onClick={limparFiltros}>
             Limpar filtros
           </button>
         </div>
       ) : null}
+
+      <div
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {buscaAplicada
+          ? `Busca por "${buscaAplicada}": ${total} resultado${
+              total !== 1 ? 's' : ''
+            } encontrado${total !== 1 ? 's' : ''}`
+          : null}
+      </div>
 
       <div className="admin-table-wrap">
         <table className="admin-table admin-table--users">
@@ -383,21 +626,45 @@ export default function RedePage() {
                 </td>
 
                 <td data-label="Competências">
-                  {pessoa.competencias.length > 0 ? (
-                    <span className="competencia-lista">
-                      {pessoa.competencias.slice(0, 2).map((competencia) => (
-                        <span className="admin-tag" key={competencia}>{competencia}</span>
-                      ))}
-                      {pessoa.competencias.length > 2 ? (
-                        <span className="admin-tag">+{pessoa.competencias.length - 2}</span>
-                      ) : null}
-                    </span>
-                  ) : (
-                    <span className="competencia-lista__vazio">
-                      <Icone icon={appIcons.warning} aria-hidden="true" />
-                      Invisível ao matching
-                    </span>
-                  )}
+                  <span className="competencia-celula">
+                    {pessoa.competencias.length > 0 ? (
+                      <span className="competencia-lista">
+                        {pessoa.competencias.slice(0, 2).map((competencia) => (
+                          <span className="admin-tag" key={competencia}>{competencia}</span>
+                        ))}
+                        {pessoa.competencias.length > 2 ? (
+                          <button
+                            type="button"
+                            className="admin-tag admin-tag--mais"
+                            aria-expanded={Boolean(popoverAberto?.pessoaId === pessoa.id)}
+                            aria-label={`Ver as ${pessoa.competencias.length - 2} competências restantes de ${pessoa.nome}`}
+                            onClick={(event) => {
+                              const jaAberto = popoverAberto?.pessoaId === pessoa.id
+
+                              if (jaAberto) {
+                                setPopoverAberto(null)
+                              } else {
+                                const botao = event.currentTarget
+                                const rect = botao.getBoundingClientRect()
+                                setPopoverAberto({
+                                  pessoaId: pessoa.id,
+                                  top: rect.bottom + 6,
+                                  left: rect.left,
+                                })
+                              }
+                            }}
+                          >
+                            +{pessoa.competencias.length - 2}
+                          </button>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span className="competencia-lista__vazio">
+                        <Icone icon={appIcons.warning} aria-hidden="true" />
+                        Invisível ao matching
+                      </span>
+                    )}
+                  </span>
                 </td>
 
                 <td data-label="Situação">
@@ -485,13 +752,52 @@ export default function RedePage() {
         </table>
       </div>
 
-      <Paginacao
-        pagina={pagina}
-        total={total}
-        porPagina={POR_PAGINA}
-        rotulo={total === 1 ? 'pessoa' : 'pessoas'}
-        onMudar={setPagina}
-      />
+      {/* Popover de competências renderizado fora da tabela (portal no body),
+         para evitar problemas de overflow/contexto de empilhamento da célula td. */}
+      {popoverAberto && (
+        <div style={{ position: 'fixed', zIndex: 50, pointerEvents: 'none' }}>
+          {createPortal(
+            <>
+              {popoverAberto && pessoas.some((p) => p.id === popoverAberto.pessoaId) && (
+                <ul
+                  className="competencia-popover"
+                  role="listbox"
+                  aria-label={`Competências de ${popoverAberto.pessoaId}`}
+                  style={{
+                    top: popoverAberto.top,
+                    left: popoverAberto.left,
+                    pointerEvents: 'auto',
+                  }}
+                >
+                  {pessoas
+                    .find((p) => p.id === popoverAberto.pessoaId)
+                    ?.competencias.slice(2)
+                    .map((competencia) => (
+                      <li key={competencia} role="option">
+                        {competencia}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </>,
+            document.body
+          )}
+        </div>
+      )}
+
+      {!carregando ? (
+        <RodapeDePaginacao
+          rotulo="Paginação da rede interna"
+          total={total}
+          inicio={inicio}
+          fim={inicio + pessoas.length}
+          pagina={pagina}
+          totalPaginas={totalPaginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={escolherLinhas}
+        />
+      ) : null}
 
       {detalhe ? (
         <FichaDePessoa
@@ -511,6 +817,7 @@ export default function RedePage() {
               ),
             },
             { rotulo: 'Instituição', valor: detalhe.instituicao },
+            { rotulo: 'Formação', valor: formacoesPorExtenso(detalhe.formacoes) },
             { rotulo: 'Disponibilidade', valor: disponibilidadeLabel(detalhe.disponibilidade) },
             { rotulo: 'Competências', valor: detalhe.competencias.join(' · ') || '—' },
             { rotulo: 'Técnicas', valor: detalhe.tecnicas.join(' · ') || '—' },

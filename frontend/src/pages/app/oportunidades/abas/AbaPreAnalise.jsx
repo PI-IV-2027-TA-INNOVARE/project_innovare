@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
+import AdminModal from '../../../../components/console/AdminModal'
 import VerDetalhes from '../../../../components/console/VerDetalhes'
 import { AdminToast, useToast } from '../../../../components/console/toast'
 import { useAuth } from '../../../../context/AuthContext'
-import { LIMITES_DE_GASTO, MOTIVOS_SEM_IA } from '../../../../lib/glossario'
+import { LIMITES_DE_GASTO, MOTIVOS_DE_FALHA_DA_PREANALISE } from '../../../../lib/glossario'
 import { Icone, appIcons } from '../../../../lib/icons'
 import {
   ROTULOS_DAS_DIMENSOES,
+  SEM_RECOMENDACAO,
   agruparPorLacuna,
   rotuloDoCriterio,
 } from '../../../../lib/lacunas'
@@ -14,11 +16,16 @@ import { ROLES } from '../../../../lib/roles'
 import {
   acatarRecomendacao,
   executarPreAnalise,
+  listarPreAnalises,
   obterEquipePotencial,
   obterPreAnalise,
+  obterPreAnaliseDaRodada,
 } from '../../../../services/pdConnectApi'
+import { situacaoEncerrada } from '../etapas'
 import EsperaIA from './EsperaIA'
 import AvisoPropostaNaoRevisada from './AvisoPropostaNaoRevisada'
+import BarraDeAcoes, { ContinuarPara } from './BarraDeAcoes'
+import EtapaEncerrada from './EtapaEncerrada'
 import ProximoPasso from './ProximoPasso'
 import '../OportunidadesPage.scss'
 
@@ -39,15 +46,12 @@ const NIVEIS = [
   { id: 'fragil', singular: 'frágil', plural: 'frágeis', rotulo: 'Frágil' },
 ]
 
-const MOTIVOS_DE_FALHA = {
-  fila_indisponivel: 'a fila de processamento não estava disponível',
-  falha_na_execucao: 'a execução falhou antes de terminar',
-  ator_indisponivel: 'quem pediu a análise não está mais disponível',
-  provedor_indisponivel: 'o serviço de IA não respondeu',
-  limite_da_oportunidade: MOTIVOS_SEM_IA.limite_da_oportunidade,
-  limite_do_mes: MOTIVOS_SEM_IA.limite_do_mes,
-  saida_invalida: 'a resposta da IA veio incompleta',
-  sem_dimensoes: 'a IA não avaliou nenhuma dimensão',
+function proximoPasso(erro) {
+  if (LIMITES_DE_GASTO.includes(erro)) return ''
+
+  if (erro === 'execucao_interrompida') return ' Reavalie para tentar de novo.'
+
+  return ' Tente reavaliar em alguns minutos.'
 }
 
 const rotuloDaDimensao = (dimensao) =>
@@ -93,7 +97,9 @@ export function primeiraFrase(texto) {
 
 const lacunasPorExtenso = (total) => `${total} ${total === 1 ? 'lacuna' : 'lacunas'}`
 
-function Dimensao({ dimensao, lacunas }) {
+const comoFrase = (texto) => `${texto.charAt(0).toUpperCase()}${texto.slice(1)}.`
+
+function Dimensao({ dimensao, lacunas, aoVerLacunas }) {
   const { frase, resto } = primeiraFrase(dimensao.avaliacao)
   const temDetalhe = Boolean(resto) || dimensao.evidencias?.length > 0
 
@@ -106,11 +112,23 @@ function Dimensao({ dimensao, lacunas }) {
         </span>
       </div>
 
+      {dimensao.nivel_significado ? (
+        <p className="preanalise__nivel-significado">
+          {comoFrase(dimensao.nivel_significado)}
+        </p>
+      ) : null}
+
       <p className="preanalise__avaliacao">{frase}</p>
 
       {lacunas.length > 0 ? (
         <p className="preanalise__dimensao-lacunas">
-          {lacunasPorExtenso(lacunas.length)} em O que melhorar
+          {aoVerLacunas ? (
+            <button type="button" className="link-button" onClick={aoVerLacunas}>
+              {lacunasPorExtenso(lacunas.length)} em O que melhorar
+            </button>
+          ) : (
+            `${lacunasPorExtenso(lacunas.length)} em O que melhorar`
+          )}
         </p>
       ) : null}
 
@@ -182,7 +200,166 @@ function Comparacao({ comparacao, versaoAtual }) {
       <p className="preanalise__comparacao-lacunas">
         {lacunasPorExtenso(comparacao.lacunas.anterior)} antes, {comparacao.lacunas.atual} agora.
       </p>
+
+      {comparacao.recomendacoes ? (
+        <>
+          <p className="preanalise__comparacao-lacunas">
+            {recomendacoesPorExtenso(comparacao.recomendacoes.anterior)} antes,{' '}
+            {comparacao.recomendacoes.atual} agora.
+          </p>
+
+          {comparacao.recomendacoes.acatadas_na_anterior.length > 0 ? (
+            <div className="preanalise__acatadas-anterior">
+              <p className="preanalise__rotulo">Acatadas na análise anterior</p>
+              <ul>
+                {comparacao.recomendacoes.acatadas_na_anterior.map((recomendacao) => (
+                  <li key={recomendacao.id_recomendacao}>
+                    <Icone icon={appIcons.done} aria-hidden="true" />
+                    <span>{recomendacao.texto}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
+  )
+}
+
+const recomendacoesPorExtenso = (total) =>
+  `${total} ${total === 1 ? 'recomendação' : 'recomendações'}`
+
+function semResultado(rodada) {
+  const motivo = rodada.status === 'erro' ? MOTIVOS_DE_FALHA_DA_PREANALISE[rodada.erro] : ''
+
+  return motivo ? `Não produziu resultado: ${motivo}` : 'Sem resultado'
+}
+
+function maisRecenteConcluida(rodadas) {
+  return rodadas
+    .filter((rodada) => rodada.status === 'ok' && !rodada.atual)
+    .sort((a, b) => Date.parse(b.executada_em) - Date.parse(a.executada_em))[0]
+}
+
+function HistoricoDePreAnalises({ rodadas, aoVer }) {
+  if (rodadas.length < 2) return null
+
+  return (
+    <VerDetalhes
+      rotulo={`Todas as pré-análises (${rodadas.length})`}
+      rotuloAberto="Ocultar as pré-análises anteriores"
+      className="preanalise__historico"
+    >
+      <ul className="preanalise__rodadas" aria-label="Pré-análises desta oportunidade">
+        {rodadas.map((rodada) => {
+          const data = formatarData(rodada.executada_em)
+
+          return (
+            <li key={rodada.id_pre_analise} className="preanalise__rodada">
+              <div className="preanalise__rodada-texto">
+                <span className="preanalise__rodada-data">{data || 'Sem data'}</span>
+                <span className="preanalise__rodada-detalhe">
+                  Proposta na versão {rodada.versao_proposta} · critérios {rodada.versao_criterios}
+                  {rodada.status === 'ok' ? '' : ` · ${rodada.status_rotulo}`}
+                </span>
+                <span className="preanalise__rodada-detalhe">
+                  {rodada.status === 'ok'
+                    ? `${lacunasPorExtenso(rodada.lacunas)} · ${rodada.recomendacoes_acatadas} de ${
+                        rodada.recomendacoes
+                      } ${rodada.recomendacoes === 1 ? 'recomendação acatada' : 'recomendações acatadas'}`
+                    : semResultado(rodada)}
+                </span>
+              </div>
+
+              {rodada.atual ? (
+                <span className="proposta__selo">
+                  {rodada.status === 'ok' ? 'Atual' : 'Mais recente'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--sm admin-btn--outline"
+                  onClick={() => aoVer(rodada)}
+                  aria-label={`Ver a pré-análise de ${data}`}
+                >
+                  <Icone icon={appIcons.view} />
+                  Ver
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </VerDetalhes>
+  )
+}
+
+function ConteudoDaRodada({ analise }) {
+  const dimensoes = analise.dimensoes || []
+  const lacunas = analise.lacunas || []
+  const motivo = analise.status === 'erro' ? MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro] : ''
+
+  return (
+    <div className="preanalise__corpo">
+      {analise.status === 'erro' ? (
+        <div className="admin-callout admin-callout--alerta" role="note">
+          <Icone icon={appIcons.warning} className="admin-callout__icon" />
+          <p className="admin-callout__text">
+            Esta execução não produziu resultado{motivo ? `: ${motivo}` : ''}.
+          </p>
+        </div>
+      ) : null}
+
+      {analise.sintese ? <p className="preanalise__sintese">{analise.sintese}</p> : null}
+      {dimensoes.length > 0 ? <Resumo dimensoes={dimensoes} /> : null}
+
+      {analise.comparacao ? (
+        <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} />
+      ) : null}
+
+      <Resultado
+        dimensoes={dimensoes}
+        lacunas={lacunas}
+        recomendacoes={analise.recomendacoes || []}
+        podeExecutar={false}
+      />
+    </div>
+  )
+}
+
+function RodadaAnterior({ analise, onFechar }) {
+  return (
+    <AdminModal
+      title={`Pré-análise de ${formatarData(analise.executada_em)}`}
+      description={`Proposta na versão ${analise.versao_proposta} · critérios ${analise.versao_criterios}. Somente leitura: as recomendações se marcam na pré-análise atual.`}
+      onClose={onFechar}
+      size="xl"
+      footer={
+        <button type="button" className="admin-btn admin-btn--outline" onClick={onFechar}>
+          Fechar
+        </button>
+      }
+    >
+      <ConteudoDaRodada analise={analise} />
+    </AdminModal>
+  )
+}
+
+function UltimoResultadoValido({ analise }) {
+  const id = useId()
+
+  return (
+    <section className="preanalise__valida" aria-labelledby={id}>
+      <h3 id={id} className="preanalise__subtitulo">
+        Último resultado válido, de {formatarData(analise.executada_em)}
+      </h3>
+      <p className="preanalise__versoes">
+        Somente leitura. É o resultado mais recente que terminou · critérios{' '}
+        {analise.versao_criterios} · proposta na versão {analise.versao_proposta}.
+      </p>
+      <ConteudoDaRodada analise={analise} />
+    </section>
   )
 }
 
@@ -212,11 +389,108 @@ function Recomendacoes({ itens, podeExecutar, ocupado, aoAlternar }) {
   )
 }
 
-function OQueMelhorar({ lacunas, recomendacoes, ...acoes }) {
+const OUTRAS_LACUNAS = 'outras'
+
+const OUTRAS_RECOMENDACOES = 'recomendacoes'
+
+const contar = (total, singular, plural) => `${total} ${total === 1 ? singular : plural}`
+
+function acatadasPorExtenso(recomendacoes) {
+  const acatadas = recomendacoes.filter((item) => item.acatada).length
+  const total = recomendacoes.length
+
+  return `${acatadas} de ${total} ${total === 1 ? 'acatada' : 'acatadas'}`
+}
+
+function gruposPorDimensao(dimensoes, lacunas, recomendacoes) {
   const { grupos, soltas } = agruparPorLacuna(lacunas, recomendacoes)
+  const avaliadas = dimensoes.map((dimensao) => dimensao.dimensao)
+  const ordem = [...new Set([...avaliadas, ...Object.keys(ROTULOS_DAS_DIMENSOES)])]
+  const porChave = new Map()
+
+  for (const grupo of grupos) {
+    const campo = grupo.lacuna.campo_afetado
+    const chave = ordem.includes(campo) ? campo : OUTRAS_LACUNAS
+
+    if (!porChave.has(chave)) porChave.set(chave, [])
+    porChave.get(chave).push(grupo)
+  }
+
+  const daDimensao = [...porChave.keys()]
+    .sort((a, b) => (a === OUTRAS_LACUNAS) - (b === OUTRAS_LACUNAS) || ordem.indexOf(a) - ordem.indexOf(b))
+    .map((chave) => {
+      const itens = porChave.get(chave)
+      const avaliada = dimensoes.find((dimensao) => dimensao.dimensao === chave)
+      const daChave = itens.flatMap((item) => item.recomendacoes)
+      const partes = [contar(itens.length, 'lacuna', 'lacunas')]
+
+      if (daChave.length > 0) partes.push(acatadasPorExtenso(daChave))
+
+      return {
+        chave,
+        titulo:
+          chave === OUTRAS_LACUNAS
+            ? 'Outras lacunas'
+            : ROTULOS_DAS_DIMENSOES[chave] || avaliada?.dimensao_rotulo || chave,
+        nivel: avaliada ? { id: avaliada.nivel, rotulo: rotuloDoNivel(avaliada) } : null,
+        resumo: partes.join(' · '),
+        itens,
+      }
+    })
+
+  if (soltas.length > 0) {
+    daDimensao.push({
+      chave: OUTRAS_RECOMENDACOES,
+      titulo: 'Outras recomendações',
+      nivel: null,
+      resumo: `${contar(soltas.length, 'recomendação', 'recomendações')} · ${acatadasPorExtenso(soltas)}`,
+      soltas,
+    })
+  }
+
+  return daDimensao
+}
+
+function GrupoDoQueMelhorar({ id, grupo, aberto, aoAlternar, children }) {
+  const conteudo = `${id}-conteudo`
+
+  return (
+    <li id={id} className="preanalise__melhoria">
+      <h4 className="preanalise__melhoria-titulo">
+        <button
+          type="button"
+          className="preanalise__melhoria-botao"
+          aria-expanded={aberto}
+          aria-controls={conteudo}
+          onClick={aoAlternar}
+        >
+          <Icone icon={aberto ? appIcons.disclosure : appIcons.next} />
+          <span className="preanalise__melhoria-nome">{grupo.titulo}</span>
+          {grupo.nivel ? (
+            <>
+              {' · '}
+              <span className={`preanalise__nivel preanalise__nivel--${grupo.nivel.id}`}>
+                {grupo.nivel.rotulo}
+              </span>
+            </>
+          ) : null}
+          {' · '}
+          <span className="preanalise__melhoria-resumo">{grupo.resumo}</span>
+        </button>
+      </h4>
+
+      <div id={conteudo} className="preanalise__melhoria-conteudo" hidden={!aberto}>
+        {children}
+      </div>
+    </li>
+  )
+}
+
+function OQueMelhorar({ dimensoes = [], lacunas, recomendacoes, abertos, aoAlternarGrupo, idDoGrupo, ...acoes }) {
+  const grupos = gruposPorDimensao(dimensoes, lacunas, recomendacoes)
   const acatadas = recomendacoes.filter((item) => item.acatada).length
 
-  if (grupos.length === 0 && soltas.length === 0) return null
+  if (grupos.length === 0) return null
 
   return (
     <div className="preanalise__bloco">
@@ -229,40 +503,110 @@ function OQueMelhorar({ lacunas, recomendacoes, ...acoes }) {
         ) : null}
       </h3>
 
-      {grupos.length > 0 ? (
-        <ul className="preanalise__grupos">
-          {grupos.map(({ lacuna, recomendacoes: daLacuna }) => (
-            <li key={lacuna.id_lacuna} className="preanalise__grupo">
-              <div className="preanalise__grupo-cabeca">
-                {ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado] ? (
-                  <span className="preanalise__grupo-dimensao">
-                    {ROTULOS_DAS_DIMENSOES[lacuna.campo_afetado]}
-                  </span>
-                ) : null}
-                <span
-                  className={`preanalise__criterio${
-                    lacuna.criterio_codigo ? '' : ' preanalise__criterio--sem-evidencia'
-                  }`}
-                >
-                  {rotuloDoCriterio(lacuna)}
-                </span>
-              </div>
+      <ul className="preanalise__melhorias">
+        {grupos.map((grupo) => (
+          <GrupoDoQueMelhorar
+            key={grupo.chave}
+            id={idDoGrupo(grupo.chave)}
+            grupo={grupo}
+            aberto={abertos.has(grupo.chave)}
+            aoAlternar={() => aoAlternarGrupo(grupo.chave)}
+          >
+            {grupo.soltas ? (
+              <Recomendacoes itens={grupo.soltas} {...acoes} />
+            ) : (
+              <ul className="preanalise__grupos">
+                {grupo.itens.map(({ lacuna, recomendacoes: daLacuna }) => (
+                  <li key={lacuna.id_lacuna} className="preanalise__grupo">
+                    <div className="preanalise__grupo-cabeca">
+                      <span
+                        className={`preanalise__criterio${
+                          lacuna.criterio_codigo ? '' : ' preanalise__criterio--sem-evidencia'
+                        }`}
+                      >
+                        {rotuloDoCriterio(lacuna)}
+                      </span>
+                    </div>
 
-              <p className="preanalise__grupo-lacuna">{lacuna.descricao}</p>
+                    <p className="preanalise__grupo-lacuna">{lacuna.descricao}</p>
 
-              {daLacuna.length > 0 ? <Recomendacoes itens={daLacuna} {...acoes} /> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {soltas.length > 0 ? (
-        <>
-          <p className="preanalise__rotulo">Outras recomendações</p>
-          <Recomendacoes itens={soltas} {...acoes} />
-        </>
-      ) : null}
+                    {daLacuna.length > 0 ? (
+                      <Recomendacoes itens={daLacuna} {...acoes} />
+                    ) : (
+                      <p className="preanalise__sem-recomendacao">{SEM_RECOMENDACAO}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </GrupoDoQueMelhorar>
+        ))}
+      </ul>
     </div>
+  )
+}
+
+function Resultado({ dimensoes, lacunas, recomendacoes, ...acoes }) {
+  const prefixo = useId()
+  const [abertos, setAbertos] = useState(() => new Set())
+  const [alvo, setAlvo] = useState(null)
+
+  const idDoGrupo = (chave) => `${prefixo}-melhorar-${chave}`
+
+  useEffect(() => {
+    if (!alvo) return
+
+    const grupo = document.getElementById(`${prefixo}-melhorar-${alvo}`)
+
+    grupo?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    grupo?.querySelector('button')?.focus({ preventScroll: true })
+    setAlvo(null)
+  }, [alvo, prefixo])
+
+  const alternarGrupo = (chave) => {
+    setAbertos((atuais) => {
+      const novos = new Set(atuais)
+
+      if (novos.has(chave)) novos.delete(chave)
+      else novos.add(chave)
+
+      return novos
+    })
+  }
+
+  const abrirGrupo = (chave) => {
+    setAbertos((atuais) => new Set(atuais).add(chave))
+    setAlvo(chave)
+  }
+
+  return (
+    <>
+      {dimensoes.length > 0 ? (
+        <div className="preanalise__bloco">
+          <h3 className="preanalise__subtitulo">Dimensões avaliadas</h3>
+          <ul className="preanalise__dimensoes">
+            {dimensoes.map((dimensao) => (
+              <Dimensao
+                key={dimensao.id_dimensao}
+                dimensao={dimensao}
+                lacunas={lacunas.filter((lacuna) => lacuna.campo_afetado === dimensao.dimensao)}
+                aoVerLacunas={() => abrirGrupo(dimensao.dimensao)}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <OQueMelhorar
+        dimensoes={dimensoes}
+        lacunas={lacunas}
+        recomendacoes={recomendacoes}
+        abertos={abertos}
+        aoAlternarGrupo={alternarGrupo}
+        idDoGrupo={idDoGrupo}
+        {...acoes}
+      />
+    </>
   )
 }
 
@@ -287,11 +631,13 @@ function AvisoSemEquipe({ irPara }) {
   )
 }
 
-export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
+export default function AbaPreAnalise({ oportunidadeId, situacao, aoOcupar, irPara }) {
   const { user } = useAuth()
   const { toast, showToast } = useToast()
 
-  const podeExecutar = user?.role === ROLES.SUPERVISOR
+  const ehSupervisor = user?.role === ROLES.SUPERVISOR
+  const encerrada = situacaoEncerrada(situacao)
+  const podeExecutar = ehSupervisor && !encerrada
 
   const [analise, setAnalise] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -301,6 +647,61 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   const [propostaPendente, setPropostaPendente] = useState(false)
   const [erroCarga, setErroCarga] = useState('')
   const [ocupado, setOcupado] = useState('')
+  const [rodadas, setRodadas] = useState([])
+  const [rodadaAberta, setRodadaAberta] = useState(null)
+  const [ultimaValida, setUltimaValida] = useState(null)
+
+  const idDaAtual = analise?.id_pre_analise
+  const acatadasDaAtual = (analise?.recomendacoes || []).filter((item) => item.acatada).length
+  const idDaUltimaValida =
+    analise?.status === 'erro' ? maisRecenteConcluida(rodadas)?.id_pre_analise : undefined
+
+  useEffect(() => {
+    if (!idDaUltimaValida) {
+      setUltimaValida(null)
+      return undefined
+    }
+
+    let ativo = true
+
+    obterPreAnaliseDaRodada(oportunidadeId, idDaUltimaValida)
+      .then((dados) => {
+        if (ativo) setUltimaValida(dados)
+      })
+      .catch(() => {
+        if (ativo) setUltimaValida(null)
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [oportunidadeId, idDaUltimaValida])
+
+  useEffect(() => {
+    if (!idDaAtual) return undefined
+
+    let ativo = true
+
+    listarPreAnalises(oportunidadeId)
+      .then((lista) => {
+        if (ativo) setRodadas(lista || [])
+      })
+      .catch(() => {
+        if (ativo) setRodadas([])
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [oportunidadeId, idDaAtual, acatadasDaAtual])
+
+  const verRodada = async (rodada) => {
+    try {
+      setRodadaAberta(await obterPreAnaliseDaRodada(oportunidadeId, rodada.id_pre_analise))
+    } catch (falha) {
+      showToast(falha?.message || 'Não foi possível abrir esta pré-análise.', 'error')
+    }
+  }
 
   const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!silencioso) setCarregando(true)
@@ -401,11 +802,13 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   }
 
   const espera = ocupado === 'executar' ? (
-    <EsperaIA titulo="A prǸ-anǭlise estǭ lendo a proposta e a equipe potencial." />
+    <EsperaIA titulo="A pré-análise está lendo a proposta e a equipe potencial." />
   ) : null
 
   const esperaDaFila = emAndamento ? (
     <EsperaIA
+      key={analise.id_pre_analise}
+      desde={analise.executada_em}
       titulo={
         analise.status === 'pendente'
           ? 'A pré-análise está na fila para começar.'
@@ -453,8 +856,11 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
           <p className="oportunidade-page__vazio">
-            Esta oportunidade ainda não tem proposta estruturada.
+            {encerrada
+              ? 'A proposta estruturada não foi iniciada antes da decisão.'
+              : 'Esta oportunidade ainda não tem proposta estruturada.'}
           </p>
           {podeExecutar ? (
             <ProximoPasso
@@ -497,6 +903,7 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
         </header>
 
         <div className="perfil-card__body preanalise__corpo">
+          <EtapaEncerrada situacao={situacao} irPara={irPara} />
           {espera}
           {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 
@@ -504,11 +911,15 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
             oportunidadeId={oportunidadeId}
             irPara={irPara}
             aoVerificar={setPropostaPendente}
+            podeRevisar={podeExecutar}
+            encerrada={encerrada}
           />
           <p className="oportunidade-page__vazio">
             {podeExecutar
               ? 'Nenhuma pré-análise foi executada ainda.'
-              : 'O Supervisor ainda não executou a pré-análise desta oportunidade.'}
+              : encerrada
+                ? 'Nenhuma pré-análise foi executada antes da decisão.'
+                : 'O Supervisor ainda não executou a pré-análise desta oportunidade.'}
           </p>
         </div>
 
@@ -518,10 +929,12 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
   }
 
   const falhou = analise?.status === 'erro'
+  const concluida = analise?.status === 'ok'
   const dimensoes = analise.dimensoes || []
   const lacunas = analise.lacunas || []
   const recomendacoes = analise.recomendacoes || []
   const data = formatarData(analise.executada_em)
+  const executor = analise.executada_por_nome || analise.executada_por
 
   return (
     <section className="perfil-card preanalise">
@@ -533,32 +946,40 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           </p>
         </div>
 
-        {podeExecutar ? (
+        {podeExecutar || (ehSupervisor && concluida) ? (
           <div className="preanalise__acoes">
-            <Link
-              className="admin-btn admin-btn--outline"
-              to={`/oportunidades/${oportunidadeId}/relatorio/pre-analise`}
-            >
-              <Icone icon={appIcons.export} />
-              Gerar relatório
-            </Link>
+            {concluida ? (
+              <Link
+                className="admin-btn admin-btn--outline"
+                to={`/oportunidades/${oportunidadeId}/relatorio/pre-analise`}
+              >
+                <Icone icon={appIcons.view} />
+                Relatório da pré-análise
+              </Link>
+            ) : null}
 
-            <button
-              type="button"
-              className="admin-btn"
-              onClick={executar}
-              disabled={
-                Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
-              }
-            >
-              <Icone icon={appIcons.reset} />
-              {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
-            </button>
+            {podeExecutar ? (
+              <button
+                type="button"
+                className="admin-btn admin-btn--outline"
+                onClick={executar}
+                disabled={
+                  Boolean(ocupado) || semEquipe || propostaPendente || emAndamento
+                }
+              >
+                <Icone icon={appIcons.reset} />
+                {ocupado === 'executar' ? 'Analisando...' : 'Reavaliar'}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span
             className="perfil-card__lock"
-            title="Executar a pré-análise é do Supervisor."
+            title={
+              encerrada
+                ? 'A oportunidade foi encerrada: a pré-análise fica como estava na decisão.'
+                : 'Executar a pré-análise é do Supervisor.'
+            }
           >
             <Icone icon={appIcons.view} />
             Somente leitura
@@ -567,6 +988,8 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
       </header>
 
       <div className="perfil-card__body preanalise__corpo">
+        <EtapaEncerrada situacao={situacao} irPara={irPara} />
+
         <div className="admin-callout" role="note">
           <Icone icon={appIcons.info} className="admin-callout__icon" />
           <p className="admin-callout__text">{analise.aviso}</p>
@@ -577,24 +1000,28 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
 
         {podeExecutar && semEquipe ? <AvisoSemEquipe irPara={irPara} /> : null}
 
-        {podeExecutar ? (
-          <AvisoPropostaNaoRevisada
-            oportunidadeId={oportunidadeId}
-            irPara={irPara}
-            aoVerificar={setPropostaPendente}
-          />
-        ) : null}
+        <AvisoPropostaNaoRevisada
+          oportunidadeId={oportunidadeId}
+          irPara={irPara}
+          aoVerificar={setPropostaPendente}
+          podeRevisar={podeExecutar}
+          encerrada={encerrada}
+        />
 
         {falhou ? (
           <div className="admin-callout admin-callout--alerta" role="alert">
             <Icone icon={appIcons.warning} className="admin-callout__icon" />
             <p className="admin-callout__text">
               A última execução não produziu resultado
-              {MOTIVOS_DE_FALHA[analise.erro] ? `: ${MOTIVOS_DE_FALHA[analise.erro]}` : ''}.
-              {LIMITES_DE_GASTO.includes(analise.erro) ? '' : ' Tente reavaliar em alguns minutos.'}
+              {MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]
+                ? `: ${MOTIVOS_DE_FALHA_DA_PREANALISE[analise.erro]}`
+                : ''}.
+              {encerrada ? '' : proximoPasso(analise.erro)}
             </p>
           </div>
         ) : null}
+
+        {falhou && ultimaValida ? <UltimoResultadoValido analise={ultimaValida} /> : null}
 
         {analise.sintese || dimensoes.length > 0 ? (
           <div className="preanalise__abertura">
@@ -608,24 +1035,8 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
 
         {analise.comparacao ? <Comparacao comparacao={analise.comparacao} versaoAtual={analise.versao_criterios} /> : null}
 
-        {dimensoes.length > 0 ? (
-          <div className="preanalise__bloco">
-            <h3 className="preanalise__subtitulo">Dimensões avaliadas</h3>
-            <ul className="preanalise__dimensoes">
-              {dimensoes.map((dimensao) => (
-                <Dimensao
-                  key={dimensao.id_dimensao}
-                  dimensao={dimensao}
-                  lacunas={lacunas.filter(
-                    (lacuna) => lacuna.campo_afetado === dimensao.dimensao,
-                  )}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <OQueMelhorar
+        <Resultado
+          dimensoes={dimensoes}
           lacunas={lacunas}
           recomendacoes={recomendacoes}
           podeExecutar={podeExecutar}
@@ -633,20 +1044,24 @@ export default function AbaPreAnalise({ oportunidadeId, aoOcupar, irPara }) {
           aoAlternar={alternarRecomendacao}
         />
 
-        {!falhou && podeExecutar ? (
-          <ProximoPasso
-            etapa="decisao"
-            irPara={irPara}
-            texto="Depois de acatar as recomendações que fizerem sentido, registre a decisão sobre a oportunidade."
-          />
-        ) : null}
-
         <p className="preanalise__versoes">
           Critérios {analise.versao_criterios} · proposta na versão {analise.versao_proposta}
           {data ? ` · executada em ${data}` : ''}
-          {analise.executada_por ? ` por ${analise.executada_por}` : ''}
+          {executor ? ` por ${executor}` : ''}
         </p>
+
+        <HistoricoDePreAnalises rodadas={rodadas} aoVer={verRodada} />
+
+        {concluida && podeExecutar ? (
+          <BarraDeAcoes estado="Depois de acatar as recomendações que fizerem sentido, registre a decisão sobre a oportunidade.">
+            <ContinuarPara etapa="decisao" irPara={irPara} />
+          </BarraDeAcoes>
+        ) : null}
       </div>
+
+      {rodadaAberta ? (
+        <RodadaAnterior analise={rodadaAberta} onFechar={() => setRodadaAberta(null)} />
+      ) : null}
 
       <AdminToast toast={toast} />
     </section>

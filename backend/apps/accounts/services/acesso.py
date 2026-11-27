@@ -6,9 +6,13 @@ Um caso de uso por classe, com `execute()`. O servico nao conhece `request`,
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
@@ -29,9 +33,21 @@ def encerrar_sessoes(usuario: Usuario) -> None:
 
     O SimpleJWT troca o token a cada renovacao e o novo nasce com prazo novo:
     sem isto, um cookie copiado seguiria valendo depois da troca de senha.
+
+    So entram as sessoes que ainda valem e ainda nao foram barradas, numa
+    gravacao so: cada renovacao deixa uma linha, e percorrer todas, uma a uma,
+    custava mais a cada dia de uso.
     """
-    for pendente in OutstandingToken.objects.filter(user=usuario):
-        BlacklistedToken.objects.get_or_create(token=pendente)
+    abertas = OutstandingToken.objects.filter(
+        user=usuario,
+        expires_at__gt=timezone.now(),
+        blacklistedtoken__isnull=True,
+    )
+
+    BlacklistedToken.objects.bulk_create(
+        [BlacklistedToken(token=sessao) for sessao in abertas],
+        ignore_conflicts=True,
+    )
 
 
 class SolicitarRecuperacaoSenhaService:
@@ -164,6 +180,27 @@ class AlterarSenhaService:
             ator=usuario.email,
         )
         return usuario
+
+
+INTERVALO_ENTRE_CARIMBOS = timedelta(minutes=5)
+"""
+A renovacao roda a cada carga de pagina; carimbar em todas so gravaria no banco
+sem mudar o que a tabela de usuarios mostra.
+"""
+
+
+def marcar_uso_da_sessao(id_usuario) -> None:
+    """
+    A sessao renovada conta como acesso, sem virar entrada na trilha.
+
+    So a entrada com senha carimbava `ultimo_acesso`, e a sessao se renova
+    sozinha por dias: quem estava logado aparecia como acessado "ha 4 dias".
+    """
+    agora = timezone.now()
+
+    Usuario.objects.filter(id_usuario=id_usuario).filter(
+        Q(ultimo_acesso__isnull=True) | Q(ultimo_acesso__lt=agora - INTERVALO_ENTRE_CARIMBOS)
+    ).update(ultimo_acesso=agora)
 
 
 class RegistrarAcessoService:

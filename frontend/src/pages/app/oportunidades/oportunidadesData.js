@@ -1,3 +1,5 @@
+import { etapaDaSituacao, etapaPorId, situacaoEncerrada } from './etapas'
+
 export const ORIGENS = Object.freeze([
   { id: 'externo', label: 'Problema externo', descricao: 'Trazido por um Demandante Externo.' },
   { id: 'interna', label: 'Ideia interna', descricao: 'Cadastrada por um Supervisor.' },
@@ -198,8 +200,44 @@ export const OPORTUNIDADES_EXEMPLO = Object.freeze([
 
 export const NUCLEO_INTERNO = 'Núcleo de P&D — AC2'
 
+export const ROTULOS_DOS_ELEMENTOS = Object.freeze({
+  problema_pesquisa: 'Problema de pesquisa',
+  hipotese: 'Hipótese',
+  objetivo_geral: 'Objetivo geral',
+  objetivos_especificos: 'Objetivos específicos',
+  metodologia: 'Metodologia',
+  resultados_esperados: 'Resultados esperados',
+  caracterizacao_inovacao: 'Caracterização da inovação',
+  infraestrutura_recursos: 'Infraestrutura e recursos',
+})
+
+export function elementoTemTexto(valor) {
+  if (Array.isArray(valor)) return valor.some((item) => String(item ?? '').trim())
+
+  return Boolean(String(valor ?? '').trim())
+}
+
+export function propostaTemTexto(proposta) {
+  if (!proposta) return false
+
+  return Object.keys(ROTULOS_DOS_ELEMENTOS).some((elemento) => elementoTemTexto(proposta[elemento]))
+}
+
+function versaoAnterior(anterior = {}) {
+  return Object.entries(anterior).map(([elemento, valor]) => ({
+    elemento,
+    rotulo: ROTULOS_DOS_ELEMENTOS[elemento] || elemento,
+    texto: Array.isArray(valor) ? valor.join('; ') : valor,
+  }))
+}
+
 const TEXTO_DO_EVENTO = Object.freeze({
   oportunidade_cadastrada: 'Oportunidade cadastrada.',
+  sessao_iniciada: 'O Copiloto leu a entrada.',
+  sessao_concluida: 'Conversa com o Copiloto encerrada.',
+  sintese_revisada: 'Resumo da entrada conferido.',
+  proposta_atualizada: 'Proposta estruturada atualizada.',
+  sugestao_aceita: 'Sugestão do Copiloto aceita na proposta.',
   contexto_atualizado: 'Contexto atualizado pelo Núcleo de P&D.',
   complementacao_enviada: 'Complementação enviada pelo demandante.',
   anexo_enviado: 'Documento anexado ao registro.',
@@ -219,9 +257,19 @@ export function decisaoDaApi(ultima) {
   }
 }
 
+function textoDaSituacao(situacao) {
+  if (situacao === 'revisar') return 'A oportunidade voltou para revisão da proposta.'
+
+  const etapa = situacaoEncerrada(situacao) ? null : etapaPorId(etapaDaSituacao(situacao))
+
+  return etapa
+    ? `A oportunidade passou para a etapa ${etapa.numero}, ${etapa.label}.`
+    : `Situação: ${situacaoLabel(situacao)}.`
+}
+
 function textoComDetalhe(tipo, detalhe) {
   if (tipo === 'situacao_atualizada' && detalhe.para) {
-    return `Situação: ${situacaoLabel(detalhe.para)}.`
+    return textoDaSituacao(detalhe.para)
   }
 
   if (tipo === 'prioridade_definida' && detalhe.para) {
@@ -229,6 +277,12 @@ function textoComDetalhe(tipo, detalhe) {
   }
 
   return ''
+}
+
+function textoDoRotulo(evento) {
+  const rotulo = evento.tipo_rotulo
+
+  return rotulo && rotulo !== evento.tipo ? `${rotulo}.` : ''
 }
 
 export function eventoDaApi(evento, indice) {
@@ -243,7 +297,9 @@ export function eventoDaApi(evento, indice) {
       detalhe.texto ||
       textoComDetalhe(evento.tipo, detalhe) ||
       TEXTO_DO_EVENTO[evento.tipo] ||
+      textoDoRotulo(evento) ||
       String(evento.tipo || '').replace(/[._]/g, ' '),
+    anterior: versaoAnterior(detalhe.anterior),
   }
 }
 
@@ -263,9 +319,13 @@ export function daApi(registro) {
     atualizadaEm: Date.parse(registro.atualizada_em),
     aguardaMinhaAtuacao: Boolean(registro.aguarda_minha_atuacao),
     decisao: decisaoDaApi(registro.ultima_decisao),
-    competencias: [],
-    equipe: [],
-    lacunas: [],
+    equipe: registro.resumo_da_equipe
+      ? {
+          estado: registro.resumo_da_equipe.estado,
+          membros: registro.resumo_da_equipe.membros,
+          lacunas: registro.resumo_da_equipe.lacunas,
+        }
+      : null,
   }
 }
 
@@ -276,6 +336,32 @@ export const situacaoLabel = (id) => rotulo(SITUACOES, id)
 export const decisaoLabel = (id) => rotulo(DECISOES, id)
 export const prioridadeLabel = (id) => rotulo(PRIORIDADES, id)
 
+export const FILTRO_EM_ANDAMENTO = 'em_andamento'
+
+export const NOTAS_DOS_INDICADORES = Object.freeze({
+  total: 'Todas as cadastradas, inclusive as decididas',
+  emAndamento: 'Ainda sem decisão registrada',
+  aguardandoDecisao: 'Prontas para você decidir',
+  comLacuna: 'A equipe sugerida não cobre todas as competências',
+})
+
+export const ESTADOS_DA_EQUIPE = Object.freeze([
+  { id: 'aguardando_competencias', label: 'Aguardando competências' },
+  { id: 'nao_executado', label: 'Matching não executado' },
+  { id: 'sem_resultado', label: 'Nenhum perfil encontrado' },
+  { id: 'com_equipe', label: 'Com equipe potencial' },
+])
+
+const plural = (total, singular, varios) => `${total} ${total === 1 ? singular : varios}`
+
+export function textoDaEquipe(equipe) {
+  if (!equipe) return '—'
+
+  if (equipe.estado === 'com_equipe') return plural(equipe.membros, 'pessoa', 'pessoas')
+
+  return rotulo(ESTADOS_DA_EQUIPE, equipe.estado)
+}
+
 export function emAndamento(oportunidade) {
   return !SITUACOES.find((situacao) => situacao.id === oportunidade.situacao)?.desfecho
 }
@@ -285,7 +371,7 @@ export function resumoPorSituacao(oportunidades) {
     total: oportunidades.length,
     emAndamento: oportunidades.filter(emAndamento).length,
     aguardandoDecisao: oportunidades.filter((item) => item.situacao === 'aguardando_decisao').length,
-    comLacuna: oportunidades.filter((item) => item.lacunas.length > 0).length,
+    comLacuna: oportunidades.filter((item) => (item.equipe?.lacunas ?? 0) > 0).length,
   }
 }
 

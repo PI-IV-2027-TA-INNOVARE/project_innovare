@@ -5459,14 +5459,15 @@
       "date": "03/09/2026",
       "baseline": "PIPE_JT_F1_2026_R1_V2",
       "change": "Ampliação com orçamento, bolsas, documentos, PI/terceiros, projeto completo suplementar, Súmula, SAGe, banco de perguntas, projetos BV, schema de BD e prompt robusto.",
+      "review": "Conferida em 07/11/2026 com as Normas PIPE vigentes desde 15/09/2026 (fapesp.br/pipe/normas): os 23 critérios de análise do item 11.1.5, de a) a f), são os mesmos de A1 a F3; prazo, teto e demais regras seguem a Chamada 33/2026, que prevalece sobre as normas gerais.",
       "status": "ATIVA"
     },
     {
-      "version": "V3 planejada",
-      "date": "15/09/2026 ou após",
-      "baseline": "Nova baseline",
-      "change": "Reavaliar novas Normas PIPE que entram em vigor em 15/09/2026; nunca sobrescrever retroativamente a baseline da Chamada 33/2026.",
-      "status": "PENDENTE"
+      "version": "Revisão de 25/11/2026",
+      "date": "25/11/2026",
+      "baseline": "PIPE_JT_F1_2026_R1_V2",
+      "change": "Conferida com a Chamada FAPESP 59/2026, PIPE Jornada Tecnológica 2ª Rodada 2026 – Fase 1, publicada em 12/11/2026 e lançada em 16/11/2026 (fapesp.br/18515). É geral, sem tema, e saiu na data prevista para a 8ª Chamada – Geral em fapesp.br/pipejornada. Os 23 critérios da seção 8.5, de a.1 a f.3, têm o mesmo texto da Chamada 33/2026, assim como a duração de 12 meses, o teto de R$ 500 mil com as bolsas e o limite de R$ 50 mil para consultoria. Mudam as datas (pré-proposta até 26/01/2027, proposta completa até 29/03/2027, resultados a partir de junho de 2027) e as normas PIPE de aplicação subsidiária, que passam a ser as vigentes desde 15/09/2026. Trocar a baseline da 33/2026 pela 59/2026 no prompt e nos metadados é decisão do PO; a baseline da 33/2026 não é sobrescrita.",
+      "status": "CONFERIDA"
     }
   ]
 }

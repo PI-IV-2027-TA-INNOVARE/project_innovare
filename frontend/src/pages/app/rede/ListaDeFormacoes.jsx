@@ -21,7 +21,11 @@ export default function ListaDeFormacoes({ values = [], onChange, readOnly = fal
   return (
     <div className="lista-formacoes">
       {values.length === 0 ? (
-        <p className="lista-editavel__vazio">Nenhuma formação informada.</p>
+        <p className="lista-editavel__vazio">
+          Nenhuma formação cadastrada. Adicione cursos, graduações,
+          especializações, mestrados ou doutorados para enriquecer o perfil
+          acadêmico do pesquisador.
+        </p>
       ) : (
         <ol className="lista-formacoes__itens">
           {values.map((formacao, indice) => {

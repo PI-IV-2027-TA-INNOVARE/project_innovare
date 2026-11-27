@@ -89,6 +89,7 @@ class SessaoCopilotoSerializer(serializers.ModelSerializer):
     estado_rotulo = serializers.CharField(
         source='get_estado_display', read_only=True
     )
+    sintese_conferida = serializers.SerializerMethodField()
 
     class Meta:
         model = SessaoCopiloto
@@ -100,10 +101,17 @@ class SessaoCopilotoSerializer(serializers.ModelSerializer):
             'estado',
             'estado_rotulo',
             'sintese',
+            'sintese_conferida',
             'criado_em',
             'encerrado_em',
         ]
         read_only_fields = fields
+
+    def get_sintese_conferida(self, sessao) -> bool:
+        """PB87: sem o resumo aceito ou corrigido, a estruturacao fica travada."""
+        from apps.copilot.services.copiloto import sintese_conferida
+
+        return sintese_conferida(sessao)
 
 
 class MensagemCopilotoSerializer(serializers.ModelSerializer):

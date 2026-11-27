@@ -20,10 +20,14 @@ versao de criterios e a versao da proposta que ela avaliou.
 """
 from __future__ import annotations
 
+import re
 import uuid
+from datetime import date, datetime
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from apps.accounts.models import Usuario
@@ -100,6 +104,8 @@ MOTIVOS_DE_LIMITE = (MOTIVO_LIMITE_DA_OPORTUNIDADE, MOTIVO_LIMITE_DO_MES)
 
 SEM_EQUIPE = 'Equipe potencial ainda não gerada para esta oportunidade.'
 
+ERRO_INTERROMPIDA = 'execucao_interrompida'
+
 
 def criterios_vigentes():
     """Os criterios da versao sem data de encerramento - a em uso hoje."""
@@ -122,7 +128,7 @@ def versao_vigente() -> VersaoCriterio:
     if primeiro is None:
         raise ConflitoDeEstado(
             'Nenhuma versão de critérios da pré-análise está cadastrada. '
-            'Importe os critérios em Console › Parâmetros antes de analisar.',
+            'Ative uma versão dos critérios em Administração › Parâmetros antes de analisar.',
             'criterios_ausentes',
         )
 
@@ -147,6 +153,79 @@ def preanalise_atual_de(oportunidade: Oportunidade) -> PreAnalise:
         )
 
     return analise
+
+
+def preanalise_mais_recente(proposta: OuterRef) -> Subquery:
+    """
+    A pre-analise atual de cada proposta, como subconsulta.
+
+    E a regra de `preanalise_atual_de` - a ultima executada - para quem conta
+    varias propostas numa consulta so.
+    """
+    return Subquery(
+        PreAnalise.objects.filter(proposta=proposta)
+        .order_by('-executada_em', '-pk')
+        .values('pk')[:1]
+    )
+
+
+def preanalises_de(oportunidade: Oportunidade) -> QuerySet[PreAnalise]:
+    """
+    Todas as rodadas da proposta, da mais nova para a mais antiga (PB98).
+
+    A contagem vem junto, para a lista nao abrir cada rodada so para dizer
+    quantas lacunas e recomendacoes ela trouxe.
+    """
+    return (
+        proposta_de(oportunidade)
+        .pre_analises.select_related('versao_criterio')
+        .annotate(
+            total_lacunas=Count('lacunas', distinct=True),
+            total_recomendacoes=Count('recomendacoes', distinct=True),
+            total_acatadas=Count(
+                'recomendacoes', filter=Q(recomendacoes__acatada=True), distinct=True
+            ),
+        )
+        .order_by('-executada_em')
+    )
+
+
+def preanalise_da_rodada(oportunidade: Oportunidade, identificador: str) -> PreAnalise:
+    """Uma rodada *desta* oportunidade: o filtro impede abrir a de outra."""
+    analise = (
+        PreAnalise.objects.filter(
+            proposta__oportunidade=oportunidade, id_pre_analise=identificador
+        )
+        .select_related('versao_criterio')
+        .prefetch_related(
+            'dimensoes', 'lacunas__criterio', 'recomendacoes__lacuna__criterio'
+        )
+        .first()
+    )
+
+    if analise is None:
+        raise RecursoNaoEncontrado(
+            'Pré-análise não encontrada nesta oportunidade.',
+            'preanalise_inexistente',
+        )
+
+    return analise
+
+
+def interrompida(analise: PreAnalise, agora: datetime | None = None) -> bool:
+    """
+    A execucao que passou do teto sem terminar: o processo morreu no meio ou a
+    fila nao tem quem a consuma, e ninguem vai marcar o erro.
+
+    Nao grava. Se o processo ainda estiver vivo e terminar, o resultado dele
+    vale; a tela so deixa de esperar e libera o Reavaliar.
+    """
+    if analise.status not in (StatusExecucao.PENDENTE, StatusExecucao.EXECUTANDO):
+        return False
+
+    decorrido = (agora or timezone.now()) - analise.executada_em
+
+    return decorrido.total_seconds() > settings.PREANALISE_TEMPO_MAXIMO_S
 
 
 def criterios_para_o_prompt(versao: VersaoCriterio) -> dict[str, Any]:
@@ -233,12 +312,14 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
             executada_em__lt=analise.executada_em,
         )
         .select_related('versao_criterio')
-        .prefetch_related('dimensoes', 'lacunas')
+        .prefetch_related('dimensoes', 'lacunas', 'recomendacoes')
         .first()
     )
 
     if anterior is None:
         return None
+
+    recomendacoes_antes = list(anterior.recomendacoes.all())
 
     niveis_antes = {item.dimensao: item.nivel for item in anterior.dimensoes.all()}
     niveis_agora = {item.dimensao: item.nivel for item in analise.dimensoes.all()}
@@ -269,6 +350,15 @@ def comparacao_com_anterior(analise: PreAnalise) -> dict[str, Any] | None:
         'lacunas': {
             'anterior': len(anterior.lacunas.all()),
             'atual': len(analise.lacunas.all()),
+        },
+        'recomendacoes': {
+            'anterior': len(recomendacoes_antes),
+            'atual': len(analise.recomendacoes.all()),
+            'acatadas_na_anterior': [
+                {'id_recomendacao': item.id_recomendacao, 'texto': item.texto}
+                for item in sorted(recomendacoes_antes, key=lambda item: item.id_recomendacao)
+                if item.acatada
+            ],
         },
     }
 
@@ -330,6 +420,135 @@ def _texto_da_equipe(oportunidade: Oportunidade) -> tuple[str, Apelidos]:
     return ('\n'.join(linhas) if linhas else SEM_EQUIPE), apelidos
 
 
+def _descricao_do_criterio(criterio: dict[str, Any]) -> str:
+    return ' — '.join(
+        parte
+        for parte in (
+            str(criterio.get('label', '')).strip(),
+            str(criterio.get('evaluation_question', '')).strip(),
+        )
+        if parte
+    )
+
+
+def _criterios_do_arquivo(base) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Os criterios do arquivo por codigo, e os codigos que nao tem dimensao."""
+    por_codigo = {}
+    sem_dimensao = []
+
+    for criterio in base.criterios():
+        codigo = str(criterio.get('id', '')).strip()
+        dimensao = DIMENSAO_DO_CRITERIO.get(codigo)
+
+        if not codigo or dimensao is None:
+            sem_dimensao.append(codigo)
+            continue
+
+        por_codigo[codigo] = {
+            'dimensao': dimensao,
+            'descricao': _descricao_do_criterio(criterio),
+            'titulo': str(criterio.get('label', '')).strip(),
+        }
+
+    return por_codigo, sem_dimensao
+
+
+def _data_da_revisao(texto: str) -> date | None:
+    achada = re.search(r'(\d{2})/(\d{2})/(\d{4})', texto or '')
+
+    if achada is None:
+        return None
+
+    dia, mes, ano = (int(parte) for parte in achada.groups())
+
+    try:
+        return date(ano, mes, dia)
+    except ValueError:
+        return None
+
+
+def _revisao_prevista(base) -> dict[str, Any] | None:
+    for registro in base.revisoes_pendentes():
+        quando = _data_da_revisao(str(registro.get('date', '')))
+
+        return {
+            'versao': str(registro.get('version', '')),
+            'data': quando,
+            'descricao': str(registro.get('change', '')),
+            'vencida': quando is not None and quando <= timezone.now().date(),
+        }
+
+    return None
+
+
+def situacao_da_base() -> dict[str, Any]:
+    """
+    O arquivo da base PIPE comparado com a versao em uso.
+
+    E o que o Administrador ve antes de ativar: ativar muda a regua de todas as
+    pre-analises seguintes. Na mesma versao nada sai, porque a importacao nao
+    apaga criterio - so revisa o texto.
+    """
+    base = base_conhecimento()
+    em_uso = (
+        VersaoCriterio.objects.filter(vigente_ate__isnull=True)
+        .order_by('-vigente_de')
+        .first()
+    )
+    situacao = {
+        'disponivel': base.disponivel,
+        'versao_do_arquivo': base.versao if base.disponivel else '',
+        'chamada': base.chamada,
+        'versao_em_uso': em_uso.versao if em_uso else None,
+        'pendente': False,
+        'novos': [],
+        'alterados': [],
+        'removidos': [],
+        'sem_dimensao': [],
+        'revisao_prevista': _revisao_prevista(base),
+    }
+
+    if not base.disponivel:
+        return situacao
+
+    do_arquivo, sem_dimensao = _criterios_do_arquivo(base)
+    em_uso_por_codigo = {
+        criterio.codigo: criterio
+        for criterio in CriterioPreAnalise.objects.filter(versao_criterio=em_uso)
+    } if em_uso else {}
+    mesma_versao = em_uso is not None and em_uso.versao == base.versao
+
+    def item(codigo, titulo):
+        return {'codigo': codigo, 'titulo': titulo}
+
+    def mudou(codigo, dados):
+        atual = em_uso_por_codigo[codigo]
+
+        return (atual.descricao, atual.dimensao) != (dados['descricao'], dados['dimensao'])
+
+    situacao['sem_dimensao'] = sem_dimensao
+    situacao['novos'] = [
+        item(codigo, dados['titulo'])
+        for codigo, dados in sorted(do_arquivo.items())
+        if codigo not in em_uso_por_codigo
+    ]
+    situacao['alterados'] = [
+        item(codigo, dados['titulo'])
+        for codigo, dados in sorted(do_arquivo.items())
+        if codigo in em_uso_por_codigo and mudou(codigo, dados)
+    ]
+    situacao['removidos'] = [] if mesma_versao else [
+        item(codigo, criterio.descricao.partition(' — ')[0])
+        for codigo, criterio in sorted(em_uso_por_codigo.items())
+        if codigo not in do_arquivo
+    ]
+    situacao['pendente'] = (
+        not mesma_versao or bool(situacao['novos']) or bool(situacao['alterados'])
+    )
+
+    return situacao
+
+
 class ImportarCriteriosService:
     """
     Carrega os criterios da Base de Conhecimento PIPE para o banco.
@@ -370,36 +589,30 @@ class ImportarCriteriosService:
         versao = versao_criterio.versao
         criados = 0
         atualizados = 0
-        sem_dimensao = []
+        do_arquivo, sem_dimensao = _criterios_do_arquivo(base)
 
-        for criterio in criterios:
-            codigo = str(criterio.get('id', '')).strip()
-            dimensao = DIMENSAO_DO_CRITERIO.get(codigo)
+        for codigo, dados in do_arquivo.items():
+            registro = CriterioPreAnalise.objects.filter(
+                versao_criterio=versao_criterio, codigo=codigo
+            ).first()
 
-            if not codigo or dimensao is None:
-                sem_dimensao.append(codigo)
+            if registro is None:
+                CriterioPreAnalise.objects.create(
+                    versao_criterio=versao_criterio,
+                    codigo=codigo,
+                    dimensao=dados['dimensao'],
+                    descricao=dados['descricao'],
+                )
+                criados += 1
                 continue
 
-            descricao = ' — '.join(
-                parte
-                for parte in (
-                    str(criterio.get('label', '')).strip(),
-                    str(criterio.get('evaluation_question', '')).strip(),
-                )
-                if parte
-            )
+            if (registro.dimensao, registro.descricao) == (dados['dimensao'], dados['descricao']):
+                continue
 
-            registro, nasceu = CriterioPreAnalise.objects.update_or_create(
-                versao_criterio=versao_criterio,
-                codigo=codigo,
-                defaults={
-                    'dimensao': dimensao,
-                    'descricao': descricao,
-                },
-            )
-
-            criados += 1 if nasceu else 0
-            atualizados += 0 if nasceu else 1
+            registro.dimensao = dados['dimensao']
+            registro.descricao = dados['descricao']
+            registro.save(update_fields=['dimensao', 'descricao'])
+            atualizados += 1
 
         VersaoCriterio.objects.exclude(pk=versao_criterio.pk).filter(
             vigente_ate__isnull=True

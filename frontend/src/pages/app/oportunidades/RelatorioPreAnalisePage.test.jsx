@@ -33,6 +33,7 @@ const RELATORIO = {
     sintese: 'Proposta consistente, com lacuna de infraestrutura.',
     executada_em: '2026-10-15T12:00:00Z',
     executada_por: 'supervisor@ac2microbiologia.com.br',
+    executada_por_nome: 'Rafael Antunes',
     status: 'ok',
     status_rotulo: 'Concluída',
     erro: '',
@@ -103,13 +104,30 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue(RELATORIO)
   })
 
+  /**
+   * "Executada por" mostrava o e-mail e "Execução de IA" um código solto. O
+   * código fica, porque a saída de IA precisa ser rastreável, mas com o que
+   * ele é e para que serve.
+   */
+  it('diz quem executou pelo nome e explica o código da execução da IA', async () => {
+    renderizar()
+
+    expect(await screen.findByText('Rafael Antunes')).toBeInTheDocument()
+    expect(screen.queryByText(/supervisor@ac2microbiologia/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/código desta execução da IA, para localizar a análise na auditoria: run-9/i),
+    ).toBeInTheDocument()
+  })
+
   it('consolida resultado por dimensão, lacunas e recomendações', async () => {
     renderizar()
 
     expect(
       await screen.findByRole('heading', { name: /detecção rápida de contaminação/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/desafio tecnologico · consolidada/i)).toBeInTheDocument()
+    const dimensao = screen.getByText('Desafio tecnológico', { selector: 'dt' }).nextElementSibling
+
+    expect(dimensao.querySelector('.relatorio-selo--consolidada')).toHaveTextContent('Consolidada')
     expect(screen.getByText('Não há descrição do laboratório.')).toBeInTheDocument()
     expect(
       screen.getByText('Descrever a infraestrutura disponível.'),
@@ -142,14 +160,33 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     renderizar()
 
     const ligada = (await screen.findByText('Falta o controle negativo.')).closest('li')
-    expect(ligada).toHaveTextContent('Plano de pesquisa · A3 · Metodologia adequada')
-    expect(within(ligada).getByText(/Defina o controle negativo\./)).toHaveTextContent('(acatada)')
+    expect(ligada).toHaveTextContent('Plano de pesquisa · Metodologia adequada (A3)')
+    expect(within(ligada).getByText('Defina o controle negativo.').closest('li')).toHaveTextContent(
+      'Acatada',
+    )
+    expect(screen.getByText('Monte um cronograma.').closest('li')).toHaveTextContent('Pendente')
 
     const semCriterio = screen.getByText('Não há prazo.').closest('li')
     expect(semCriterio).toHaveTextContent('Sem evidência na proposta')
     expect(within(semCriterio).getByText('Monte um cronograma.')).toBeInTheDocument()
 
     expect(screen.getByRole('heading', { name: 'Outras recomendações' })).toBeInTheDocument()
+  })
+
+  it('sinaliza no documento a lacuna que veio sem recomendação (PB97)', async () => {
+    api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      pre_analise: {
+        ...RELATORIO.pre_analise,
+        lacunas: [{ id_lacuna: 5, campo_afetado: 'viabilidade', descricao: 'Não há prazo.' }],
+        recomendacoes: [],
+      },
+    })
+
+    renderizar()
+
+    const lacuna = (await screen.findByText('Não há prazo.')).closest('li')
+    expect(lacuna).toHaveTextContent('A pré-análise não trouxe recomendação para esta lacuna.')
   })
 
   it('carrega o aviso de que o documento é orientativo', async () => {
@@ -163,6 +200,16 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
 
     expect(await screen.findByText('Critérios V2')).toBeInTheDocument()
     expect(screen.getByText(/metodologia adequada/i)).toBeInTheDocument()
+  })
+
+  it('cita cada critério de referência pelo nome, com o código entre parênteses', async () => {
+    renderizar()
+
+    const nome = await screen.findByText('Metodologia adequada', { selector: 'strong' })
+
+    expect(nome.closest('li')).toHaveTextContent(
+      'Metodologia adequada (A3) · Plano de pesquisa — a metodologia é adequada aos objetivos?'
+    )
   })
 
   it('mostra a equipe considerada e a proposta avaliada', async () => {
@@ -221,7 +268,60 @@ describe('RelatorioPreAnalisePage (PB78)', () => {
     expect(
       await screen.findByText(/não produziu resultado/i),
     ).toBeInTheDocument()
-    expect(screen.queryByText(/desafio tecnologico/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/desafio tecnológico/i)).not.toBeInTheDocument()
+  })
+
+  /**
+   * O motivo saía como código cru, "(motivo: provedor_indisponivel)". O
+   * relatório usa o mesmo texto da aba Pré-análise.
+   */
+  it('explica a falha com o texto da aba, sem o código cru', async () => {
+    for (const [erro, texto] of [
+      ['provedor_indisponivel', /o serviço de ia não respondeu/i],
+      ['execucao_interrompida', /passou do tempo esperado sem terminar/i],
+    ]) {
+      api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+        ...RELATORIO,
+        pre_analise: {
+          ...RELATORIO.pre_analise,
+          status: 'erro',
+          status_rotulo: 'Erro',
+          erro,
+          dimensoes: [],
+          lacunas: [],
+          recomendacoes: [],
+          sintese: '',
+        },
+      })
+
+      const { unmount } = renderizar()
+
+      expect(await screen.findByText(texto)).toBeInTheDocument()
+      expect(screen.queryByText(new RegExp(erro))).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('execução em andamento não aparece como falha', async () => {
+    api.obterRelatorioPreAnalise = vi.fn().mockResolvedValue({
+      ...RELATORIO,
+      pre_analise: {
+        ...RELATORIO.pre_analise,
+        status: 'executando',
+        status_rotulo: 'Executando',
+        erro: '',
+        dimensoes: [],
+        lacunas: [],
+        recomendacoes: [],
+        sintese: '',
+      },
+    })
+
+    renderizar()
+
+    expect(await screen.findByText(/ainda está em andamento/i)).toBeInTheDocument()
+    expect(screen.queryByText(/não produziu resultado/i)).not.toBeInTheDocument()
   })
 
   it('oferece impressão e volta para a oportunidade', async () => {

@@ -93,8 +93,25 @@ class IndicadoresDeMaturidadeSerializer(serializers.Serializer):
     versao_criterios = serializers.CharField(read_only=True, allow_null=True)
 
 
+class UsoPorFluxoSerializer(serializers.Serializer):
+    fluxo = serializers.CharField(read_only=True)
+    rotulo = serializers.CharField(read_only=True)
+    chamadas = serializers.IntegerField(read_only=True)
+    falhas = serializers.IntegerField(read_only=True)
+
+
+class UsoDaIASerializer(serializers.Serializer):
+    """PB105 - volume de chamadas e falhas por fluxo, do registro de chamadas."""
+
+    houve_chamada = serializers.BooleanField(read_only=True)
+    chamadas = serializers.IntegerField(read_only=True)
+    falhas = serializers.IntegerField(read_only=True)
+    por_fluxo = UsoPorFluxoSerializer(many=True, read_only=True)
+
+
 class IndicadoresDeIASerializer(serializers.Serializer):
-    """Os dois blocos das fases 3.2/3.3, num `GET` so."""
+    """Os blocos das fases 3.2/3.3 e o uso da IA, num `GET` so."""
 
     matching = IndicadoresDeMatchingSerializer(read_only=True)
     maturidade = IndicadoresDeMaturidadeSerializer(read_only=True)
+    uso = UsoDaIASerializer(read_only=True)

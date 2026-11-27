@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,17 +8,25 @@ const api = vi.hoisted(() => ({
   obterOportunidade: null,
   listarHistorico: null,
   registrarDecisao: null,
+  registrarObservacao: null,
+  solicitarComplemento: null,
   listarAnexos: null,
   obterProposta: null,
   obterEstadoCopiloto: null,
   estruturarComCopiloto: null,
   definirPrioridade: null,
+  listarCompetencias: null,
+  obterEquipePotencial: null,
+  executarMatching: null,
+  obterPreAnalise: null,
 }))
 
 vi.mock('../../../services/pdConnectApi', () => ({
   obterOportunidade: (...args) => api.obterOportunidade(...args),
   listarHistorico: (...args) => api.listarHistorico(...args),
   registrarDecisao: (...args) => api.registrarDecisao(...args),
+  registrarObservacao: (...args) => api.registrarObservacao(...args),
+  solicitarComplemento: (...args) => api.solicitarComplemento(...args),
   listarAnexos: (...args) => api.listarAnexos(...args),
   enviarAnexo: vi.fn(),
   obterProposta: (...args) => api.obterProposta(...args),
@@ -30,10 +38,23 @@ vi.mock('../../../services/pdConnectApi', () => ({
   responderCopiloto: vi.fn(),
   concluirSessaoCopiloto: vi.fn(),
   definirPrioridade: (...args) => api.definirPrioridade(...args),
+  listarCompetencias: (...args) => api.listarCompetencias(...args),
+  obterEquipePotencial: (...args) => api.obterEquipePotencial(...args),
+  executarMatching: (...args) => api.executarMatching(...args),
+  ajustarMembroEquipe: vi.fn(),
+  adicionarMembroEquipe: vi.fn(),
+  validarEquipe: vi.fn(),
+  listarRede: vi.fn(() => Promise.resolve({ results: [] })),
+  obterPreAnalise: (...args) => api.obterPreAnalise(...args),
+  listarPreAnalises: vi.fn(() => Promise.resolve([])),
+  obterPreAnaliseDaRodada: vi.fn(),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { role: 'supervisor', displayName: 'Rafael Antunes' } }),
+  useAuth: () => ({
+    user: { role: 'supervisor', displayName: 'Rafael Antunes' },
+    isAuthenticated: true,
+  }),
 }))
 
 const OPORTUNIDADE = {
@@ -53,9 +74,16 @@ const OPORTUNIDADE = {
   atualizada_em: '2026-09-16T10:00:00.000Z',
 }
 
-function renderPagina() {
+function propostaNaoIniciada() {
+  const erro = new Error('Esta oportunidade ainda não tem proposta estruturada.')
+  erro.status = 404
+  erro.data = { detail: erro.message, codigo: 'proposta_inexistente' }
+  return erro
+}
+
+function renderPagina(rota = '/oportunidades/OP-2026-014') {
   return render(
-    <MemoryRouter initialEntries={['/oportunidades/OP-2026-014']}>
+    <MemoryRouter initialEntries={[rota]}>
       <Routes>
         <Route path="/oportunidades/:id" element={<OportunidadePage />} />
       </Routes>
@@ -68,9 +96,14 @@ beforeEach(() => {
   api.listarHistorico = vi.fn().mockResolvedValue({ results: [] })
   api.registrarDecisao = vi.fn().mockResolvedValue(OPORTUNIDADE)
   api.listarAnexos = vi.fn().mockResolvedValue([])
-  api.obterProposta = vi.fn().mockResolvedValue(null)
+  api.obterProposta = vi.fn().mockRejectedValue(propostaNaoIniciada())
   api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
-    sessao: null,
+    sessao: {
+      id_sessao: 'abc',
+      estado: 'aberta',
+      sintese: 'Problema: lotes perdidos por contaminação.',
+      sintese_conferida: true,
+    },
     mensagens: [],
     perguntas: [],
     lacunas: [],
@@ -81,6 +114,9 @@ beforeEach(() => {
     .fn()
     .mockResolvedValue({ preenchidos: ['metodologia'], fallback_usado: false })
   api.definirPrioridade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, prioridade: 'alta' })
+  api.listarCompetencias = vi.fn().mockResolvedValue([])
+  api.obterEquipePotencial = vi.fn().mockResolvedValue(null)
+  api.obterPreAnalise = vi.fn().mockResolvedValue(null)
 })
 
 describe('OportunidadePage — prioridade na fila', () => {
@@ -99,6 +135,196 @@ describe('OportunidadePage — prioridade na fila', () => {
 
     expect(api.definirPrioridade).toHaveBeenCalledWith('OP-2026-014', 'alta')
     expect(await screen.findByText(/prioridade alta na fila/i)).toBeInTheDocument()
+  })
+})
+
+describe('OportunidadePage — matching sem travar as etapas', () => {
+  /**
+   * A rodada do matching travava todas as etapas e passou de 80 s. Agora a
+   * página guarda a rodada: a pessoa troca de etapa, volta e vê a espera, e
+   * um aviso diz quando a equipe ficou pronta.
+   */
+  it('a pessoa segue em outra etapa e é avisada quando a equipe fica pronta', async () => {
+    let liberar
+    api.executarMatching = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          liberar = resolve
+        }),
+    )
+    api.obterEquipePotencial = vi
+      .fn()
+      .mockRejectedValue({ data: { codigo: 'equipe_inexistente' }, message: 'sem equipe' })
+    api.listarCompetencias = vi.fn().mockResolvedValue([{ id_competencia_necessaria: 1 }])
+
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^equipe potencial/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /rodar matching/i }))
+
+    expect(await screen.findByText(/pode seguir para outra etapa/i)).toBeInTheDocument()
+    expect(screen.queryByText(/aguarde a ia terminar/i)).toBeNull()
+    expect(screen.getByRole('button', { name: /^decisão/i })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /^contexto/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^equipe potencial/i }))
+
+    expect(await screen.findByText(/pode seguir para outra etapa/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /rodando/i })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /^contexto/i }))
+    liberar({ equipe: { membros: [] }, avaliados: 3 })
+
+    expect(await screen.findByText(/a equipe potencial ficou pronta/i)).toBeInTheDocument()
+    expect(api.executarMatching).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OportunidadePage — cabeçalho', () => {
+  /**
+   * Código, origem, situação, prioridade, demandante e data dividiam uma linha
+   * só e disputavam a atenção com o título. Agora quem é a oportunidade fica
+   * numa linha, e em que pé ela está, na seguinte.
+   */
+  it('separa quem é a oportunidade de em que pé ela está', async () => {
+    const { container } = renderPagina()
+
+    await screen.findByRole('heading', { level: 1, name: 'Bioinsumo para cana-de-açúcar' })
+
+    const identidade = container.querySelector('.oportunidade-page__identidade')
+    const estado = container.querySelector('.oportunidade-page__meta')
+
+    expect(identidade).toHaveTextContent('OP-2026-014')
+    expect(identidade).toHaveTextContent('Agroindústria Vale Verde')
+    expect(within(estado).getByRole('combobox', { name: /prioridade/i })).toBeInTheDocument()
+    expect(estado).toHaveTextContent(/atualizada/i)
+    expect(estado).not.toHaveTextContent('Agroindústria Vale Verde')
+    expect(estado).not.toHaveTextContent('OP-2026-014')
+  })
+})
+
+describe('OportunidadePage — do Copiloto ao elemento da proposta', () => {
+  it('o ponto apontado pelo Copiloto abre a proposta no elemento dele', async () => {
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      sessao: { id_sessao: 'abc', estado: 'aberta', sintese: 'Resumo.', sintese_conferida: true },
+      mensagens: [],
+      perguntas: [],
+      lacunas: [
+        {
+          id_lacuna: 9,
+          campo_afetado: 'metodologia',
+          natureza: 'pouco_desenvolvido',
+          natureza_rotulo: 'Pouco desenvolvido',
+          descricao: 'Faltam os controles.',
+          recomendacao: 'Descreva o controle positivo e o negativo.',
+          severidade: 'media',
+          severidade_rotulo: 'Média',
+        },
+      ],
+      elementos_vazios: [],
+      base_disponivel: true,
+    })
+    api.obterProposta = vi.fn().mockResolvedValue({
+      id_proposta: 1,
+      problema_pesquisa: 'Perda de lotes.',
+      hipotese: '',
+      objetivo_geral: 'Reduzir a perda.',
+      objetivos_especificos: ['Medir a perda'],
+      metodologia: 'Cultivo seletivo.',
+      resultados_esperados: 'Protocolo.',
+      caracterizacao_inovacao: 'Mais rápido.',
+      infraestrutura_recursos: 'Laboratório.',
+      revisada_por_humano: true,
+      revisor_nome: 'Rafael Antunes',
+    })
+
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^copiloto/i }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /editar na proposta \(metodologia\)/i }),
+    )
+
+    const campo = await screen.findByLabelText(/metodologia/i)
+
+    await waitFor(() => expect(campo).toHaveFocus())
+    expect(screen.getByRole('button', { name: /proposta estruturada/i })).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
+  })
+
+  it('sair do Copiloto com resposta não enviada pede confirmação', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^copiloto/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /adicionar outra informação/i }))
+    await userEvent.type(
+      screen.getByLabelText(/mais alguma coisa que o copiloto deve saber/i),
+      'Mais contexto.',
+    )
+    await userEvent.click(screen.getByRole('button', { name: /^contexto/i }))
+
+    expect(confirmar).toHaveBeenCalledWith(
+      expect.stringMatching(/respostas ao copiloto que não foram enviadas/i),
+    )
+    expect(screen.getByLabelText(/mais alguma coisa que o copiloto deve saber/i)).toHaveValue('Mais contexto.')
+
+    confirmar.mockRestore()
+  })
+})
+
+describe('OportunidadePage — oportunidade que não existe', () => {
+  /**
+   * Um endereço como /oportunidades/admin caía nesta página, que buscava o
+   * código "admin" e dizia "Não foi possível concluir a operação", com
+   * "Tentar de novo". Agora o endereço fora do formato do código é página não
+   * encontrada, sem ir ao servidor; o código que o servidor não acha, ou que
+   * não está no escopo de quem pede, é oportunidade não encontrada; e só a
+   * falha do servidor ou da rede oferece tentar de novo.
+   */
+  it('endereço fora do formato do código é página não encontrada, sem ir ao servidor', async () => {
+    renderPagina('/oportunidades/admin')
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Página não encontrada' }),
+    ).toBeInTheDocument()
+    expect(api.obterOportunidade).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toHaveAttribute(
+      'href',
+      '/oportunidades',
+    )
+    expect(screen.getByRole('link', { name: 'Ir para o painel' })).toHaveAttribute('href', '/painel')
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).not.toBeInTheDocument()
+  })
+
+  it('código que o servidor não acha é oportunidade não encontrada', async () => {
+    api.obterOportunidade = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('Não encontrado.'), { status: 404 }))
+
+    renderPagina()
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Oportunidade não encontrada' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('OP-2026-014')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).not.toBeInTheDocument()
+  })
+
+  it('falha do servidor ou da rede continua oferecendo tentar de novo', async () => {
+    api.obterOportunidade = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('O servidor não respondeu.'), { status: 500 }))
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /tentar de novo/i })).toBeInTheDocument()
+    expect(screen.getByText(/não foi possível carregar a oportunidade/i)).toBeInTheDocument()
+    expect(screen.queryByText(/não encontrada/i)).not.toBeInTheDocument()
   })
 })
 
@@ -132,6 +358,101 @@ describe('OportunidadePage — custo de abertura', () => {
     renderPagina()
 
     expect(await screen.findByText('Bioinsumo para cana-de-açúcar')).toBeInTheDocument()
+  })
+})
+
+describe('OportunidadePage — observação da avaliação', () => {
+  /**
+   * A etapa Decisão e a aba Histórico leem a mesma trilha da página. A nota
+   * registrada na Decisão precisa estar no Histórico sem recarregar, e a que
+   * já estava na trilha aparece na Decisão.
+   */
+  it('a observação registrada na Decisão aparece no Histórico', async () => {
+    api.registrarObservacao = vi.fn().mockResolvedValue({
+      ocorrido_em: '2026-09-22T10:00:00.000Z',
+      texto: 'Laudo do lote de verão confirma a contaminação.',
+      autor_nome: 'Rafael Antunes',
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.type(
+      await screen.findByLabelText('Nova observação'),
+      'Laudo do lote de verão confirma a contaminação.',
+    )
+    await user.click(screen.getByRole('button', { name: /registrar observação/i }))
+
+    expect(
+      await screen.findByText('Laudo do lote de verão confirma a contaminação.'),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /histórico/i }))
+
+    expect(
+      screen.getByText('Laudo do lote de verão confirma a contaminação.'),
+    ).toBeInTheDocument()
+    expect(api.listarHistorico).toHaveBeenCalledTimes(1)
+  })
+
+  it('a Decisão mostra a observação que já estava na trilha', async () => {
+    api.listarHistorico = vi.fn().mockResolvedValue({
+      results: [
+        {
+          ocorrido_em: '2026-09-18T10:00:00.000Z',
+          categoria: 'observacao',
+          tipo: 'observacao_registrada',
+          ator_nome: 'Rafael Antunes',
+          detalhe: { texto: 'Demandante confirmou o volume de lotes perdidos.' },
+        },
+        {
+          ocorrido_em: '2026-09-17T10:00:00.000Z',
+          categoria: 'oportunidade',
+          tipo: 'oportunidade_cadastrada',
+          ator_nome: 'Agroindústria Vale Verde',
+          detalhe: {},
+        },
+      ],
+    })
+
+    renderPagina()
+
+    const lista = await screen.findByRole('list', { name: 'Observações registradas' })
+
+    expect(within(lista).getAllByRole('listitem')).toHaveLength(1)
+    expect(lista).toHaveTextContent('Demandante confirmou o volume de lotes perdidos.')
+  })
+})
+
+describe('OportunidadePage — pedido de complementação', () => {
+  /**
+   * O pedido ficava só no estado da aba onde era feito. Ao trocar de aba a
+   * aba desmontava, e o pedido sumia da trilha até a página recarregar,
+   * embora já estivesse gravado. Agora ele é feito em Contexto e aparece no
+   * Histórico sem recarregar.
+   */
+  it('o pedido feito em Contexto aparece no Histórico', async () => {
+    api.solicitarComplemento = vi.fn().mockResolvedValue({
+      ocorrido_em: '2026-09-22T09:00:00.000Z',
+      mensagem: 'Faltam os laudos do lote.',
+      autor_nome: 'Rafael Antunes',
+    })
+    const user = userEvent.setup()
+    renderPagina()
+
+    const etapas = await screen.findByRole('navigation', { name: /etapas da oportunidade/i })
+
+    await user.click(within(etapas).getByRole('button', { name: /^contexto/i }))
+    await user.click(screen.getByRole('button', { name: /pedir complementação/i }))
+    await user.type(screen.getByLabelText(/que informação falta na entrada/i), 'Faltam os laudos do lote.')
+    await user.click(screen.getByRole('button', { name: /enviar o pedido/i }))
+
+    expect(await screen.findByText(/pedido enviado/i)).toBeInTheDocument()
+
+    await user.click(within(etapas).getByRole('button', { name: /histórico/i }))
+
+    expect(screen.getByText(/faltam os laudos do lote/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/que informação falta na entrada/i)).toBeNull()
+    expect(api.listarHistorico).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -186,16 +507,71 @@ describe('OportunidadePage — andamento das etapas', () => {
     expect(await screen.findByRole('button', { name: /Competências.*concluída/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Contexto.*concluída/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Equipe potencial.*em andamento/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Decisão$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Decisão ?a seguir$/ })).toBeInTheDocument()
   })
 
-  it('em estruturação, Copiloto e Proposta estão em andamento juntos', async () => {
+  /**
+   * As etapas que ainda não começaram tinham a mesma cara das outras. Agora
+   * ficam apagadas e com cadeado, mas continuam abrindo: travar a aba
+   * esconderia o motivo, e a etapa diz lá dentro o que falta antes dela.
+   */
+  it('as etapas que ainda não começaram ficam marcadas, mas abrem', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'competencias' })
+
+    renderPagina()
+
+    const equipe = await screen.findByRole('button', { name: /^Equipe potencial ?a seguir$/ })
+
+    expect(equipe).toHaveClass('is-futura')
+    expect(equipe).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Pré-análise ?a seguir$/ })).toHaveClass('is-futura')
+    expect(screen.getByRole('button', { name: /^Competências ?em andamento$/ })).not.toHaveClass('is-futura')
+    expect(screen.getByRole('button', { name: /^Contexto ?concluída$/ })).not.toHaveClass('is-futura')
+
+    await userEvent.click(equipe)
+    expect(equipe).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('em revisão, nenhuma etapa fica marcada como a seguir', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'revisar' })
+
+    renderPagina()
+
+    await screen.findByRole('button', { name: /^Competências/ })
+    expect(document.querySelectorAll('.oportunidade-aba.is-futura')).toHaveLength(0)
+  })
+
+  /**
+   * Copiloto e Proposta apareciam "em andamento" juntos desde o começo, e a
+   * pessoa não sabia por qual começar. A proposta só entra em andamento
+   * quando tem algum texto.
+   */
+  it('em estruturação, sem texto na proposta, só o Copiloto está em andamento', async () => {
     api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
 
     renderPagina()
 
     expect(await screen.findByRole('button', { name: /Copiloto.*em andamento/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Proposta estruturada.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Proposta estruturada ?a seguir$/ })).toBeInTheDocument()
+  })
+
+  it('em estruturação, com texto na proposta, Copiloto e Proposta estão em andamento juntos', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
+    api.obterProposta = vi.fn().mockResolvedValue({
+      problema_pesquisa: '',
+      hipotese: '',
+      objetivo_geral: '',
+      objetivos_especificos: ['Medir a perda'],
+      metodologia: '',
+      resultados_esperados: '',
+      caracterizacao_inovacao: '',
+      infraestrutura_recursos: '',
+    })
+
+    renderPagina()
+
+    expect(await screen.findByRole('button', { name: /Proposta estruturada.*em andamento/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Copiloto.*em andamento/ })).toBeInTheDocument()
   })
 
   it('oportunidade arquivada não mostra andamento', async () => {
@@ -208,9 +584,185 @@ describe('OportunidadePage — andamento das etapas', () => {
     expect(screen.queryByText('concluída')).not.toBeInTheDocument()
   })
 
-  it('diz em que etapa a pessoa está', async () => {
+  /**
+   * A linha sob a barra dizia só a posição da aba aberta. Em Contexto, numa
+   * oportunidade aguardando decisão, "Etapa 1 de 7" era lido como "a
+   * oportunidade está no começo". Agora ela separa a etapa que a pessoa está
+   * vendo da etapa em que a oportunidade está.
+   */
+  it('diz em que etapa a pessoa está e em qual a oportunidade está', async () => {
     renderPagina()
 
-    expect(await screen.findByText('Etapa 1 de 7')).toBeInTheDocument()
+    expect(await screen.findByText('Etapa 7 de 7 · em andamento')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Contexto/ }))
+
+    expect(
+      screen.getByText('Você está vendo a etapa 1 de 7, já concluída. Etapa atual: 7, Decisão.'),
+    ).toBeInTheDocument()
+  })
+
+  /**
+   * "Etapa 2 de 7 · concluída · a oportunidade está na etapa 7, Decisão"
+   * obrigava a pessoa a decifrar a frase. Agora ela diz o que a pessoa vê,
+   * qual é a etapa atual e leva até ela.
+   */
+  it('fora da etapa atual, oferece voltar a ela', async () => {
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Contexto/ }))
+    await userEvent.click(screen.getByRole('button', { name: /ir para a etapa atual/i }))
+
+    expect(screen.getByRole('button', { name: /^Decisão/ })).toHaveAttribute('aria-current', 'step')
+    expect(screen.queryByRole('button', { name: /ir para a etapa atual/i })).toBeNull()
+  })
+
+  it('numa etapa que ainda não começou, diz isso em vez de um estado', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'estruturacao' })
+
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Competências/ }))
+
+    expect(
+      screen.getByText('Você está vendo a etapa 4 de 7, que ainda não começou. Etapa atual: 2, Copiloto.'),
+    ).toBeInTheDocument()
+  })
+
+  /**
+   * Quem saía de Contexto para o Copiloto lia "etapa 2 de 7, que ainda não
+   * começou" e um convite a voltar, mas é no Copiloto que a etapa começa.
+   */
+  it('na etapa logo depois da atual, diz que é a próxima', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'entrada' })
+    api.obterEstadoCopiloto = vi.fn().mockResolvedValue({
+      sessao: null,
+      mensagens: [],
+      perguntas: [],
+      lacunas: [],
+      elementos_vazios: [],
+      base_disponivel: true,
+    })
+
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Copiloto/ }))
+
+    expect(
+      screen.getByText('Você está vendo a etapa 2 de 7, a próxima. Etapa atual: 1, Contexto.'),
+    ).toBeInTheDocument()
+  })
+
+  it('numa oportunidade arquivada, a linha diz só a posição', async () => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao: 'arquivada' })
+
+    renderPagina()
+
+    expect(await screen.findByText('Etapa 7 de 7')).toBeInTheDocument()
+  })
+})
+
+describe('OportunidadePage — abre onde a oportunidade está', () => {
+  /**
+   * A página abria sempre em Contexto. Quem voltava para trabalhar numa
+   * oportunidade adiantada precisava achar sozinho a etapa em que tinha
+   * parado. Agora ela abre na etapa em que a oportunidade está; com decisão
+   * registrada, na Decisão; de volta para revisão, na Proposta estruturada,
+   * que é para onde a aba Decisão já manda retomar.
+   */
+  it.each([
+    ['entrada', 'Contexto'],
+    ['estruturacao', 'Copiloto'],
+    ['competencias', 'Competências'],
+    ['matching', 'Equipe potencial'],
+    ['pre_analise', 'Pré-análise'],
+    ['aguardando_decisao', 'Decisão'],
+    ['revisar', 'Proposta estruturada'],
+    ['continuar', 'Decisão'],
+    ['arquivada', 'Decisão'],
+  ])('em %s, abre na etapa %s', async (situacao, etapa) => {
+    api.obterOportunidade = vi.fn().mockResolvedValue({ ...OPORTUNIDADE, situacao })
+
+    renderPagina()
+
+    expect(
+      await screen.findByRole('button', { name: new RegExp(`^${etapa}`) }),
+    ).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('a atualização em segundo plano não tira a pessoa da etapa que ela abriu', async () => {
+    renderPagina()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^copiloto/i }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /estruturar o que falta/i }),
+    )
+
+    await waitFor(() => expect(api.obterOportunidade).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: /^copiloto/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  /**
+   * No celular a barra de etapas rola na horizontal. Abrindo na etapa 7, a
+   * aba aberta ficava fora da tela, à direita. A barra rola até ela, sem
+   * mexer na rolagem vertical da página.
+   */
+  it('a barra de etapas rola até a aba em que a página abriu', async () => {
+    const original = Element.prototype.scrollIntoView
+    const rolagens = []
+    Element.prototype.scrollIntoView = function rolar(opcoes) {
+      rolagens.push({ alvo: this, opcoes })
+    }
+
+    try {
+      renderPagina()
+
+      const decisao = await screen.findByRole('button', { name: /^Decisão/ })
+
+      await waitFor(() => expect(rolagens.map((item) => item.alvo)).toContain(decisao))
+      expect(rolagens.find((item) => item.alvo === decisao).opcoes).toEqual({
+        block: 'nearest',
+        inline: 'center',
+      })
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+
+  /**
+   * No celular a barra cortava uma aba no meio ("ipe potencial") e deixava
+   * Anexos e Histórico fora da tela, sem nenhum sinal de que havia mais etapas.
+   */
+  it('quando a barra de etapas não cabe, mostra que há mais etapas e rola até elas', async () => {
+    renderPagina()
+
+    const barra = await screen.findByRole('navigation', { name: 'Etapas da oportunidade' })
+    const rolar = vi.fn()
+    Object.defineProperties(barra, {
+      scrollWidth: { configurable: true, value: 1200 },
+      clientWidth: { configurable: true, value: 360 },
+      scrollLeft: { configurable: true, value: 0, writable: true },
+    })
+    barra.scrollBy = rolar
+
+    barra.dispatchEvent(new Event('scroll'))
+
+    const mais = await screen.findByLabelText('Ver mais etapas')
+    expect(screen.queryByLabelText('Ver etapas anteriores')).not.toBeInTheDocument()
+
+    await userEvent.click(mais)
+    expect(rolar).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
+    expect(rolar.mock.calls[0][0].left).toBeGreaterThan(0)
+  })
+
+  it('a volta para a lista é um botão, não um link apagado', async () => {
+    renderPagina()
+
+    await screen.findByRole('navigation', { name: 'Etapas da oportunidade' })
+
+    expect(screen.getByRole('link', { name: /voltar para oportunidades/i })).toHaveClass(
+      'admin-btn',
+      'admin-btn--outline',
+    )
   })
 })

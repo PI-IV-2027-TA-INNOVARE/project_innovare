@@ -9,17 +9,23 @@ from rest_framework import permissions, status, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.matching.services import oportunidades_com_a_pessoa_na_equipe
 from apps.network.models import MembroRede, Titulacao
 from apps.network.serializers import (
     FiltroDaRedeSerializer,
     LiberarAcessoSerializer,
+    MembroInativadoSerializer,
     MudancaDeSituacaoSerializer,
     MembroRedeSerializer,
     PerfilProprioSerializer,
     ResumoDaRedeSerializer,
     TitulacaoSerializer,
 )
-from apps.network.services.consulta import ordenar_rede, resumo_da_rede
+from apps.network.services.consulta import (
+    ordenar_rede,
+    resumo_da_rede,
+    sem_competencia_declarada,
+)
 from apps.network.services.rede import (
     AtualizarMembroService,
     AtualizarPerfilProprioService,
@@ -96,6 +102,9 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
         filtro = FiltroDaRedeSerializer(data=self.request.query_params)
         filtro.is_valid(raise_exception=True)
 
+        if filtro.validated_data['sem_competencia']:
+            queryset = sem_competencia_declarada(queryset)
+
         if 'ordenar' in filtro.validated_data:
             queryset = ordenar_rede(queryset, filtro.validated_data['ordenar'])
 
@@ -151,15 +160,20 @@ class MembroRedeViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(membro).data)
 
-    @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroRedeSerializer)
+    @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroInativadoSerializer)
     @action(detail=True, methods=['post'], url_path='inativar', url_name='inativar')
     def inativar(self, request, pk=None):
-        """Sai das proximas rodadas de matching e perde o login (P3)."""
+        """Sai das proximas rodadas de matching e perde o login (P3, PB84)."""
         membro = InativarMembroService().execute(
             membro=self.get_object(), ator=request.user
         )
 
-        return Response(self.get_serializer(membro).data)
+        return Response(
+            MembroInativadoSerializer(
+                membro,
+                context={'equipes_afetadas': oportunidades_com_a_pessoa_na_equipe(membro)},
+            ).data
+        )
 
     @extend_schema(request=MudancaDeSituacaoSerializer, responses=MembroRedeSerializer)
     @action(detail=True, methods=['post'], url_path='reativar', url_name='reativar')

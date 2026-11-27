@@ -16,6 +16,7 @@ from apps.audit.models import EventoAuditoria
 from apps.matching.services import AdicionarMembroService, candidatos_da_rede, equipe_atual_de
 from apps.matching.serializers import MembroEquipeSerializer
 from apps.network.models import SituacaoMembro
+from apps.opportunities.models import SituacaoOportunidade
 from core.exceptions import ConflitoDeEstado
 from core.tests.builders import (
     SENHA_PADRAO,
@@ -53,6 +54,51 @@ class InativarBaseTests(TestCase):
             {'email': self.membro.usuario.email, 'password': SENHA_PADRAO},
             format='json',
         )
+
+
+class EquipesAfetadasPelaInativacaoTests(InativarBaseTests):
+    """
+    PB84: inativada a pessoa, o Supervisor e informado das equipes potenciais
+    vigentes em que ela esta, e decide o ajuste (PB47). Nada sai da equipe
+    sozinho.
+    """
+
+    def test_informa_a_equipe_vigente_em_que_a_pessoa_esta(self):
+        oportunidade = OportunidadeBuilder().intitulada('Deteccao de Alicyclobacillus').build()
+        indicar_na_equipe(oportunidade, self.membro)
+
+        resposta = self.inativar()
+
+        self.assertEqual(resposta.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            resposta.data['equipes_afetadas'],
+            [{'codigo': oportunidade.codigo, 'titulo': 'Deteccao de Alicyclobacillus'}],
+        )
+        self.assertEqual(equipe_atual_de(oportunidade).membros.count(), 1)
+
+    def test_oportunidade_ja_decidida_nao_entra(self):
+        arquivada = OportunidadeBuilder().arquivada().build()
+        continuada = OportunidadeBuilder().na_situacao(SituacaoOportunidade.CONTINUAR).build()
+        indicar_na_equipe(arquivada, self.membro)
+        indicar_na_equipe(continuada, self.membro)
+
+        self.assertEqual(self.inativar().data['equipes_afetadas'], [])
+
+    def test_equipe_que_ja_foi_substituida_nao_entra(self):
+        oportunidade = OportunidadeBuilder().build()
+        indicar_na_equipe(oportunidade, self.membro)
+        outra = MembroRedeBuilder().pesquisador().chamado('Bruno Dias').build()
+        indicar_na_equipe(oportunidade, outra)
+
+        self.assertEqual(self.inativar().data['equipes_afetadas'], [])
+
+    def test_indicacao_que_o_supervisor_tirou_da_equipe_nao_entra(self):
+        oportunidade = OportunidadeBuilder().build()
+        indicacao = indicar_na_equipe(oportunidade, self.membro)
+        indicacao.incluido = False
+        indicacao.save(update_fields=['incluido'])
+
+        self.assertEqual(self.inativar().data['equipes_afetadas'], [])
 
 
 class InativarMembroTests(InativarBaseTests):

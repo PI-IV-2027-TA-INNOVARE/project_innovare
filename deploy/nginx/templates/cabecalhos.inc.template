@@ -1,0 +1,13 @@
+# Cabecalhos de seguranca da tela. A API manda os dela, pelo Django.
+#
+# A politica de conteudo do index.html vai numa tag <meta>, e a tag nao aceita
+# frame-ancestors: quem impede a tela de ser aberta dentro de outro site e o
+# cabecalho abaixo. As duas politicas valem juntas.
+
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+add_header X-Frame-Options "DENY" always;
+add_header Content-Security-Policy "frame-ancestors 'none'" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "same-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+add_header Cross-Origin-Opener-Policy "same-origin" always;

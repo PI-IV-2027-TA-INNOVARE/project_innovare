@@ -8,8 +8,11 @@ esquecer que a analise e orientativa (AGENTS.md 0.2).
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.accounts.services.nomes import nome_de_quem_executou
+from apps.ai.models import StatusExecucao
 from apps.copilot.serializers import LacunaSerializer
 from apps.maturity.models import (
+    SIGNIFICADO_DO_NIVEL,
     CriterioPreAnalise,
     DimensaoMaturidade,
     NivelDimensao,
@@ -57,6 +60,7 @@ class PreAnaliseDimensaoSerializer(serializers.ModelSerializer):
         source='get_dimensao_display', read_only=True
     )
     nivel_rotulo = serializers.CharField(source='get_nivel_display', read_only=True)
+    nivel_significado = serializers.SerializerMethodField()
 
     class Meta:
         model = PreAnaliseDimensao
@@ -67,10 +71,14 @@ class PreAnaliseDimensaoSerializer(serializers.ModelSerializer):
             'avaliacao',
             'nivel',
             'nivel_rotulo',
+            'nivel_significado',
             'evidencias',
             'ordem',
         ]
         read_only_fields = fields
+
+    def get_nivel_significado(self, instancia) -> str:
+        return SIGNIFICADO_DO_NIVEL.get(instancia.nivel, '')
 
 
 def rotulo_do_criterio(criterio) -> str | None:
@@ -148,6 +156,19 @@ class ContagemDeLacunasSerializer(serializers.Serializer):
     atual = serializers.IntegerField()
 
 
+class RecomendacaoAcatadaSerializer(serializers.Serializer):
+    id_recomendacao = serializers.IntegerField()
+    texto = serializers.CharField()
+
+
+class ComparacaoDeRecomendacoesSerializer(serializers.Serializer):
+    """PB98 e PB100: quantas antes e agora, e quais da anterior foram acatadas."""
+
+    anterior = serializers.IntegerField()
+    atual = serializers.IntegerField()
+    acatadas_na_anterior = RecomendacaoAcatadaSerializer(many=True)
+
+
 class ComparacaoSerializer(serializers.Serializer):
     """A evolucao em relacao a rodada anterior (PB59). Nivel, nunca nota."""
 
@@ -155,6 +176,56 @@ class ComparacaoSerializer(serializers.Serializer):
     mesmos_criterios = serializers.BooleanField()
     dimensoes = MovimentoDimensaoSerializer(many=True)
     lacunas = ContagemDeLacunasSerializer()
+    recomendacoes = ComparacaoDeRecomendacoesSerializer()
+
+
+class RodadaDaPreAnaliseSerializer(serializers.ModelSerializer):
+    """
+    Uma linha do historico de pre-analises (PB98): o bastante para escolher
+    qual abrir. A rodada inteira vem por `PreAnaliseSerializer`.
+    """
+
+    versao_criterios = serializers.CharField(
+        source='versao_criterio.versao', read_only=True
+    )
+    status_rotulo = serializers.CharField(source='get_status_display', read_only=True)
+    lacunas = serializers.IntegerField(source='total_lacunas', read_only=True)
+    recomendacoes = serializers.IntegerField(source='total_recomendacoes', read_only=True)
+    recomendacoes_acatadas = serializers.IntegerField(source='total_acatadas', read_only=True)
+    atual = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PreAnalise
+        fields = [
+            'id_pre_analise',
+            'executada_em',
+            'versao_proposta',
+            'versao_criterios',
+            'status',
+            'status_rotulo',
+            'erro',
+            'lacunas',
+            'recomendacoes',
+            'recomendacoes_acatadas',
+            'atual',
+        ]
+        read_only_fields = fields
+
+    def get_atual(self, instancia) -> bool:
+        return instancia.id_pre_analise == self.context.get('atual')
+
+    def to_representation(self, instancia):
+        """A execucao que passou do teto sai como erro, como na rodada inteira."""
+        from apps.maturity.services import ERRO_INTERROMPIDA, interrompida
+
+        dados = super().to_representation(instancia)
+
+        if interrompida(instancia):
+            dados['status'] = StatusExecucao.ERRO
+            dados['status_rotulo'] = StatusExecucao.ERRO.label
+            dados['erro'] = ERRO_INTERROMPIDA
+
+        return dados
 
 
 class PreAnaliseSerializer(serializers.ModelSerializer):
@@ -172,6 +243,7 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
     )
     aviso = serializers.SerializerMethodField()
     comparacao = serializers.SerializerMethodField()
+    executada_por_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = PreAnalise
@@ -182,6 +254,7 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
             'sintese',
             'executada_em',
             'executada_por',
+            'executada_por_nome',
             'status',
             'status_rotulo',
             'erro',
@@ -196,6 +269,22 @@ class PreAnaliseSerializer(serializers.ModelSerializer):
 
     def get_aviso(self, instancia) -> str:
         return AVISO_ORIENTATIVO
+
+    def get_executada_por_nome(self, instancia) -> str | None:
+        return nome_de_quem_executou(instancia.executada_por)
+
+    def to_representation(self, instancia):
+        """A execucao que passou do teto sai como erro, sem gravar (ver `interrompida`)."""
+        from apps.maturity.services import ERRO_INTERROMPIDA, interrompida
+
+        dados = super().to_representation(instancia)
+
+        if interrompida(instancia):
+            dados['status'] = StatusExecucao.ERRO
+            dados['status_rotulo'] = StatusExecucao.ERRO.label
+            dados['erro'] = ERRO_INTERROMPIDA
+
+        return dados
 
     @extend_schema_field(ComparacaoSerializer(allow_null=True))
     def get_comparacao(self, instancia):
@@ -254,6 +343,33 @@ class ResultadoImportacaoCriteriosSerializer(serializers.Serializer):
     sem_dimensao = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
+
+
+class CriterioDoArquivoSerializer(serializers.Serializer):
+    codigo = serializers.CharField(read_only=True)
+    titulo = serializers.CharField(read_only=True)
+
+
+class RevisaoPrevistaSerializer(serializers.Serializer):
+    versao = serializers.CharField(read_only=True)
+    data = serializers.DateField(read_only=True, allow_null=True)
+    descricao = serializers.CharField(read_only=True)
+    vencida = serializers.BooleanField(read_only=True)
+
+
+class SituacaoDaBaseSerializer(serializers.Serializer):
+    """O arquivo da base PIPE comparado com a versao em uso, antes de ativar."""
+
+    disponivel = serializers.BooleanField(read_only=True)
+    versao_do_arquivo = serializers.CharField(read_only=True)
+    chamada = serializers.CharField(read_only=True)
+    versao_em_uso = serializers.CharField(read_only=True, allow_null=True)
+    pendente = serializers.BooleanField(read_only=True)
+    novos = CriterioDoArquivoSerializer(many=True, read_only=True)
+    alterados = CriterioDoArquivoSerializer(many=True, read_only=True)
+    removidos = CriterioDoArquivoSerializer(many=True, read_only=True)
+    sem_dimensao = serializers.ListField(child=serializers.CharField(), read_only=True)
+    revisao_prevista = RevisaoPrevistaSerializer(read_only=True, allow_null=True)
 
 
 class AcatarRecomendacaoSerializer(serializers.Serializer):

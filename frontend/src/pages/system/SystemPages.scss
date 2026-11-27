@@ -26,29 +26,17 @@
   }
 }
 
-.system-card__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  margin-bottom: 20px;
-  font-size: 1.3rem;
-  color: var(--accent-secondary);
-  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
-  border-radius: 18px;
-
-  &--lock {
-    color: var(--accent-primary-text);
-    background: var(--accent-primary-dim);
-  }
-}
-
 .system-card__code {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: var(--text-muted);
+  font-size: clamp(3.5rem, 14vw, 5rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-primary-text);
+
+  + .system-card__title {
+    margin-top: 14px;
+  }
 }
 
 .system-card__title {
@@ -72,8 +60,7 @@
   color: var(--text-muted);
 }
 
-.system-card__acoes,
-.system-destinos {
+.system-card__acoes {
   display: flex;
   justify-content: center;
   gap: 8px;

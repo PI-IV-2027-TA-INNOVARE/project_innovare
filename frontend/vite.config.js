@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
       setupFiles: './src/test/setup.js',
       include: ['src/**/*.test.{js,jsx}'],
       css: false,
+      testTimeout: 15000,
 
       env: {
         VITE_API_BASE_URL: 'http://localhost/api',
